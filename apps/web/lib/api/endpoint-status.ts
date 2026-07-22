@@ -1,8 +1,9 @@
 /**
  * Per-endpoint mock/live promotion map — the code-level source of truth
  * mirrored (manually, on every change) to docs/coordination/ENDPOINT_STATUS.md
- * per Master Plan 3.4 #2. MSW passes through to the real API for `live`
- * entries; every other entry stays mocked regardless of what's deployed.
+ * per Master Plan 3.4 #2. `lib/mocks/handlers.ts` reads this map and calls
+ * MSW's passthrough() for `live` entries, so flipping one here genuinely
+ * routes to the deployed API; every other entry stays mocked.
  *
  * Flip an entry to "live" only after Agent A posts it LIVE in
  * docs/coordination/DAILY_LOG.md AND the consuming screen has been
@@ -21,7 +22,10 @@ export interface EndpointStatusEntry {
 }
 
 export const endpointStatus: EndpointStatusEntry[] = [
-  { method: "GET", path: "/health", phase: 1, status: "mock" },
+  // /health is intentionally absent: it is served outside the /v1 prefix,
+  // excluded from the frozen contract and from /docs-json, and so is not in
+  // the generated client. It is infrastructure, not a contract endpoint, and
+  // listing it here implied a promotion path it does not have.
   { method: "GET", path: "/auth/me", phase: 1, status: "mock", notes: "demo flag (D-10) included" },
   { method: "POST", path: "/auth/context", phase: 1, status: "mock" },
   { method: "PATCH", path: "/auth/language", phase: 1, status: "mock" },
@@ -32,12 +36,12 @@ export const endpointStatus: EndpointStatusEntry[] = [
   { method: "GET", path: "/onboarding/applications/{id}", phase: 2, status: "mock", notes: "reviewer application detail" },
   { method: "POST", path: "/onboarding/applications/{id}/submit", phase: 2, status: "mock", notes: "wizard step 4" },
   { method: "POST", path: "/onboarding/applications/{id}/bank-account", phase: 2, status: "mock", notes: "wizard step 4" },
-  { method: "POST", path: "/onboarding/applications/{id}/consents", phase: 2, status: "mock", notes: "wizard step 3 · consent catalogue provisional (Q-05)" },
+  { method: "POST", path: "/onboarding/applications/{id}/consents", phase: 2, status: "mock", notes: "wizard step 3 · consent catalogue provisional (Q-09)" },
   { method: "GET", path: "/onboarding/applications/{id}/information-requests", phase: 2, status: "mock", notes: "info-request inbox (both portals)" },
   { method: "POST", path: "/onboarding/applications/{id}/respond", phase: 2, status: "mock", notes: "supplier response form" },
-  { method: "POST", path: "/onboarding/applications/{id}/decide", phase: 2, status: "mock", notes: "reviewer decision form · reason-code catalogue provisional (Q-02)" },
+  { method: "POST", path: "/onboarding/applications/{id}/decide", phase: 2, status: "mock", notes: "reviewer decision form · reason-code catalogue provisional (Q-06)" },
   { method: "POST", path: "/government/lookup", phase: 2, status: "mock", notes: "handler exists; no screen triggers a manual lookup yet" },
-  { method: "GET", path: "/government/requests/{id}", phase: 2, status: "mock", notes: "handler exists; source panel reads the application's list instead (Q-04)" },
+  { method: "GET", path: "/government/requests/{id}", phase: 2, status: "mock", notes: "handler exists; source panel reads the application's list instead (Q-08)" },
 
   { method: "GET", path: "/buyers/search", phase: 3, status: "mock" },
   { method: "POST", path: "/buyers/resolve", phase: 3, status: "mock" },

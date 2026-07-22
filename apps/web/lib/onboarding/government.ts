@@ -3,7 +3,7 @@
  *
  * The frozen contract types it `additionalProperties: true`, which is not
  * enough to render the source badge + retrieval date the brief (§5) and
- * ZM-GOV-002 require. Escalated as **Q-01** in
+ * ZM-GOV-002 require. Escalated as **Q-05** in
  * docs/coordination/OPEN_QUESTIONS.md; the recommended shape is one entry per
  * field carrying `value`/`source`/`retrievedAt`/`verificationStatus`/
  * `evidenceRef`/`sourceReference`.
@@ -57,7 +57,7 @@ function asVerificationStatus(value: unknown): VerificationStatus | null {
     : null;
 }
 
-/** True for `{ value, source, retrievedAt, ... }`-shaped entries (Q-01 option 2). */
+/** True for `{ value, source, retrievedAt, ... }`-shaped entries (Q-05 option 2). */
 function isProvenanceEntry(entry: unknown): entry is Record<string, unknown> {
   return (
     typeof entry === "object" &&

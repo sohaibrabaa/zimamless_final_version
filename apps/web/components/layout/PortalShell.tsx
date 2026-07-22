@@ -1,10 +1,11 @@
 "use client";
 
+import { useEffect } from "react";
 import Link from "next/link";
-import { useParams, usePathname } from "next/navigation";
+import { useParams, usePathname, useRouter } from "next/navigation";
 import { useTranslations } from "@/lib/i18n/dictionary-context";
 import { useSession } from "@/lib/session/SessionProvider";
-import { portalNav, type Portal } from "./portal-nav";
+import { portalNav, portalForOrgType, type Portal } from "./portal-nav";
 import { OrgSwitcher } from "./OrgSwitcher";
 import { LanguageSwitcher } from "./LanguageSwitcher";
 import { Badge } from "@/components/ui/Badge";
@@ -14,10 +15,24 @@ import { clsx } from "@/lib/clsx";
 export function PortalShell({ portal, children }: { portal: Portal; children: React.ReactNode }) {
   const t = useTranslations();
   const pathname = usePathname();
+  const router = useRouter();
   const { locale } = useParams<{ locale: string }>();
-  const { me, activeMembership, signOut } = useSession();
+  const { me, loading, activeMembership, signOut } = useSession();
 
   const basePath = `/${locale}/${portal}`;
+
+  // A bank user must not browse the supplier portal, and vice versa. This is
+  // navigation hygiene, not the security boundary: the API's org-context
+  // guard and the database's RLS policies are what actually refuse the data,
+  // independently of anything rendered here.
+  const homePortal = portalForOrgType(activeMembership?.organizationType);
+  const misrouted = !loading && !!activeMembership && homePortal !== undefined && homePortal !== portal;
+
+  useEffect(() => {
+    if (misrouted) router.replace(`/${locale}/${homePortal}/dashboard`);
+  }, [misrouted, router, locale, homePortal]);
+
+  if (misrouted) return null;
 
   return (
     <div className="flex min-h-screen">

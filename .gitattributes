@@ -1,0 +1,16 @@
+# Normalize line endings to LF in the repository and in every working tree.
+#
+# Without this, a Windows checkout with core.autocrlf=true materializes text
+# files as CRLF. That is invisible to most tooling but not to the checks that
+# compare files byte-for-byte — db/tools/build-0001.mjs compares migration
+# 0001 against the frozen schema, and it reported spurious drift on Windows
+# while passing on Linux CI. Pinning eol=lf makes those checks mean the same
+# thing everywhere.
+* text=auto eol=lf
+
+# Binary: never touch these.
+*.png binary
+*.jpg binary
+*.pdf binary
+*.docx binary
+*.ico binary

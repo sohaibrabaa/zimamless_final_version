@@ -61,6 +61,8 @@
     "verifyPhoneBody": "Enter the code sent to {phone}.",
     "resendCode": "Resend code",
     "orgSwitcherLabel": "Organization",
+    "orgSwitchFailed": "Could not switch organization.",
+    "wrongPortal": "That portal belongs to a different organization type.",
     "invalidCredentials": "Invalid email or password."
   },
   "portal": {

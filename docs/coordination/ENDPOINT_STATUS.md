@@ -4,9 +4,13 @@ Mirror of `apps/web/lib/api/endpoint-status.ts`. Agent A flips **Announced live*
 
 Legend: `mock` = MSW mock · `live` = real API, smoke-passed · `n/a` = not yet generated.
 
+`GET /health` is deliberately **not** on this board. It is served outside the
+`/v1` prefix, excluded from the frozen contract and from `/docs-json`, and so
+never appears in the generated client — it is infrastructure, not a contract
+endpoint, and has no mock→live promotion to track.
+
 | Endpoint | Phase | Announced live (A, date) | B status | Notes |
 |---|---|---|---|---|
-| GET /health | 1 | — | mock | |
 | GET /auth/me | 1 | — | mock | demo flag (D-10) included |
 | POST /auth/context | 1 | — | mock | |
 | PATCH /auth/language | 1 | — | mock | |
@@ -16,12 +20,12 @@ Legend: `mock` = MSW mock · `live` = real API, smoke-passed · `n/a` = not yet 
 | GET /onboarding/applications/{id} | 2 | — | mock | reviewer application detail |
 | POST …/{id}/submit | 2 | — | mock | wizard step 4 |
 | POST …/{id}/bank-account | 2 | — | mock | wizard step 4 |
-| POST …/{id}/consents | 2 | — | mock | wizard step 3 · **consent catalogue provisional, see Q-05** |
+| POST …/{id}/consents | 2 | — | mock | wizard step 3 · **consent catalogue provisional, see Q-09** |
 | GET …/{id}/information-requests | 2 | — | mock | info-request inbox (both portals) |
 | POST …/{id}/respond | 2 | — | mock | supplier response form |
-| POST …/{id}/decide | 2 | — | mock | reviewer decision form · **reason-code catalogue provisional, see Q-02** |
+| POST …/{id}/decide | 2 | — | mock | reviewer decision form · **reason-code catalogue provisional, see Q-06** |
 | POST /government/lookup | 2 | — | mock | handler exists; no screen triggers a manual lookup yet |
-| GET /government/requests/{id} | 2 | — | mock | handler exists; source panel reads the list on the application instead (Q-04) |
+| GET /government/requests/{id} | 2 | — | mock | handler exists; source panel reads the list on the application instead (Q-08) |
 | GET /buyers/search | 3 | — | mock | |
 | POST /buyers/resolve | 3 | — | mock | |
 | GET /buyers/{id} | 3 | — | mock | |

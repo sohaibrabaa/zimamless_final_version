@@ -21,6 +21,31 @@ Rules: append only; never edit the other agent's entries; answer the counterpart
 
 ---
 
+## 2026-07-22 — Agent A (session 1)
+LIVE: none yet on a deployed URL. `GET /health`, `GET /auth/me`, `POST /auth/context`, `PATCH /auth/language` are implemented and serve locally; they move to LIVE in ENDPOINT_STATUS.md the moment the API is deployed (blocked, see below).
+CHANGED: none. Frozen files untouched. Migration 0001 is generated from `docs/02_DATABASE_SCHEMA.sql` with only the ruled D-01 statement removed, and CI re-runs the generator with `--check` so any drift fails the build.
+SEED: `db/seed/0100_seed_dev.sql` — paste-and-run SQL, idempotent, fixed UUIDs. 6 orgs (1 platform, 2 suppliers, 3 banks), 15 users with working Supabase Auth logins, 16 memberships, 20 role grants, 6 buyers. Password for every account: `Zimmamless#2026`. Identity list is `docs/specs/GOV_DUMMY_DATA.md` — **please mirror those exact names and numbers in your MSW fixtures** so the mock→live swap is visually diffable.
+BLOCKED ON: (1) a reachable `DATABASE_URL` — the project's direct host resolves to IPv6 only and this machine has no IPv6 route, so the session pooler string is needed; nothing DB-dependent has executed yet. (2) D-15 ratification in DECISIONS.md (see OPEN_QUESTIONS Q-01) — worked around additively, not blocking.
+NOTE FOR B:
+  - Three seeded accounts you will want first: `owner@alnoor.zimmamless.test` (supplier), `maker@jnb.zimmamless.test` (bank), `admin@platform.zimmamless.test` (platform).
+  - `multi@platform.zimmamless.test` holds memberships in TWO orgs — it exists specifically so the org-context switcher is testable. Single-org users can only exercise the failure path.
+  - Banks K1 and K2 both have a maker AND a separate approver. ZM-ROL-002 is a DB CHECK, so self-approval is rejected by the database, not just the service — your UI block is a third layer, not the only one.
+  - Buyers B4/B5/B6 are seeded `SUSPENDED`/`STRUCK_OFF`/`UNDER_LIQUIDATION` so you can build the block-state screens now rather than waiting for Phase 3.
+  - `X-Organization-Id` is required on every request except `/onboarding/register`. Missing header, malformed uuid, and non-member org all return the SAME 403 by design — do not branch on the difference, there deliberately isn't one.
+  - `GET /health` is NOT in the frozen contract. It is served outside the `/v1` prefix and excluded from `/docs-json`, so your generated client will not contain it. That is intentional, not a gap.
+  - Error envelope matches the contract `Error` schema and always carries `correlationId`; the same id comes back in the `X-Correlation-Id` response header. Surfacing it in your error UI makes support tractable.
+  - `/auth/me` will include the optional `demo` block (D-10) only when the time machine is enabled server-side; it is absent in production. Gate the time-machine control on its presence.
+
+## 2026-07-22 — Agent A (session 1, addendum: database is live)
+LIVE (serving locally against the hosted Supabase, NOT yet on a public URL): `GET /health`, `GET /auth/me`, `POST /auth/context`, `PATCH /auth/language`. All four smoke-tested with real Supabase tokens. **Do not flip ENDPOINT_STATUS.md to `live` until I announce a deployed URL.**
+CHANGED: none to frozen files. Migration `0004` added (a policy I had missed on `business_calendar_holidays`). `POST /auth/context` now returns **200**, not 201, per the contract.
+SEED: applied and verified — 6 orgs, 15 users with working logins, 16 memberships, 20 role grants, 6 buyers. Password `Zimmamless#2026`. Fixed ids, so you can hard-code them in mocks; they are listed in `docs/specs/GOV_DUMMY_DATA.md`.
+BLOCKED ON: nothing. D-15 ratification still pending but not blocking.
+NOTE FOR B — three things that will affect your client:
+  1. **Tokens are ES256, not HS256.** This project has moved to asymmetric signing keys even though the dashboard still shows a legacy JWT secret. If you decode or verify tokens anywhere, do not assume HS256. It cost me a round of debugging; it should cost you none.
+  2. **`/auth/me` works WITHOUT `X-Organization-Id`** — it has to, since you cannot know which org to name until it answers. Call it right after login, then send the header on everything else. Passing an org the user does not belong to is not an error there; the response simply omits `activeOrganizationId`.
+  3. **`POST /auth/context` returns 200**, and your generated client should expect that. It was briefly 201 (NestJS's POST default) — fixed. Worth knowing the conformance gate did NOT catch it, because it compares paths and verbs but not status codes; if you hit a status mismatch anywhere, treat it as real and tell me rather than assuming the gate would have caught it.
+Verification status: 78 automated checks green — 40 unit, 23 RLS persona (live, INV-11 + the D-02 floor revoke proven by direct SQL), 15 schema checks, plus the frozen-schema and conformance gates.
 ## 2026-07-22 — Agent B (session 1)
 DONE (all mock — Phase 1, brief §Phase 1 / phases/PHASE_1_FOUNDATION_SHELL.md):
 - `/apps/web` scaffolded standalone (Next.js 16, React 19, TypeScript, Tailwind v4).
@@ -42,22 +67,63 @@ NEEDS FROM A:
 - Root workspace config: `/apps/web` currently ships its own standalone `package.json`/lockfile (root `package.json`/`tsconfig.base.json`/`db/` are untracked in the checkout I branched from). Root config is A's by default — let me know when it's committed and I'll fold `apps/web` into the workspace rather than doing it myself.
 NOTE FOR B (next session): Phase 1 exit bar needs the 4 auth endpoints flipped to `live` in `ENDPOINT_STATUS.md` — blocked on A. Also: hit and worked around a Next.js 16.2.11 bug where Turbopack dev throws `TypeError: adapterFn is not a function` on every request as soon as a `proxy.ts` exists (reproduced with a minimal one) — `next build` is unaffected, but `npm run dev` now runs `next dev --webpack` explicitly (see comment in `apps/web/next.config.ts`). Revisit if upgrading past 16.2.11.
 
-## 2026-07-23 — Agent B (session 2)
-DONE (all mock — Phase 2, `phases/PHASE_2_ONBOARDING_GOVERNMENT.md` Agent B tasks). All 8 in-scope screens delivered:
-- Supplier: bootstrap form (D-04 `/onboarding/register`), 4-step onboarding wizard (identity review → licence review → consents → bank account), SLA tracker, information-request inbox + response form, conditional-approval banner, ineligibility notice (ZM-SON-013).
-- Platform: application review queue (status filter + pagination off D-05), application detail with government data panel, decision form (approve / conditional / info-required / reject with reason code).
-- Government fields render **read-only with source badge + retrieval date** everywhere, supplier and reviewer alike — no editable variant exists (ZM-SON-003 covers administrators too). Blank fields are muted text, never a warning colour (ZM-GOV-003).
-- Per-source availability panel keeps `sourceAvailable` visually and semantically separate from the data (ZM-GOV-008). A registry that didn't answer reads "No response yet" with copy stating it cannot affect the assessment (ZM-SON-010).
-- ZM-SON-011 financing gate wraps all five supplier financing routes now, not when those screens ship — the destination stays reachable and explains what's outstanding.
-- Stateful MSW store (`lib/mocks/onboarding-store.ts`) reproduces the §5.5 state machine, so submit → info-request → respond → decide is drivable today by persona-switching, not just inspectable.
-- **First test suite in the repo** (closes a Phase 1 carry-over): 26 tests on `node:test`, no new dependency. `npm run check` = lint + i18n parity + tests. Also `scripts/check-i18n-parity.mjs` now fails the build on any key present in one locale only (RTL rule #8) — 256 keys, both locales.
-- Verified: `next build`, `eslint`, `tsc --noEmit` all clean; 26/26 tests green; `/en` and `/ar` routes for all four new pages return 200 with `dir="rtl"` and Arabic strings confirmed in the AR payload.
-SWAPPED TO LIVE: none — no Agent A entries in this log yet, no endpoints announced.
-CONTRACT GAPS FOUND: **Q-01..Q-05**, all filed to `OPEN_QUESTIONS.md`, all OPEN. Summary: `governmentData` has no per-field provenance shape (Q-01); no `decisionReasonCode` catalogue (Q-02); `slaPaused` carries no reason (Q-03); no way to list an application's government lookups (Q-04); no consent-type catalogue (Q-05). None is a missing endpoint — each is under-specification inside something the contract declares free-form or as a bare string, so I built with each assumption isolated to a single file and filed all five rather than halting the phase. Reasoning is in §5 of `docs/completion/PHASE_2_AGENT_B.md`.
+## 2026-07-23 — Unification session (both halves, single session)
+Scope: fold Agent B's worktree into `main`, then fix everything the independent Phase 1 audit found in either half. Ownership boundaries were suspended for this session only; both agents resume their own areas at Phase 2.
+
+WORKSPACE: `apps/web` is now a real npm workspace member. Its standalone lockfile is gone (root lockfile is authoritative), its `tsconfig.json` extends `tsconfig.base.json`, it has `typecheck` and `test` scripts, and `next.config.ts` traces from the repo root instead of pinning the old nested-worktree root. Root `npm run lint|typecheck|test` now covers all three workspaces.
+
+PORTS: the API keeps 3000 (the frozen contract's servers block names it); the web app now runs on **3001** via `--port` in its dev/start scripts. `CORS_ORIGINS` already expected 3001, so this makes the two agree rather than changing either.
+
+BACKEND FIXES:
+- `TIME_PROVIDER` was registered with `useClass` alongside `SystemTimeProvider`, creating **two instances with separate caches** — `main.ts` primed the one no injection site uses. Now `useExisting`.
+- Hard rule 6 hole: an org-context-**exempt mutation** (`PATCH /auth/language`) sent without `X-Organization-Id` wrote an audit row with `actor_org_id = NULL`. The guard now adopts the user's sole membership when there is exactly one, and refuses with `ORGANIZATION_CONTEXT_REQUIRED` when the user is multi-org. Exempt **GET**s are unchanged — `/auth/me` still works with no context, as it must. Four new guard tests.
+- Generic 403s were labelled `ORGANIZATION_CONTEXT_REQUIRED` by the exception filter's fallback. New neutral `FORBIDDEN` code; AppException codes unchanged.
+- `Money.multiply()` accepted any JS number, undercutting the float ban. Safe integers only (a count of instalments is exact); fractional factors must be strings or Decimals. Three new money tests.
+- `db/tools/verify.mjs` no longer disables TLS certificate verification by default (`--insecure-tls` opt-in), and derives the expected migration list from `db/migrations/` — the hand-kept literal had silently stopped covering `0004`.
+- The RLS persona suite now **throws** instead of skipping when `DATABASE_URL` is absent in CI. A security suite that goes green by not running is the one failure mode that must not look like a pass.
+
+FRONTEND FIXES:
+- **Org switching would not have worked against the live API at all.** The client derived `X-Organization-Id` from `me.activeOrganizationId`, but the live `/auth/me` only *echoes* a header the request already carried — so no header was ever sent, no org was ever active, and every non-exempt endpoint would have 403'd. The active org is now client-side state (React state + localStorage), defaulted to the first membership after login, healed when a stored id is no longer a membership, and updated on switch. Five new SessionProvider tests against MSW, including that the refetch after a switch carries the NEW org.
+- Mock fixtures were **entirely invented** — wrong names, wrong org ids, and wrong role strings (`SUPPLIER_OWNER_ADMIN`, `BANK_ADMIN`+`OFFER_APPROVER`, `SUPER_ADMIN`). Since the contract types roles as plain `string[]`, none of that would fail until it met the live API. All fixtures now copy `db/seed/0100_seed_dev.sql` verbatim, and a new test reads the seed SQL and fails if any fixture id, name, email, or role is not in it.
+- Added the multi-membership persona (Sara Yaseen, S2+P1). Without it `OrgSwitcher` never rendered, so `POST /auth/context` was unreachable from the UI — the org-switch flow is a Phase 1 checkpoint item and could not have been demonstrated. Also added K2's maker and buyers B4–B6 (the three blocked registry statuses).
+- MSW now honours the mock/live map: `handlers.ts` calls `passthrough()` for `live` entries. Previously every handler was registered unconditionally and `isLive()` was dead code, so flipping an endpoint to `live` changed the dev badge and nothing else.
+- The mock `POST /auth/context` now mirrors the live 403 (`ORGANIZATION_CONTEXT_INVALID`, same envelope with `correlationId`) for a non-member org, and `OrgSwitcher` catches it and shows a toast instead of leaving an unhandled rejection.
+- `/health` was mocked at `/v1/health`; it lives at the server root. Fixed, and removed from both the code map and ENDPOINT_STATUS.md — it is infrastructure, not a contract endpoint.
+- Supabase client no longer falls back silently to a placeholder URL/key outside mock mode; it throws naming the missing variable. ESLint money ban extended to `Number.parseFloat`/`globalThis.parseInt` and friends.
+- Portal shells are now actually role-gated: a user whose active membership is the wrong organization type is redirected to their own portal. Navigation hygiene only — the API guard and RLS remain the real boundary.
+
+GATE: `scripts/contract-conformance.mjs` now compares **success status codes** per path+verb, not just paths and verbs. Verified against a deliberately regressed spec: it catches the exact 201-vs-200 defect that shipped in Phase 1 and passed the old gate. It still does not compare response bodies — see Q-04.
+
+DOCS: corrected two factual errors in `PHASE_1_AGENT_A.md` (the "identical 403" handoff note, and 62-vs-61 RLS-enabled tables) with the corrections marked rather than silently rewritten. Filed **Q-03** (Arabic digit set for money) and **Q-04** (`/auth/context` returns an undeclared body).
+
+VERIFICATION: 47 API unit tests, 11 web tests, 23 live RLS persona tests, 15 `db:verify` checks, frozen-schema drift check, conformance gate, `next build` (all routes × both locales), lint and typecheck across all three workspaces — all green.
+
+STILL OPEN (unchanged by this session): the API is **not deployed to a public URL**, so the joint Phase 1 checkpoint remains unrun and every ENDPOINT_STATUS entry stays `mock`. That is the first task of Phase 2.
+
+## 2026-07-23 — Agent B (session 2, Phase 2)
+Sequencing note, for honesty: this session's Phase 2 work was built on `b/phase1-shell` **before** merging the unification commit above, because that branch did not contain `docs/plan/11_PHASE_2_KICKOFF_B.md` and the kickoff's Step 0 was therefore never seen. Everything below is the state **after** merging `origin/main` and reworking against it. The behavioural work survived the merge; the infrastructure assumptions did not, and what changed is listed under REWORK.
+
+DONE (all mock — `phases/PHASE_2_ONBOARDING_GOVERNMENT.md`, Agent B tasks). All 8 in-scope screens:
+- Supplier: bootstrap form (D-04 `/onboarding/register`), 4-step wizard (identity review → licence review → consents → bank account), SLA tracker, information-request inbox + response form, conditional-approval banner, ineligibility notice (ZM-SON-013).
+- Platform: review queue (status filter + pagination off D-05), application detail with the government data panel, decision form (approve / conditional / info-required / reject with reason code).
+- The three things the kickoff flagged as where this phase goes wrong: government fields are read-only with source badge + retrieval date and no editable variant exists anywhere (ZM-SON-003 binds administrators too); `GOVERNMENT_SERVICE_UNAVAILABLE` renders as paused-not-adverse with copy saying so, and a regression test asserts its badge tone stays neutral; `APPROVED_CONDITIONAL` gets a banner plus a real gate on all five supplier financing routes, wired now rather than when those screens ship.
+- Stateful MSW store reproduces the §5.5 state machine, so submit → info request → respond → decide is drivable by persona switching rather than only inspectable.
+
+REWORK after merging `origin/main` — the audit fixes applied to my half, carried forward:
+- **Fixtures rebuilt on the frozen identities.** My Phase 2 fixtures had the same defect the audit found in Phase 1: invented names and numbers. They are now S1 Al-Noor (`20000101`, DRAFT — the wizard), S2 Petra (`20000102`, paused on an information request, GAM partial), S3 Jordan Valley Foods (`20000103`, ISTD unavailable — GOV_DUMMY §2 designates this supplier as the SLA-pause scenario). Org ids copied from `db/seed/0100_seed_dev.sql`.
+- **Adapter variants now key off the frozen §5 injection keys** (`90000001` UNAVAILABLE, `90000002` NOT_FOUND, `90000003` PARTIAL), replacing a last-digit convention I had invented. There is now a test asserting `90000001` and `90000002` stay distinguishable — that pair is the fourth defining behaviour.
+- **Added the `platform-reviewer` persona** (Maha Darwish, seeded). `decide` requires `PLATFORM_SUPPLIER_REVIEWER`, which `platform-admin` does not hold — without her the review queue could be read but never acted on. `data.spec.ts` passes, so she is genuinely in the seed.
+- **Handlers rewritten onto `mockOnly()`/`passthrough()`** so the Phase 2 endpoints honour the mock/live map like the Phase 1 ones, and onto the real error envelope with canonical codes (`VALIDATION_FAILED`, `NOT_FOUND`, `INSUFFICIENT_ROLE`, `INVALID_STATE_TRANSITION`) instead of the ad-hoc ones I had invented.
+- **`useMyApplication` reads `activeOrganizationId` from `useSession()`**, not `me.activeOrganizationId` — and re-fetches when it changes, so an org switch reloads the screen.
+- **Tests migrated from `node:test` to vitest** (`*.spec.ts`, colocated) now that a runner exists. My separate `tests/` directory and the `node --experimental-strip-types` script are gone.
+- My **Q-01..Q-05 renumbered to Q-05..Q-09** — `origin/main` had already used Q-01..Q-04. Renumbered in `OPEN_QUESTIONS.md` and in every code comment that cites one.
+
+VERIFIED: 38/38 vitest green (19 domain + 8 state machine + main's 6 seed-parity + 5 SessionProvider); typecheck, lint (web and root-wide), `next build` all clean; i18n parity 258 keys in both locales.
+SWAPPED TO LIVE: none. Per A's own instruction, nothing flips until a deployed public URL is announced — that is still outstanding, so all 14 endpoints remain `mock`.
+CONTRACT GAPS FOUND: **Q-05..Q-09** (filed this session, renumbered) plus **Q-10** (new). Q-05 `governmentData` has no per-field provenance shape · Q-06 no `decisionReasonCode` catalogue · Q-07 `slaPaused` carries no reason · Q-08 no way to list an application's government lookups · Q-09 no consent-type catalogue · Q-10 no sole-proprietorship identity or injection key, which ZM-SON-013 needs. None is a missing endpoint; each is under-specification inside something the contract declares free-form or as a bare string, so each assumption is isolated to one file. Reasoning in §5 of `docs/completion/PHASE_2_AGENT_B.md`.
 NEEDS FROM A:
-1. **Match three lists exactly or day one of integration 422s**: `lib/onboarding/consents.ts` (4 consent codes @ version `1.0`), `lib/onboarding/reason-codes.ts` (13 codes), `lib/onboarding/status.ts` (the §5.5 status strings verbatim). If the requirements point elsewhere, say so and I'll regenerate — don't accommodate my guess.
-2. **Q-04 is the one that blocks a checkpoint item**: the phase file's failure drill requires showing GAM unavailable with the clock paused and nothing adverse. Without the government-request list on the application I can only say "not yet retrieved" — I can't name which source didn't answer.
-3. `docs/specs/SEED_DATA.md` — now more overdue, not less. I added five placeholder supplier identities with specific establishment numbers (`200145678`, `200987654`, `200555222`, `200333111`, `200777999`) to cover the state variety this phase needs. Different numbers in your seed makes the swap a rewrite rather than a diff.
-4. My dummy-adapter variants key off the **last digit** of the establishment number (`0` → sole proprietorship, `9` → GAM unavailable, else full). Tell me your convention and I'll match, so we demo the same cases.
-5. Still outstanding from session 1: root workspace config, and a Supabase project for real auth smoke-testing.
-NOTE FOR A: the Phase 1 checkpoint is still open too — I'm now two phases ahead on mocks with zero live endpoints. Eleven Phase 2 endpoints are wired and waiting; `ENDPOINT_STATUS.md` now records which screen consumes each one, so each flip has a specific same-day smoke target.
+1. **Match three lists exactly or the first integration day 422s**: `lib/onboarding/consents.ts` (4 consent codes @ `1.0`), `lib/onboarding/reason-codes.ts` (13 codes), `lib/onboarding/status.ts` (the §5.5 status strings). If the requirements point elsewhere, say so and I will regenerate — do not accommodate my guess.
+2. **Q-08 blocks a checkpoint item.** The failure drill requires showing a named source as unavailable with the clock paused; without the government-request list on the application I can only say "not yet retrieved" and cannot name which registry went quiet.
+3. **Q-10**: please add a sole-proprietorship case to `GOV_DUMMY_DATA.md` — §5 key `90000006` is my recommendation and what I currently use. Adding is explicitly allowed by that file; I did not edit it, since it is yours.
+4. **S3 Jordan Valley Foods needs an organization id.** GOV_DUMMY §2 marks it "no (Phase 1 seed)", so its name and establishment number are frozen but it is not in `0100_seed_dev.sql` yet. I am using the placeholder `0e000000-0000-4000-8000-000000000007`, marked as such in `onboarding-store.ts`. Tell me the real id when you seed it — it is the single value in that file that has to be reconciled.
+5. Thank you for the multi-org persona, K2, B4–B6 and the passthrough fix — the last of those is the mechanism the whole mock-first strategy rests on, and it is now exercised by 14 more endpoints.

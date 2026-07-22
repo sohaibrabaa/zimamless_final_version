@@ -3,7 +3,7 @@
  *
  * `POST /onboarding/applications/{id}/consents` requires the client to supply
  * `consentType` + `consentVersion`, but the frozen pack defines neither the
- * codes nor the versions — escalated as **Q-05**. These four map to the
+ * codes nor the versions — escalated as **Q-09**. These four map to the
  * categories in requirements §5.2 ("lookup and sharing authorization; terms;
  * privacy; declarations"). All are `essential`: ZM-SON-012 makes refusal of an
  * essential consent a hard rejection, so the wizard cannot submit without them.

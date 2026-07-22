@@ -1,0 +1,31 @@
+node_modules/
+dist/
+build/
+coverage/
+*.tsbuildinfo
+
+.env
+.env.local
+.env.*.local
+!.env.example
+
+.pgdata/
+.tmp/
+*.log
+
+.DS_Store
+Thumbs.db
+
+__pycache__/
+*.pyc
+.venv/
+venv/
+.pytest_cache/
+
+_manual/
+
+# Agent worktrees and local agent state
+.claude/
+
+# Generated OpenAPI (emitted by CI for the conformance gate)
+apps/api/openapi.generated.json

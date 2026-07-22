@@ -3,29 +3,31 @@
  *
  * Stateful on purpose: the phase-2 integration checkpoint is a *sequence*
  * (register → wizard → submit → reviewer requests information → clock pauses →
- * supplier responds → clock resumes → reviewer approves), and a set of static
- * fixtures can't demonstrate that the SLA pauses and resumes. This store
- * reproduces the state machine and the clock transitions from requirements
- * §5.5 so both halves of the flow are exercisable before Agent A's endpoints
- * land — then it is deleted from the request path endpoint by endpoint as
- * entries flip to `live` in endpoint-status.ts.
+ * supplier responds → clock resumes → reviewer approves), and static fixtures
+ * can't demonstrate that the SLA pauses and resumes. This store reproduces the
+ * state machine and clock transitions from requirements §5.5 so both halves of
+ * the flow are exercisable before Agent A's endpoints land — then it drops out
+ * of the request path endpoint by endpoint as entries flip to `live` in
+ * endpoint-status.ts (handlers.ts calls passthrough() for those).
  *
- * Government payloads follow the shape recommended in **Q-01**; if the ruling
+ * Identities are the frozen ones from `docs/specs/GOV_DUMMY_DATA.md`, and org
+ * ids are copied from `db/seed/0100_seed_dev.sql` — not invented. That is the
+ * whole point of the shared identity list: after an endpoint goes live the
+ * screen should show the same names and numbers it showed a minute earlier.
+ *
+ * Government payloads follow the shape recommended in **Q-09**; if the ruling
  * differs, this file and lib/onboarding/government.ts change together.
- *
- * Identities are still the Phase 1 placeholders — docs/specs/SEED_DATA.md is
- * an Agent A deliverable and does not exist yet (carried over from Phase 1,
- * still an open NEEDS FROM A).
  */
 
 import type { components } from "@/lib/api/generated/schema";
 import type { GovernmentSource } from "@/lib/onboarding/government";
+import { ORG } from "./data";
 
 type SupplierApplication = components["schemas"]["SupplierApplication"];
 type InformationRequest = components["schemas"]["InformationRequest"];
 type GovernmentRequest = components["schemas"]["GovernmentRequest"];
 
-/** Q-01 recommended per-field provenance entry. */
+/** Q-09 recommended per-field provenance entry. */
 interface GovField {
   value: string | string[] | null;
   source: GovernmentSource;
@@ -39,15 +41,25 @@ export interface MockApplication extends SupplierApplication {
   nationalEstablishmentNumber?: string;
   professionLicenceNumber?: string;
   organizationName?: string;
-  /** Q-03 recommended field — present here so the UI path that reads it is exercised. */
+  /** Q-07 recommended field — present so the UI path that reads it is exercised. */
   slaPausedReason?: string;
-  /** Q-04 recommended field. */
+  /** Q-08 recommended field. */
   governmentRequests?: GovernmentRequest[];
   informationRequests?: InformationRequest[];
   consents?: { consentType: string; consentVersion: string; granted: boolean }[];
   bankAccount?: { iban: string; bankName: string; accountHolderName: string };
   decisionNotes?: string;
 }
+
+/**
+ * S3 Jordan Valley Foods is frozen in GOV_DUMMY_DATA.md §2 but is **not yet in
+ * `db/seed/0100_seed_dev.sql`** — that table marks it "no (Phase 2)", i.e. it
+ * arrives with Agent A's Phase 2 seed. Its name and establishment number are
+ * therefore authoritative; only this organization id is a placeholder, and it
+ * is the one value in this file that has to be reconciled when A seeds S3.
+ * Flagged in the daily log rather than left to be discovered at integration.
+ */
+const ORG_JORDAN_VALLEY_PENDING_SEED = "0e000000-0000-4000-8000-000000000007";
 
 const RETRIEVED_AT = "2026-07-20T09:14:00.000Z";
 const VALID_UNTIL = "2026-10-18T09:14:00.000Z";
@@ -66,26 +78,26 @@ function gov(
   };
 }
 
-function ccdBlock(name: string, number: string, type: string, status: string) {
+function ccdBlock(name: string, establishmentNo: string, type: string, status: string) {
   return {
-    legalCompanyName: gov(name, "CCD", `CCD/${number}`),
-    companyNumber: gov(number, "CCD", `CCD/${number}`),
+    legalCompanyName: gov(name, "CCD", `CCD/${establishmentNo}`),
+    companyNumber: gov(`CR-${establishmentNo}`, "CCD", `CCD/${establishmentNo}`),
     companyType: gov(type, "CCD"),
     registryStatus: gov(status, "CCD"),
     registrationDate: gov("2016-03-14", "CCD"),
     registeredAddress: gov("Al-Abdali, Amman", "CCD"),
     governorate: gov("Amman", "CCD"),
     capital: gov("150000.000", "CCD"),
-    authorizedSignatories: gov(["Rania Al-Khatib", "Faris Al-Khatib"], "CCD"),
+    authorizedSignatories: gov(["Rania Haddad"], "CCD"),
     businessPurposes: gov(["Wholesale trade", "Import and export"], "CCD"),
-    partners: gov(["Rania Al-Khatib (60%)", "Faris Al-Khatib (40%)"], "CCD"),
+    partners: gov(["Rania Haddad (60%)", "Omar Khalil (40%)"], "CCD"),
   };
 }
 
-function istdBlock(taxNumber: string | null) {
+function istdBlock(establishmentNo: string) {
   return {
-    taxNumber: gov(taxNumber, "ISTD"),
-    taxRegistrationStatus: gov(taxNumber ? "REGISTERED" : null, "ISTD"),
+    taxNumber: gov(`TAX-${establishmentNo}`, "ISTD"),
+    taxRegistrationStatus: gov("REGISTERED", "ISTD"),
   };
 }
 
@@ -115,43 +127,47 @@ function govRequest(
 }
 
 /**
- * The seeded queue. States chosen to cover every branch the phase-2 screens
- * have to render — including one paused on an information request and one
- * paused on a government source that did not answer (the failure drill).
+ * The seeded queue, covering every state the phase-2 screens must render.
+ *
+ * Registry behaviour per supplier is copied from GOV_DUMMY_DATA.md §2:
+ * S1 all sources full · S2 CCD full / GAM partial · S3 ISTD unavailable —
+ * S3 being the file's designated SLA-pause scenario, which is exactly the
+ * phase-2 failure drill.
  */
 function seedApplications(): MockApplication[] {
   return [
     {
-      id: "a0000000-0000-0000-0000-000000000001",
-      organizationId: "10000000-0000-0000-0000-000000000001",
-      organizationName: "Al-Mashriq Trading Co.",
-      nationalEstablishmentNumber: "200145678",
+      // S1 Al-Noor — the demo protagonist. DRAFT so the wizard → submit →
+      // reviewer decides → supplier responds sequence is drivable by persona
+      // switching, not merely inspectable.
+      id: "0ea00000-0000-4000-8000-000000000001",
+      organizationId: ORG.alnoor,
+      organizationName: "Al-Noor Trading Company",
+      nationalEstablishmentNumber: "20000101",
       professionLicenceNumber: "AMN-2016-4471",
-      // DRAFT on purpose: this is the `supplier-owner` persona's own
-      // application, so the wizard → submit → reviewer decides →
-      // supplier responds sequence of the phase-2 checkpoint can be driven
-      // end to end by switching personas, rather than only inspected.
       status: "DRAFT",
       slaPaused: false,
       governmentData: {
-        ...ccdBlock("Al-Mashriq Trading Co.", "200145678", "LIMITED_LIABILITY", "ACTIVE"),
-        ...istdBlock("9911223344"),
+        ...ccdBlock("Al-Noor Trading Company", "20000101", "LIMITED_LIABILITY", "ACTIVE"),
+        ...istdBlock("20000101"),
         ...gamBlock("AMN-2016-4471", "ACTIVE", "2027-01-31"),
       },
       governmentRequests: [
-        govRequest("g0000000-0000-0000-0000-000000000001", "CCD", "SUCCESS", true),
-        govRequest("g0000000-0000-0000-0000-000000000002", "ISTD", "SUCCESS", true),
-        govRequest("g0000000-0000-0000-0000-000000000003", "GAM", "SUCCESS", true),
+        govRequest("0eb00000-0000-4000-8000-000000000001", "CCD", "SUCCESS", true),
+        govRequest("0eb00000-0000-4000-8000-000000000002", "ISTD", "SUCCESS", true),
+        govRequest("0eb00000-0000-4000-8000-000000000003", "GAM", "SUCCESS", true),
       ],
       informationRequests: [],
       consents: [],
     },
     {
-      id: "a0000000-0000-0000-0000-000000000002",
-      organizationId: "10000000-0000-0000-0000-000000000002",
-      organizationName: "Petra Steel Works",
-      nationalEstablishmentNumber: "200987654",
-      professionLicenceNumber: "AMN-2019-8812",
+      // S2 Petra — paused on an information request. GOV_DUMMY: CCD full,
+      // GAM partial (licence fields present, activity/expiry absent).
+      id: "0ea00000-0000-4000-8000-000000000002",
+      organizationId: ORG.petra,
+      organizationName: "Petra Industrial Supplies",
+      nationalEstablishmentNumber: "20000102",
+      professionLicenceNumber: "ZRQ-2019-8812",
       status: "INFORMATION_REQUIRED",
       submittedAt: "2026-07-20T09:00:00.000Z",
       slaDeadlineAt: "2026-07-27T10:00:00.000Z",
@@ -159,19 +175,23 @@ function seedApplications(): MockApplication[] {
       slaPaused: true,
       slaPausedReason: "INFORMATION_REQUIRED",
       governmentData: {
-        ...ccdBlock("Petra Steel Works", "200987654", "LIMITED_LIABILITY", "ACTIVE"),
-        // ISTD answered but held no tax number — blank, and NOT adverse (ZM-GOV-003).
-        ...istdBlock(null),
-        ...gamBlock("AMN-2019-8812", "ACTIVE", "2026-11-30"),
+        ...ccdBlock("Petra Industrial Supplies", "20000102", "LIMITED_LIABILITY", "ACTIVE"),
+        ...istdBlock("20000102"),
+        // GAM partial: the licence exists, the detail fields do not. Blank is
+        // normal and not adverse (ZM-GOV-003).
+        licenceNumber: gov("ZRQ-2019-8812", "GAM", "GAM/ZRQ-2019-8812"),
+        licenceStatus: gov("ACTIVE", "GAM"),
+        licenceActivity: gov(null, "GAM"),
+        licenceExpiryDate: gov(null, "GAM"),
       },
       governmentRequests: [
-        govRequest("g0000000-0000-0000-0000-000000000011", "CCD", "SUCCESS", true),
-        govRequest("g0000000-0000-0000-0000-000000000012", "ISTD", "PARTIAL", true),
-        govRequest("g0000000-0000-0000-0000-000000000013", "GAM", "SUCCESS", true),
+        govRequest("0eb00000-0000-4000-8000-000000000011", "CCD", "SUCCESS", true),
+        govRequest("0eb00000-0000-4000-8000-000000000012", "ISTD", "SUCCESS", true),
+        govRequest("0eb00000-0000-4000-8000-000000000013", "GAM", "PARTIAL", true),
       ],
       informationRequests: [
         {
-          id: "i0000000-0000-0000-0000-000000000001",
+          id: "0ec00000-0000-4000-8000-000000000001",
           requestedItem: "Authorized signatory certificate",
           description:
             "The account user does not appear among the authorized signatories in the CCD record. Please provide a recent signatory certificate or an authorization document.",
@@ -182,11 +202,15 @@ function seedApplications(): MockApplication[] {
       consents: [],
     },
     {
-      id: "a0000000-0000-0000-0000-000000000003",
-      organizationId: "10000000-0000-0000-0000-000000000003",
-      organizationName: "Jerash Foods",
-      nationalEstablishmentNumber: "200555222",
-      professionLicenceNumber: "AMN-2021-1190",
+      // S3 Jordan Valley Foods — the failure drill. GOV_DUMMY §2 designates
+      // this supplier's ISTD as unavailable, and §5 key 90000001 is the
+      // deterministic "source down" injection. `sourceAvailable: false` is
+      // the signal that must never render as adverse (ZM-GOV-008, ZM-SON-010).
+      id: "0ea00000-0000-4000-8000-000000000003",
+      organizationId: ORG_JORDAN_VALLEY_PENDING_SEED,
+      organizationName: "Jordan Valley Foods",
+      nationalEstablishmentNumber: "20000103",
+      professionLicenceNumber: "IRB-2021-1190",
       status: "GOVERNMENT_SERVICE_UNAVAILABLE",
       submittedAt: "2026-07-22T07:45:00.000Z",
       slaDeadlineAt: "2026-07-28T09:00:00.000Z",
@@ -194,66 +218,15 @@ function seedApplications(): MockApplication[] {
       slaPaused: true,
       slaPausedReason: "GOVERNMENT_SERVICE_UNAVAILABLE",
       governmentData: {
-        ...ccdBlock("Jerash Foods", "200555222", "LIMITED_LIABILITY", "ACTIVE"),
-        ...istdBlock("9955667788"),
-        // GAM did not answer at all: no licence fields, and the request below
-        // carries sourceAvailable=false. This is the failure-drill fixture —
-        // it must render as "not yet retrieved", never as adverse (ZM-SON-010).
+        ...ccdBlock("Jordan Valley Foods", "20000103", "LIMITED_LIABILITY", "ACTIVE"),
+        // No ISTD fields at all — the source did not answer. Nothing is
+        // fabricated to fill the gap.
+        ...gamBlock("IRB-2021-1190", "ACTIVE", "2027-06-30"),
       },
       governmentRequests: [
-        govRequest("g0000000-0000-0000-0000-000000000021", "CCD", "SUCCESS", true),
-        govRequest("g0000000-0000-0000-0000-000000000022", "ISTD", "SUCCESS", true),
-        govRequest("g0000000-0000-0000-0000-000000000023", "GAM", "UNAVAILABLE", false),
-      ],
-      informationRequests: [],
-      consents: [],
-    },
-    {
-      id: "a0000000-0000-0000-0000-000000000004",
-      organizationId: "10000000-0000-0000-0000-000000000004",
-      organizationName: "Aqaba Marine Supplies",
-      nationalEstablishmentNumber: "200333111",
-      professionLicenceNumber: "AQB-2018-2204",
-      status: "APPROVED_CONDITIONAL",
-      submittedAt: "2026-07-16T08:15:00.000Z",
-      decidedAt: "2026-07-17T13:40:00.000Z",
-      decisionReasonCode: "OPERATIONAL_ITEM_OUTSTANDING",
-      decisionNotes: "Licence renewal receipt outstanding; financing actions remain disabled.",
-      slaPaused: false,
-      slaRemainingBusinessSeconds: 0,
-      governmentData: {
-        ...ccdBlock("Aqaba Marine Supplies", "200333111", "LIMITED_LIABILITY", "ACTIVE"),
-        ...istdBlock("9944332211"),
-        ...gamBlock("AQB-2018-2204", "PENDING_RENEWAL", "2026-07-31"),
-      },
-      governmentRequests: [
-        govRequest("g0000000-0000-0000-0000-000000000031", "CCD", "SUCCESS", true),
-        govRequest("g0000000-0000-0000-0000-000000000032", "ISTD", "SUCCESS", true),
-        govRequest("g0000000-0000-0000-0000-000000000033", "GAM", "SUCCESS", true),
-      ],
-      informationRequests: [],
-      consents: [],
-    },
-    {
-      id: "a0000000-0000-0000-0000-000000000005",
-      organizationId: "10000000-0000-0000-0000-000000000005",
-      organizationName: "Madaba Textiles Est.",
-      nationalEstablishmentNumber: "200777999",
-      professionLicenceNumber: "MDB-2020-3345",
-      status: "REJECTED",
-      submittedAt: "2026-07-15T08:00:00.000Z",
-      decidedAt: "2026-07-15T15:20:00.000Z",
-      // ZM-SON-013 — the ineligibility fixture behind the dedicated screen.
-      decisionReasonCode: "ENTITY_TYPE_NOT_ELIGIBLE_V3",
-      slaPaused: false,
-      slaRemainingBusinessSeconds: 0,
-      governmentData: {
-        ...ccdBlock("Madaba Textiles Est.", "200777999", "SOLE_PROPRIETORSHIP", "ACTIVE"),
-        ...istdBlock("9977665544"),
-      },
-      governmentRequests: [
-        govRequest("g0000000-0000-0000-0000-000000000041", "CCD", "SUCCESS", true),
-        govRequest("g0000000-0000-0000-0000-000000000042", "ISTD", "SUCCESS", true),
+        govRequest("0eb00000-0000-4000-8000-000000000021", "CCD", "SUCCESS", true),
+        govRequest("0eb00000-0000-4000-8000-000000000022", "ISTD", "UNAVAILABLE", false),
+        govRequest("0eb00000-0000-4000-8000-000000000023", "GAM", "SUCCESS", true),
       ],
       informationRequests: [],
       consents: [],
@@ -262,11 +235,11 @@ function seedApplications(): MockApplication[] {
 }
 
 let applications: MockApplication[] = seedApplications();
-let sequence = 100;
+let sequence = 0;
 
 function nextId(prefix: string): string {
   sequence += 1;
-  return `${prefix}0000000-0000-0000-0000-${String(sequence).padStart(12, "0")}`;
+  return `0e${prefix}00000-0000-4000-8000-${String(sequence).padStart(12, "0")}`;
 }
 
 export function listApplications(): MockApplication[] {
@@ -282,13 +255,26 @@ export function findApplicationByOrganization(organizationId: string): MockAppli
 }
 
 /**
- * Deterministic dummy-adapter behaviour keyed by establishment number, mirroring
- * the contract Agent A implements for the real adapters (ZM-GOV-008): the same
- * number always produces the same variant.
- * - ending 0 → sole proprietorship (ineligible, ZM-SON-013)
- * - ending 9 → GAM does not answer (sourceAvailable=false, paused not adverse)
- * - anything else → full CCD + ISTD + GAM
+ * Deterministic dummy-adapter behaviour keyed by establishment number, using
+ * the **frozen failure-injection keys** from GOV_DUMMY_DATA.md §5 so a mock
+ * screen and Agent A's real adapter misbehave on the same inputs:
+ *
+ *   90000001 → UNAVAILABLE, sourceAvailable=false (SLA pause; not adverse)
+ *   90000002 → NOT_FOUND,   sourceAvailable=true  (adverse but answered)
+ *   90000003 → PARTIAL      (half the fields present)
+ *   90000004 → ERROR        (source returned 500)
+ *   90000005 → success, slow
+ *
+ * The 90000001/90000002 pair is the fourth defining behaviour of the product:
+ * identical-looking absences, one of which must never count against the
+ * supplier. Both are reachable from the bootstrap form.
+ *
+ * ZM-SON-013 (sole proprietorship) has **no frozen identity or injection key**
+ * — raised as Q-10. Until one exists, `90000006` stands in and is marked here
+ * as a local extension, not a shared convention.
  */
+const SOLE_PROPRIETORSHIP_KEY_PENDING_RULING = "90000006";
+
 export function bootstrapApplication(
   nationalEstablishmentNumber: string,
   professionLicenceNumber: string
@@ -298,41 +284,47 @@ export function bootstrapApplication(
   );
   if (existing) return existing;
 
-  const lastDigit = nationalEstablishmentNumber.slice(-1);
-  const soleProprietorship = lastDigit === "0";
-  const gamUnavailable = lastDigit === "9";
+  const key = nationalEstablishmentNumber;
+  const sourceDown = key === "90000001";
+  const notFound = key === "90000002";
+  const partial = key === "90000003";
+  const soleProprietorship = key === SOLE_PROPRIETORSHIP_KEY_PENDING_RULING;
+
+  const name = soleProprietorship
+    ? `Establishment ${key}`
+    : `Company ${key}`;
 
   const application: MockApplication = {
     id: nextId("a"),
-    organizationId: nextId("1"),
-    organizationName: soleProprietorship
-      ? `Establishment ${nationalEstablishmentNumber}`
-      : `Company ${nationalEstablishmentNumber}`,
+    organizationId: nextId("0"),
+    organizationName: name,
     nationalEstablishmentNumber,
     professionLicenceNumber,
     status: "DRAFT",
     slaPaused: false,
-    governmentData: {
-      ...ccdBlock(
-        soleProprietorship
-          ? `Establishment ${nationalEstablishmentNumber}`
-          : `Company ${nationalEstablishmentNumber}`,
-        nationalEstablishmentNumber,
-        soleProprietorship ? "SOLE_PROPRIETORSHIP" : "LIMITED_LIABILITY",
-        "ACTIVE"
-      ),
-      ...istdBlock(`99${nationalEstablishmentNumber.slice(0, 8)}`),
-      ...(gamUnavailable ? {} : gamBlock(professionLicenceNumber, "ACTIVE", "2027-06-30")),
-    },
+    governmentData: notFound
+      ? {}
+      : {
+          ...ccdBlock(
+            name,
+            key,
+            soleProprietorship ? "SOLE_PROPRIETORSHIP" : "LIMITED_LIABILITY",
+            "ACTIVE"
+          ),
+          // A source that was down contributes nothing — not a blank field,
+          // no field at all.
+          ...(sourceDown ? {} : istdBlock(key)),
+          ...(partial ? {} : gamBlock(professionLicenceNumber, "ACTIVE", "2027-06-30")),
+        },
     governmentRequests: [
-      govRequest(nextId("g"), "CCD", "SUCCESS", true),
-      govRequest(nextId("g"), "ISTD", "SUCCESS", true),
+      govRequest(nextId("b"), "CCD", notFound ? "NOT_FOUND" : "SUCCESS", true),
       govRequest(
-        nextId("g"),
-        "GAM",
-        gamUnavailable ? "UNAVAILABLE" : "SUCCESS",
-        !gamUnavailable
+        nextId("b"),
+        "ISTD",
+        sourceDown ? "UNAVAILABLE" : "SUCCESS",
+        !sourceDown
       ),
+      govRequest(nextId("b"), "GAM", partial ? "PARTIAL" : "SUCCESS", true),
     ],
     informationRequests: [],
     consents: [],
@@ -420,7 +412,7 @@ export function decideApplication(
     application.informationRequests = [
       ...(application.informationRequests ?? []),
       {
-        id: nextId("i"),
+        id: nextId("c"),
         requestedItem: reasonCode ?? "Additional information",
         description: notes ?? "",
         status: "OPEN",
@@ -451,5 +443,5 @@ export function findGovernmentRequest(requestId: string): GovernmentRequest | un
 /** Test/dev affordance: reset to the seeded queue without a page reload. */
 export function resetOnboardingMocks() {
   applications = seedApplications();
-  sequence = 100;
+  sequence = 0;
 }

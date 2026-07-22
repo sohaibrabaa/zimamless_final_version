@@ -19,7 +19,7 @@ import { isDecided } from "@/lib/onboarding/status";
  *
  * The reason-code picker is scoped to the chosen outcome so a rejection code
  * can never be filed against an approval. The catalogue itself is provisional
- * (see Q-02) and lives in lib/onboarding/reason-codes.ts.
+ * (see Q-06) and lives in lib/onboarding/reason-codes.ts.
  *
  * There is no "quick approve" shortcut: the decision is deliberately two
  * explicit choices plus a confirm, because it is what flips an organization to

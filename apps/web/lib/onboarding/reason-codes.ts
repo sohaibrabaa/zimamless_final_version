@@ -3,7 +3,7 @@
  *
  * `POST /onboarding/applications/{id}/decide` takes `reasonCode` as a bare
  * string with no enum, and no catalogue exists in the frozen pack — escalated
- * as **Q-02** in docs/coordination/OPEN_QUESTIONS.md. These codes are a
+ * as **Q-06** in docs/coordination/OPEN_QUESTIONS.md. These codes are a
  * verbatim transcription of the hard-rejection conditions in ZM-SON-012 plus
  * the ZM-SON-013 ineligibility case; Agent A's accepted values must match this
  * list or `decide` will fail validation at integration.

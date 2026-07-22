@@ -1,0 +1,28 @@
+{
+  "name": "zimmamless",
+  "version": "3.0.0",
+  "private": true,
+  "description": "Zimmamless V3 — receivables marketplace (monorepo root)",
+  "workspaces": [
+    "apps/api",
+    "apps/web",
+    "db"
+  ],
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "lint": "npm run lint --workspaces --if-present",
+    "typecheck": "npm run typecheck --workspaces --if-present",
+    "test": "npm run test --workspaces --if-present",
+    "build": "npm run build --workspaces --if-present",
+    "db:migrate": "npm run migrate -w db",
+    "db:verify": "npm run verify -w db",
+    "db:seed": "npm run seed -w db",
+    "db:reset": "npm run reset -w db",
+    "contract:check": "node scripts/contract-conformance.mjs"
+  },
+  "devDependencies": {
+    "typescript": "^5.6.3"
+  }
+}

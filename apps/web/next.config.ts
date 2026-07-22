@@ -1,6 +1,10 @@
 import type { NextConfig } from "next";
 import path from "node:path";
 
+// The repo root is the npm workspace root: its lockfile covers apps/web too,
+// so file tracing must start there or hoisted dependencies are excluded.
+const repoRoot = path.resolve(__dirname, "../..");
+
 // `npm run dev` runs with --webpack (see package.json): Turbopack dev on
 // Next.js 16.2.11 throws "TypeError: adapterFn is not a function" on every
 // request once a proxy.ts (formerly middleware.ts) file is present — a
@@ -8,13 +12,10 @@ import path from "node:path";
 // with a minimal proxy.ts. `next build` (webpack) and `next dev --webpack`
 // are both unaffected. Revisit when upgrading next past 16.2.11.
 const nextConfig: NextConfig = {
-  // Pin explicitly: this worktree is nested under the main repo checkout,
-  // which has its own root-level lockfile — without this, Turbopack's
-  // upward directory walk finds that unrelated lockfile and misinfers the
-  // workspace root.
   turbopack: {
-    root: path.resolve(__dirname),
+    root: repoRoot,
   },
+  outputFileTracingRoot: repoRoot,
 };
 
 export default nextConfig;

@@ -10,7 +10,7 @@ export type InformationRequest = components["schemas"]["InformationRequest"];
 
 /**
  * Optional fields the frontend reads when present but never requires, because
- * the frozen contract doesn't define them yet (Q-01/Q-03/Q-04). Declared as a
+ * the frozen contract doesn't define them yet (Q-05/Q-07/Q-08). Declared as a
  * widening of the generated type rather than an edit to it — the generated
  * schema stays the single source of truth for everything the contract does say,
  * and every screen degrades if these never land.
@@ -31,7 +31,13 @@ export type ApplicationView = SupplierApplication & {
  * intended use of the list per D-05 ("supplier sees its own").
  */
 export function useMyApplication(): AsyncResource<ApplicationView> {
-  const { me, loading: sessionLoading } = useSession();
+  // `activeOrganizationId` comes from SessionProvider's own state, never from
+  // `me.activeOrganizationId` — the live `/auth/me` only echoes back the
+  // header the request already carried, so deriving it from the response is
+  // circular and leaves the header unset (Phase 1 audit, kickoff §"What
+  // changed in your tree"). Re-fetching when it changes is what makes the
+  // org switcher actually reload this screen.
+  const { me, activeOrganizationId, loading: sessionLoading } = useSession();
 
   return useAsyncResource<ApplicationView>(
     async () => {
@@ -41,8 +47,8 @@ export function useMyApplication(): AsyncResource<ApplicationView> {
       if (error) throw error;
       return (data?.items?.[0] as ApplicationView | undefined) ?? null;
     },
-    [me?.activeOrganizationId],
-    !sessionLoading && !!me
+    [activeOrganizationId],
+    !sessionLoading && !!me && !!activeOrganizationId
   );
 }
 

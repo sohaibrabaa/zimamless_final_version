@@ -1,0 +1,19 @@
+{
+  "name": "@zimmamless/db",
+  "version": "3.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Migrations, seed, and the migration runner",
+  "scripts": {
+    "migrate": "node tools/migrate.mjs",
+    "migrate:status": "node tools/migrate.mjs --status",
+    "build:0001": "node tools/build-0001.mjs",
+    "check:0001": "node tools/build-0001.mjs --check",
+    "verify": "node tools/verify.mjs",
+    "seed": "node tools/seed.mjs",
+    "reset": "node tools/migrate.mjs --reset"
+  },
+  "dependencies": {
+    "pg": "^8.13.1"
+  }
+}

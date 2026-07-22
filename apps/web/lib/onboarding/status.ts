@@ -48,7 +48,7 @@ const CLOCK_BY_STATUS: Record<ApplicationStatus, SlaClockState> = {
 /**
  * The server's `slaPaused` flag wins when present — the client's status→clock
  * table exists so the tracker still reads correctly if the flag is absent, and
- * so a state that pauses for a reason we can't yet name (see Q-03) is at least
+ * so a state that pauses for a reason we can't yet name (see Q-07) is at least
  * never shown as counting down.
  */
 export function slaClockState(

@@ -54,10 +54,12 @@ export function formatMoneyDisplay(
   const negative = d.isNegative();
   const abs = d.abs().toFixed(DECIMAL_PLACES);
   const [whole, frac] = abs.split(".");
-  const numeralLocale = locale === "ar" ? "ar-JO" : "en-US";
-  const groupedWhole = new Intl.NumberFormat(numeralLocale === "ar-JO" ? "en-US" : "en-US").format(
-    BigInt(whole)
-  );
+  // Western digits in both locales. ZM-I18N-004 requires numbers to be
+  // "localized" but does not say which digit set Arabic uses, and an ar-JO
+  // NumberFormat would emit Arabic-Indic digits (١٢٣) — a visible change to
+  // every amount on the Arabic side. Holding at en-US preserves the shipped
+  // behaviour until that is ruled on; filed as Q-03 in OPEN_QUESTIONS.md.
+  const groupedWhole = new Intl.NumberFormat("en-US").format(BigInt(whole));
   const sign = negative ? "-" : "";
   const amount = `${sign}${groupedWhole}.${frac}`;
   if (!withCurrency) return amount;

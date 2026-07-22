@@ -1,23 +1,18 @@
 {
+  "extends": "../../tsconfig.base.json",
   "compilerOptions": {
+    // The base config targets Node/CommonJS for the NestJS API. Everything
+    // below re-points it at the browser/bundler world Next.js compiles for.
     "target": "ES2017",
     "lib": ["dom", "dom.iterable", "esnext"],
-    "allowJs": true,
-    "skipLibCheck": true,
-    "strict": true,
-    "noEmit": true,
-    "esModuleInterop": true,
     "module": "esnext",
     "moduleResolution": "bundler",
-    "resolveJsonModule": true,
-    // The test suite runs on Node's native type stripping
-    // (`node --experimental-strip-types`), which does no module resolution of
-    // its own and therefore requires explicit `.ts` specifiers. Next.js's own
-    // bundler-resolved imports are unaffected.
-    "allowImportingTsExtensions": true,
-    "isolatedModules": true,
     "jsx": "react-jsx",
-    "incremental": true,
+    "allowJs": true,
+    "noEmit": true,
+    "declaration": false,
+    "sourceMap": false,
+    "isolatedModules": true,
     "plugins": [
       {
         "name": "next"
@@ -35,5 +30,10 @@
     ".next/dev/types/**/*.ts",
     "**/*.mts"
   ],
-  "exclude": ["node_modules"]
+  // vitest.config.mts is excluded deliberately: Next and vitest each bundle
+  // their own Vite (rolldown- vs rollup-based) and their plugin types are
+  // mutually unassignable, so typechecking the test-runner config here fails
+  // for reasons that have nothing to do with application code. vitest
+  // typechecks it itself when it loads it.
+  "exclude": ["node_modules", "vitest.config.mts"]
 }

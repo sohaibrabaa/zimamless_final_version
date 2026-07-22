@@ -34,7 +34,7 @@ interface SourceRow {
  * responded — not that anything is missing or wrong.
  *
  * Falls back to reconstructing rows from the retrieved fields when the API
- * doesn't send `governmentRequests` (Q-04): a source that answered with nothing
+ * doesn't send `governmentRequests` (Q-08): a source that answered with nothing
  * at all is then shown as "not yet retrieved", which is the honest reading of
  * what we actually know in that case.
  */

@@ -42,7 +42,7 @@ export function slaProgressFraction(remaining: number | undefined): number | nul
 /**
  * Pause reason.
  *
- * The contract exposes no pause-reason field (escalated as **Q-03**); until it
+ * The contract exposes no pause-reason field (escalated as **Q-07**); until it
  * does, the reason is inferred from the two statuses requirements §5.5 marks
  * as pausing, and a server-sent `slaPausedReason` is preferred the moment one
  * appears. `GOVERNMENT_SERVICE_UNAVAILABLE` gets its own key precisely so it

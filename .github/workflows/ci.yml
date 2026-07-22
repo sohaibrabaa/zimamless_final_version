@@ -1,0 +1,211 @@
+name: CI
+
+on:
+  push:
+    branches: [main, 'a/**', 'b/**', backend, frontend]
+  pull_request:
+    branches: [main]
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  NODE_VERSION: '22'
+
+jobs:
+  # ---------------------------------------------------------------------
+  # Static checks. No database, so these fail fast and cheaply.
+  # ---------------------------------------------------------------------
+  static:
+    name: Lint, typecheck, unit tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+
+      - run: npm ci
+
+      # The two bans that matter are enforced here, not by review:
+      #   * new Date()/Date.now() in modules|jobs (PA-05 / risk R-05)
+      #   * float arithmetic on money (Master Plan 5.5)
+      - name: Lint
+        run: npm run lint
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      - name: Unit tests
+        run: npm run test
+
+  # ---------------------------------------------------------------------
+  # Migration 0001 must remain the frozen schema. Verified mechanically,
+  # because "we didn't change it" is not something review can confirm.
+  # ---------------------------------------------------------------------
+  frozen-schema:
+    name: Migration 0001 matches the frozen schema
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+
+      - name: Regenerate and diff
+        run: node db/tools/build-0001.mjs --check
+
+      - name: Migration 0002 matches the approved amendment
+        run: |
+          # 0002 is the approved amendment verbatim below a header. Any
+          # divergence means the amendment was edited in place, which needs a
+          # DECISIONS.md ruling first.
+          # 8-line header (7 comment lines + a blank), so the body starts at 9.
+          tail -n +9 db/migrations/0002_additive_amendment.sql \
+            > /tmp/0002_body.sql
+          if ! diff -q /tmp/0002_body.sql docs/amendments/DB_MIGRATION_0002_ADDITIVE.sql; then
+            echo "::error::db/migrations/0002 has diverged from the approved amendment."
+            diff /tmp/0002_body.sql docs/amendments/DB_MIGRATION_0002_ADDITIVE.sql || true
+            exit 1
+          fi
+
+  # ---------------------------------------------------------------------
+  # Contract conformance — the tripwire against silent drift (risk R-08).
+  # ---------------------------------------------------------------------
+  contract:
+    name: Contract conformance
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+
+      - run: npm ci
+
+      # Emits from the real module graph with no database, so the gate sees
+      # exactly the routes Nest registered.
+      - name: Emit served OpenAPI document
+        run: npm run openapi:emit -w @zimmamless/api
+
+      - name: Diff against frozen contract + v3.1.0 overlay
+        run: node scripts/contract-conformance.mjs apps/api/openapi.generated.json
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: openapi-served
+          path: apps/api/openapi.generated.json
+
+  # ---------------------------------------------------------------------
+  # The database suite: migrations apply, the schema is what the API
+  # expects, and RLS holds with NestJS bypassed entirely (ZM-ARC-005).
+  # ---------------------------------------------------------------------
+  database:
+    name: Migrations, schema verification, RLS personas
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: postgres:15
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: zimmamless_test
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    env:
+      DATABASE_URL: postgresql://postgres:postgres@localhost:5432/zimmamless_test
+      NODE_ENV: test
+
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+
+      - run: npm ci
+
+      - name: Install psql client
+        run: sudo apt-get update && sudo apt-get install -y postgresql-client
+
+      # Roles, the auth schema, and auth.uid(). Not a migration — it stands
+      # in for what Supabase provides, so the RLS suite can run without a
+      # hosted project.
+      - name: Apply Supabase compatibility shim
+        run: psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f db/ci/000_supabase_compat.sql
+
+      # The real test of the migrations: they must apply to an empty
+      # database, in order, with no manual intervention.
+      - name: Apply migrations
+        run: npm run db:migrate
+
+      # Asserts the outcome rather than the exit code: RLS on every table,
+      # the D-02 floor revoke holding, anon stripped, writes revoked.
+      - name: Verify schema
+        run: npm run db:verify
+
+      - name: Seed personas
+        run: psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f db/seed/0100_seed_dev.sql
+
+      # INV-11 and the floor revoke, proven by direct SQL as each persona.
+      - name: RLS persona suite
+        run: npm run test:rls -w @zimmamless/api
+
+      - name: Re-verify after seeding
+        if: always()
+        run: npm run db:verify
+
+  # ---------------------------------------------------------------------
+  # Idempotency: applying the migrations twice must be a no-op. Catches the
+  # class of bug where a re-run breaks an existing deployment.
+  # ---------------------------------------------------------------------
+  migrations-rerun:
+    name: Migrations are re-runnable
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: postgres:15
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: zimmamless_rerun
+        ports: ['5433:5432']
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    env:
+      DATABASE_URL: postgresql://postgres:postgres@localhost:5433/zimmamless_rerun
+      NODE_ENV: test
+
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+      - run: npm ci
+      - run: sudo apt-get update && sudo apt-get install -y postgresql-client
+      - run: psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f db/ci/000_supabase_compat.sql
+      - run: npm run db:migrate
+      - name: Apply again — must be a clean no-op
+        run: npm run db:migrate
+      - run: npm run db:verify
+      - name: Seed twice — must be idempotent
+        run: |
+          psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f db/seed/0100_seed_dev.sql
+          psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f db/seed/0100_seed_dev.sql

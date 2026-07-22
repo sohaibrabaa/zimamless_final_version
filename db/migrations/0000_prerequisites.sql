@@ -1,0 +1,32 @@
+-- =====================================================================
+-- MIGRATION 0000 — PREREQUISITES (additive; runs before 0001)
+-- =====================================================================
+-- Why this exists
+-- ---------------
+-- docs/02_DATABASE_SCHEMA.sql (FROZEN) declares three columns as `citext`
+--   users.email                          (line 112)
+--   organizations.contact_email          (line 133)
+--   supplier_buyer_relationships.contact_email (line 318)
+-- but its extension block (lines 14-15) creates only "uuid-ossp" and
+-- "pgcrypto". The citext extension is NOT enabled by default on Supabase,
+-- so the frozen file aborts at its first CREATE TABLE with
+--   ERROR: type "citext" does not exist
+--
+-- This is the same class of defect as RULING D-01 (the file does not
+-- execute as written), but it is NOT covered by an existing ruling. Raised
+-- as D-15 in docs/coordination/OPEN_QUESTIONS.md.
+--
+-- The frozen file is left untouched and migration 0001 remains byte-faithful
+-- to it. Enabling a required extension ahead of it is purely additive: it
+-- alters no column, constraint, or response shape, which the pack permits
+-- without a ruling (00_START_HERE.md §4; brief §2). If the product owner
+-- prefers the extension line to live inside the frozen file instead, delete
+-- this migration and regenerate 0001.
+-- =====================================================================
+
+CREATE EXTENSION IF NOT EXISTS citext;
+
+-- Note on the other two: "uuid-ossp" and "pgcrypto" are requested by the
+-- frozen file itself (0001) and are pre-installed on Supabase into the
+-- `extensions` schema, so its IF NOT EXISTS calls are no-ops there. They are
+-- not duplicated here.
