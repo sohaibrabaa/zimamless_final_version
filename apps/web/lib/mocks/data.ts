@@ -185,6 +185,33 @@ export const mockUsers: Record<string, AuthMeResponse> = {
     demo: { timeMachineEnabled: true, currentOffsetDays: 0 },
   },
 
+  // The only role `POST /onboarding/applications/{id}/decide` accepts
+  // (contract: "Reviewer decision (PLATFORM_SUPPLIER_REVIEWER)"). The
+  // platform-admin persona above holds PLATFORM_SUPER_ADMIN, which is not
+  // the same grant — without this persona the Phase 2 review queue could
+  // only be read, never acted on. Seeded: db/seed/0100_seed_dev.sql L171.
+  "platform-reviewer": {
+    user: {
+      id: "0e100000-0000-4000-8000-00000000000d",
+      fullName: "Maha Darwish",
+      email: "reviewer@platform.zimmamless.test",
+      phoneNumber: "+962790000002",
+      preferredLanguage: "EN",
+      mfaEnabled: true,
+      status: "ACTIVE",
+    },
+    memberships: [
+      {
+        organizationId: ORG.platform,
+        organizationName: "Zimmamless Platform",
+        organizationType: "PLATFORM",
+        roles: ["PLATFORM_SUPPLIER_REVIEWER"],
+        isAuthorizedSignatory: false,
+      },
+    ],
+    activeOrganizationId: ORG.platform,
+  },
+
   // Two memberships, one user. Without this persona OrgSwitcher never
   // renders and POST /auth/context is unreachable from the UI — and the
   // org-switch flow is a Phase 1 checkpoint item.

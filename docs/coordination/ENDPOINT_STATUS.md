@@ -14,18 +14,18 @@ endpoint, and has no mock→live promotion to track.
 | GET /auth/me | 1 | — | mock | demo flag (D-10) included |
 | POST /auth/context | 1 | — | mock | |
 | PATCH /auth/language | 1 | — | mock | |
-| POST /onboarding/register * | 2 | — | mock | v3.1.0 |
-| GET /onboarding/applications-list * | 2 | — | mock | v3.1.0 |
-| POST /onboarding/applications | 2 | — | mock | |
-| GET /onboarding/applications/{id} | 2 | — | mock | |
-| POST …/{id}/submit | 2 | — | mock | |
-| POST …/{id}/bank-account | 2 | — | mock | |
-| POST …/{id}/consents | 2 | — | mock | |
-| GET …/{id}/information-requests | 2 | — | mock | |
-| POST …/{id}/respond | 2 | — | mock | |
-| POST …/{id}/decide | 2 | — | mock | |
-| POST /government/lookup | 2 | — | mock | |
-| GET /government/requests/{id} | 2 | — | mock | |
+| POST /onboarding/register * | 2 | — | mock | v3.1.0 · consumed by supplier bootstrap form |
+| GET /onboarding/applications-list * | 2 | — | mock | v3.1.0 · supplier onboarding home + reviewer queue |
+| POST /onboarding/applications | 2 | — | mock | no screen consumes it — bootstrap (D-04) covers the supplier path |
+| GET /onboarding/applications/{id} | 2 | — | mock | reviewer application detail |
+| POST …/{id}/submit | 2 | — | mock | wizard step 4 |
+| POST …/{id}/bank-account | 2 | — | mock | wizard step 4 |
+| POST …/{id}/consents | 2 | — | mock | wizard step 3 · **consent catalogue provisional, see Q-09** |
+| GET …/{id}/information-requests | 2 | — | mock | info-request inbox (both portals) |
+| POST …/{id}/respond | 2 | — | mock | supplier response form |
+| POST …/{id}/decide | 2 | — | mock | reviewer decision form · **reason-code catalogue provisional, see Q-06** |
+| POST /government/lookup | 2 | — | mock | handler exists; no screen triggers a manual lookup yet |
+| GET /government/requests/{id} | 2 | — | mock | handler exists; source panel reads the list on the application instead (Q-08) |
 | GET /buyers/search | 3 | — | mock | |
 | POST /buyers/resolve | 3 | — | mock | |
 | GET /buyers/{id} | 3 | — | mock | |

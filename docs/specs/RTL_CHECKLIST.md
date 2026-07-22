@@ -36,3 +36,24 @@ For each screen, in Arabic, verify:
 ## Status
 
 Phase 1 screens covered by the standing rules above: login, register, verify-email, verify-phone, all three portal dashboards, all stub nav destinations. No dedicated per-screen pass yet — that's Phase 9's job per the Master Plan; this file will grow a per-screen sign-off table as real screens land in Phases 2–8.
+
+### Rule #8 is now enforced, not just stated
+
+`npm run check:i18n` (`apps/web/scripts/check-i18n-parity.mjs`) fails the build if any key exists in one locale and not the other. This matters more than it looks: `useTranslations` falls back to returning the key itself, so a missing Arabic string renders as `onboarding.sla.pausedTitle` on screen rather than throwing. Wired into `npm run check` alongside lint and tests. Currently 256 keys, both locales.
+
+## Phase 2 screens — built RTL-ready (Phase 9 still verifies)
+
+Per the standing rules, not retrofitted. What each screen needed beyond the defaults:
+
+| Screen | RTL-specific handling |
+|---|---|
+| Supplier bootstrap form | Establishment + licence number inputs forced `dir="ltr"` (rule #4) — numeric identifiers must not reorder in Arabic |
+| Onboarding wizard (4 steps) | `WizardStepper` renders steps in document order with `ms-*` connectors, so the strip mirrors without a per-locale reversed array (rules #2, #3) |
+| Government field list | Every retrieved value wrapped in `.zm-ltr-embed` — company numbers, tax numbers, IBANs and Latin company names inside Arabic labels (rule #4) |
+| SLA tracker | Progress bar sized with `inlineSize`, not `width`, so it fills from the mirrored edge (rule #7 / progress indicators) |
+| Information-request inbox | Textarea inherits page direction (free Arabic text is correct RTL); status badges use logical spacing |
+| Reviewer queue table | Columns in document order via `components/ui/Table.tsx`; establishment-number cell LTR-isolated; SLA column `align: "end"` |
+| Application detail | Same government components as the supplier side; back-link chevron is the text `←`, **flagged as a directional glyph needing mirroring in the Phase 9 pass** |
+| Ineligibility notice | Reference number LTR-isolated |
+
+Known item for the Phase 9 pass: the `←` back-link on the application detail screen is a literal character, not an icon component, so it does not mirror. Rule #5 says directional glyphs must mirror; this needs either a mirrored icon component or a logical-property replacement when the icon system lands.
