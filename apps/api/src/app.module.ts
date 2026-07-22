@@ -14,6 +14,17 @@ import { AuthService } from './modules/auth/auth.service';
 import { AuthController } from './modules/auth/auth.controller';
 import { JwtVerifierService } from './modules/auth/jwt-verifier.service';
 import { HealthController } from './modules/health/health.controller';
+import { OnboardingController } from './modules/onboarding/onboarding.controller';
+import { OnboardingService } from './modules/onboarding/onboarding.service';
+import { SlaClockService } from './modules/onboarding/sla-clock.service';
+import { GovernmentController } from './modules/government/government.controller';
+import { GovernmentService } from './modules/government/government.service';
+import { GOVERNMENT_ADAPTERS } from './modules/government/government-adapter';
+import { CcdAdapter, GamAdapter, IstdAdapter } from './modules/government/dummy-adapters';
+import {
+  DEFAULT_RESILIENCE,
+  ResilientGovernmentAdapter,
+} from './modules/government/resilient-adapter';
 
 export const APP_CONFIG = 'APP_CONFIG';
 
@@ -32,7 +43,7 @@ export const APP_CONFIG = 'APP_CONFIG';
  */
 @Global()
 @Module({
-  controllers: [AuthController, HealthController],
+  controllers: [AuthController, HealthController, OnboardingController, GovernmentController],
   providers: [
     {
       provide: AppConfig,
@@ -62,6 +73,30 @@ export const APP_CONFIG = 'APP_CONFIG';
     {
       provide: TIME_PROVIDER,
       useExisting: SystemTimeProvider,
+    },
+
+    // --- Phase 2: onboarding and government -----------------------------
+    OnboardingService,
+    SlaClockService,
+    GovernmentService,
+    CcdAdapter,
+    IstdAdapter,
+    GamAdapter,
+    /**
+     * Each dummy adapter is wrapped in the retry/timeout/circuit-breaker
+     * layer here rather than inside the adapters themselves. ZM-GOV-009
+     * requires that swapping a dummy for a production adapter change no
+     * domain logic — so resilience has to live outside the thing being
+     * swapped, and every adapter gets identical treatment by construction.
+     */
+    {
+      provide: GOVERNMENT_ADAPTERS,
+      useFactory: (ccd: CcdAdapter, istd: IstdAdapter, gam: GamAdapter, time: { nowMs(): number }) =>
+        [ccd, istd, gam].map(
+          (adapter) =>
+            new ResilientGovernmentAdapter(adapter, DEFAULT_RESILIENCE, () => time.nowMs()),
+        ),
+      inject: [CcdAdapter, IstdAdapter, GamAdapter, TIME_PROVIDER],
     },
 
     { provide: APP_GUARD, useClass: AuthGuard },

@@ -36,6 +36,11 @@ export class AppConfig {
     /** Env half of the two-part guard on the time machine. */
     timeMachineEnabled: boolean;
   };
+  /**
+   * Symmetric key for column encryption (supplier IBANs, national ids).
+   * Never logged; see toJSON below.
+   */
+  encryptionKey!: string;
 
   constructor(init: Omit<AppConfig, 'toJSON'>) {
     Object.assign(this, init);
@@ -62,6 +67,7 @@ export class AppConfig {
       },
       ml: this.ml,
       demo: this.demo,
+      encryptionKey: '[REDACTED]',
     };
   }
 }
@@ -108,8 +114,21 @@ export function loadConfiguration(): AppConfig {
     );
   }
 
+  // Column encryption (supplier IBANs — ZM-SON bank account handling).
+  // A development default keeps local setup to one command, but shipping
+  // that default to production would make every encrypted column readable
+  // by anyone who has read the repository. Production must supply its own.
+  const encryptionKey = optional('ENCRYPTION_KEY', '');
+  if (nodeEnv === 'production' && encryptionKey === '') {
+    throw new ConfigError(
+      'ENCRYPTION_KEY is required when NODE_ENV=production — supplier IBANs are stored ' +
+        'encrypted and the development fallback key must never protect real data.',
+    );
+  }
+
   return new AppConfig({
     nodeEnv,
+    encryptionKey: encryptionKey || 'zimmamless-development-only-key',
     port: intOf('PORT', 3000),
     // The contract's servers block is http://localhost:3000/v1.
     globalPrefix: optional('API_GLOBAL_PREFIX', 'v1'),

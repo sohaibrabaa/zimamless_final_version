@@ -30,6 +30,23 @@ export const OrgContextExempt = () => SetMetadata(ORG_CONTEXT_EXEMPT_KEY, true);
 /** Require any one of these role_key values in the active org context. */
 export const RequireRoles = (...roles: string[]) => SetMetadata(REQUIRED_ROLES_KEY, roles);
 
+/**
+ * An exempt mutation that *creates* the caller's first organization.
+ *
+ * Only `/onboarding/register` (D-04). It needs its own marker because the
+ * exempt-mutation rule — adopt a sole membership, otherwise refuse — is
+ * correct for `/auth/language` and exactly wrong here: a first-time
+ * registrant has ZERO memberships, so that rule would refuse the one call
+ * whose entire purpose is to give them one.
+ *
+ * This is not a hole in hard rule 6. The handler MUST patch the request
+ * context with the organization it creates, so the audit row still names an
+ * actor org — the org simply does not exist until the handler runs. The
+ * guard test suite pins both halves.
+ */
+export const BOOTSTRAPS_ORGANIZATION_KEY = 'auth:bootstrapsOrganization';
+export const BootstrapsOrganization = () => SetMetadata(BOOTSTRAPS_ORGANIZATION_KEY, true);
+
 export interface AuthenticatedRequest extends Request {
   user?: PlatformUser;
   authUserId?: string;

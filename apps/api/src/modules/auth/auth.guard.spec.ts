@@ -3,7 +3,12 @@ import { Reflector } from '@nestjs/core';
 import { AuthGuard, ORGANIZATION_HEADER } from './auth.guard';
 import { AppException } from '../../common/errors/app.exception';
 import { ErrorCode } from '../../common/errors/error-codes';
-import { IS_PUBLIC_KEY, ORG_CONTEXT_EXEMPT_KEY, REQUIRED_ROLES_KEY } from './decorators';
+import {
+  BOOTSTRAPS_ORGANIZATION_KEY,
+  IS_PUBLIC_KEY,
+  ORG_CONTEXT_EXEMPT_KEY,
+  REQUIRED_ROLES_KEY,
+} from './decorators';
 import { RequestContextStore } from '../../common/context/request-context';
 
 /**
@@ -263,6 +268,57 @@ describe('AuthGuard', () => {
       await expect(run(guard, context)).resolves.toBe(true);
       expect(req.organizationId).toBeUndefined();
       expect(listMemberships).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('the bootstrap exemption (/onboarding/register, D-04)', () => {
+    // The adopt-or-refuse rule above is right for /auth/language and exactly
+    // wrong for registration: a first-time registrant has ZERO memberships,
+    // so that rule would refuse the one call whose purpose is to create one.
+    // @BootstrapsOrganization marks the single route where that is allowed;
+    // its handler patches the context with the org it creates, so the audit
+    // row still names an actor org and hard rule 6 holds.
+    it('allows a zero-membership user to register', async () => {
+      const { guard } = makeGuard({
+        metadata: {
+          [ORG_CONTEXT_EXEMPT_KEY]: true,
+          [BOOTSTRAPS_ORGANIZATION_KEY]: true,
+        },
+        listMemberships: jest.fn().mockResolvedValue([]),
+      });
+      const { context, req } = makeContext({ authorization: 'Bearer ok', method: 'POST' });
+
+      await expect(run(guard, context)).resolves.toBe(true);
+      expect(req.organizationId).toBeUndefined();
+    });
+
+    it('would be refused without the marker — the rule is still in force', async () => {
+      // Same request, same zero memberships, only the marker removed.
+      const { guard } = makeGuard({
+        metadata: { [ORG_CONTEXT_EXEMPT_KEY]: true },
+        listMemberships: jest.fn().mockResolvedValue([]),
+      });
+      const { context } = makeContext({ authorization: 'Bearer ok', method: 'POST' });
+
+      await expect(run(guard, context)).rejects.toMatchObject({
+        code: ErrorCode.ORGANIZATION_CONTEXT_REQUIRED,
+      });
+    });
+
+    it('does not widen the exemption to ordinary exempt mutations', async () => {
+      // A multi-org user on a non-bootstrap exempt mutation is still refused.
+      const { guard } = makeGuard({
+        metadata: { [ORG_CONTEXT_EXEMPT_KEY]: true },
+        listMemberships: jest.fn().mockResolvedValue([
+          { organization_id: ORG_ID, organization_type: 'SUPPLIER', roles: [] },
+          { organization_id: OTHER_ORG_ID, organization_type: 'PLATFORM', roles: [] },
+        ]),
+      });
+      const { context } = makeContext({ authorization: 'Bearer ok', method: 'PATCH' });
+
+      await expect(run(guard, context)).rejects.toMatchObject({
+        code: ErrorCode.ORGANIZATION_CONTEXT_REQUIRED,
+      });
     });
   });
 

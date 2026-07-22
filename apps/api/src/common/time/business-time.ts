@@ -289,3 +289,16 @@ export function businessDateKey(instant: Date): string {
   const wall = ammanWallClock(instant.getTime());
   return dateKey(wall.year, wall.month, wall.day);
 }
+
+/**
+ * Calendar-day arithmetic on an instant.
+ *
+ * Not business days — this is for plain validity windows such as the
+ * 90-day government snapshot freshness period. It lives here because
+ * src/modules/** cannot construct a Date at all, and routing that through
+ * the one file allowed to do so beats scattering lint suppressions.
+ */
+export function plusDays(instant: Date, days: number): Date {
+  if (!Number.isSafeInteger(days)) throw new Error('plusDays requires a whole number of days.');
+  return new Date(instant.getTime() + days * 86_400_000);
+}

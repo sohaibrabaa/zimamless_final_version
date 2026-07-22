@@ -5,6 +5,7 @@ import { AuthService } from './auth.service';
 import { AppException } from '../../common/errors/app.exception';
 import { RequestContextStore } from '../../common/context/request-context';
 import {
+  BOOTSTRAPS_ORGANIZATION_KEY,
   IS_PUBLIC_KEY,
   ORG_CONTEXT_EXEMPT_KEY,
   REQUIRED_ROLES_KEY,
@@ -88,6 +89,14 @@ export class AuthGuard implements CanActivate {
       // write an audit row with actor_org_id NULL. One unambiguous
       // membership is adopted silently; anything else has to be told.
       if (MUTATING_METHODS.has(req.method) && !req.organizationId) {
+        // ...unless this is the route that creates that first membership.
+        // A registrant has no organization yet by definition; the handler
+        // patches the context with the org it creates, so the audit row
+        // still names one.
+        if (this.reflector.getAllAndOverride<boolean>(BOOTSTRAPS_ORGANIZATION_KEY, targets)) {
+          return true;
+        }
+
         const memberships = await this.auth.listMemberships(user.id);
         if (memberships.length !== 1) throw AppException.organizationContextRequired();
         const only = memberships[0];
