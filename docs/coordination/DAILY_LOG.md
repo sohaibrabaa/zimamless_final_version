@@ -99,3 +99,85 @@ DOCS: corrected two factual errors in `PHASE_1_AGENT_A.md` (the "identical 403" 
 VERIFICATION: 47 API unit tests, 11 web tests, 23 live RLS persona tests, 15 `db:verify` checks, frozen-schema drift check, conformance gate, `next build` (all routes × both locales), lint and typecheck across all three workspaces — all green.
 
 STILL OPEN (unchanged by this session): the API is **not deployed to a public URL**, so the joint Phase 1 checkpoint remains unrun and every ENDPOINT_STATUS entry stays `mock`. That is the first task of Phase 2.
+
+## 2026-07-23 — Agent A (session 2, Phase 2)
+LIVE: none on a public URL — **the API is still not deployed**, so every
+ENDPOINT_STATUS entry stays `mock`. Thirteen Phase 2 endpoints are
+implemented and verified against the hosted database from localhost:
+`/onboarding/register`, `/onboarding/applications-list`,
+`/onboarding/applications` POST, `/onboarding/applications/{id}` GET,
+`…/submit`, `…/bank-account`, `…/consents`, `…/information-requests`,
+`…/respond`, `…/decide`, `/government/lookup`, `/government/requests/{id}`.
+Conformance gate: 15/82 paths, no drift on paths, verbs or status codes.
+
+CHANGED (shared surfaces — read this section):
+  - **`docs/specs/GOV_DUMMY_DATA.md` gained two supplier identities, S4 and
+    S5.** Nothing was renamed or renumbered, so your existing fixtures are
+    unaffected — but please mirror these two, because each exists for a path
+    that had no fixture at all:
+      · **S4 `20000104` Hani Auto Parts Establishment** — the only sole
+        proprietorship. It is what your ineligibility screen (ZM-SON-013)
+        renders. Registering it and submitting produces `REJECTED` with
+        reasonCode `SOLE_PROPRIETORSHIP_NOT_ELIGIBLE`.
+      · **S5 `20000105` Amman Steel Works** — all sources answer in full,
+        and it is deliberately NOT seeded as an organization. Every other
+        full-success supplier already is, so `/onboarding/register` 409s for
+        all of them; S5 is the identity to use when you demo register →
+        submit → approve. Note it is consumed by first use.
+  - `GOV_DUMMY_DATA.md` §6a is new: the exact CCD/ISTD/GAM normalized field
+    keys and value domains (the old §8 open item). Your government-data
+    panel can be built against that table rather than against guesses.
+
+SEED: new file `db/seed/0200_seed_phase2.sql`, applied to the hosted
+database (idempotent, fixed UUIDs, run after `0100`).
+  - **12 public holidays.** `business_calendar_holidays` was empty, which
+    silently meant "no holidays exist" — every holiday branch in the SLA
+    arithmetic was unreachable with real data. The lunar Islamic dates are
+    approximations, flagged as such in the file and in the spec.
+  - **Five applications now exist, spanning every interesting state**:
+    APPROVED (Al-Noor, fixed id `0e200000-…-0001`), INFORMATION_REQUIRED and
+    paused (Petra, `0e200000-…-0002`, with an OPEN information request),
+    GOVERNMENT_SERVICE_UNAVAILABLE (Jordan Valley Foods), APPROVED via the
+    full pause/resume cycle (Amman Steel Works), and REJECTED (the sole
+    proprietorship). **Only the two `0e200000-…` ids are fixtures** — hard-code
+    those. The other three were created by registering through the live API
+    while verifying, so their ids are random; treat them as queue content,
+    not as fixtures.
+
+BLOCKED ON: **the deploy.** Everything in `DEPLOY_RUNBOOK.md` except §2
+(creating the Render service) has now been executed for real against the
+production build, and the runbook is corrected accordingly. §2 needs a
+hosting account, which I do not have. A `render.yaml` blueprint is committed
+at the repo root so it is one action once an account exists. Until then the
+Phase 1 checkpoint stays unrun and nothing flips to `live`.
+
+NOTE FOR B — five things that will affect your screens:
+  1. **A paused SLA has NO deadline.** `slaDeadlineAt` is `null` whenever
+     `slaPaused` is true, by design — projecting one from "if it resumed
+     now" would show a date that moves on every refresh. Render the paused
+     state and the remaining time; do not render a date. `slaPausedReason`
+     tells you why (`INFORMATION_REQUESTED` or
+     `GOVERNMENT_SERVICE_UNAVAILABLE`).
+  2. **`GOVERNMENT_SERVICE_UNAVAILABLE` is not an adverse state and must not
+     look like one.** No red, no "failed", no "rejected". The clock is
+     paused and nothing about the supplier has been judged. Correspondingly,
+     on `/government/*` responses branch on **`sourceAvailable`**, never on
+     `status` alone: `NOT_FOUND` means the registry answered "no such
+     entity" (adverse, `sourceAvailable: true`) while `UNAVAILABLE` means it
+     did not answer (`sourceAvailable: false`). Fixture keys `90000002` and
+     `90000001` are that pair.
+  3. **`governmentData` is a map of `{value, sourceKind, source,
+     retrievedAt}`, not bare values.** That is what your source badge and
+     retrieval date read from. `sourceKind` is `GOVERNMENT` or
+     `SELF_DECLARED`; render `GOVERNMENT` fields read-only. A field the
+     supplier typed that contradicts the registry is stored but does not win
+     (ZM-SON-004) — it will appear with `sourceKind: GOVERNMENT` and the
+     supplier's value is kept behind it for the reviewer.
+  4. **`POST /onboarding/register` returns 201 on first call and 200 when
+     the user already has an organization**, with the same ids both times.
+     It is the only route exempt from `X-Organization-Id`, because the caller
+     has no organization yet. Everything else needs the header as usual.
+  5. Status codes worth pinning in your client: `submit`, `respond` and
+     `decide` all return **200** (not 201); `/government/lookup` returns
+     **202**. The conformance gate now checks these, so if you see a
+     mismatch it is real — tell me rather than assuming the gate caught it.

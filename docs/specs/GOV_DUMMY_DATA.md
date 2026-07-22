@@ -33,8 +33,23 @@ so a number's role is obvious on sight while debugging:
 | S1 | `20000101` | Al-Noor Trading Company | شركة النور للتجارة | Amman | Wholesale | yes | CCD/ISTD/GAM all full |
 | S2 | `20000102` | Petra Industrial Supplies | بتراء للتوريدات الصناعية | Zarqa | Manufacturing | yes | CCD full, GAM partial |
 | S3 | `20000103` | Jordan Valley Foods | أغذية وادي الأردن | Irbid | Food | no (Phase 2) | ISTD unavailable — drives the SLA-pause scenario |
+| S4 | `20000104` | Hani Auto Parts Establishment | مؤسسة هاني لقطع غيار السيارات | Amman | Retail | no — register it | **Sole proprietorship** — hard-rejected (ZM-SON-012/013) |
+| S5 | `20000105` | Amman Steel Works | أعمال عمان للحديد | Amman | Manufacturing | no — register it | All sources full; reserved for the register → approve flow |
 
 S1 is the demo's protagonist (Master Plan 6.2).
+
+**S4 and S5 were added in Phase 2** (announced in the daily log, 2026-07-23).
+Nothing was renamed or renumbered. Both exist because a required path had no
+identity to run on:
+
+- **S4** is the only sole proprietorship, so ZM-SON-013's ineligibility
+  screen and its hard-rejection test had no fixture without it.
+- **S5** is deliberately **not** seeded as an organization. Every other
+  full-success supplier already is, so `POST /onboarding/register` returns
+  409 for all of them and the Phase 2 integration checkpoint — register →
+  submit → approve — could not be run end to end. S5 is the identity to
+  register with when demonstrating that flow. Registering it consumes it:
+  a second registration returns 409, which is correct behaviour.
 
 ## 3. Buyers
 
@@ -126,8 +141,51 @@ switching context is a Phase 1 checkpoint item.
 |---|---|
 | `40000001` | Zimmamless Platform |
 
+## 6a. Adapter payload shapes (drafted Phase 2)
+
+Each source supplies a fixed set of normalized field keys. The set is the
+**denominator of `dataAvailabilityPct`** — a `PARTIAL` answer supplies some
+of them, an unavailable source supplies none, and without a declared
+expected set the two are indistinguishable from a complete answer that
+happens to be short.
+
+| Source | Normalized field keys |
+|---|---|
+| **CCD** | `legalNameEn`, `legalNameAr`, `companyType`, `registryStatus`, `commercialRegistrationNo`, `registrationDate`, `paidCapitalJod`, `governorate` |
+| **ISTD** | `taxNumber`, `taxStatus`, `vatRegistered`, `lastFilingPeriod` |
+| **GAM** | `professionLicenceNumber`, `licenceStatus`, `licenceExpiryDate`, `premisesAddress`, `activityCode` |
+
+Value domains: `companyType` ∈ `LIMITED_LIABILITY | PRIVATE_SHAREHOLDING |
+PUBLIC_SHAREHOLDING | GENERAL_PARTNERSHIP | SOLE_PROPRIETORSHIP` ·
+`registryStatus` ∈ `ACTIVE | SUSPENDED | STRUCK_OFF | UNDER_LIQUIDATION |
+UNKNOWN` · `taxStatus` ∈ `REGISTERED | NOT_REGISTERED | DEREGISTERED` ·
+`licenceStatus` ∈ `VALID | EXPIRED | SUSPENDED`.
+
+`paidCapitalJod` is a **3-dp string** (`"50000.000"`), never a number —
+money is a string on every wire in this system, including this one.
+
+Every normalized value is a string. `vatRegistered` is `"true"`/`"false"`,
+not a boolean: these are provenance-carrying field values stored in one
+`entity_field_values.field_value` text column, and a per-field type would
+have to be reconstructed on read anyway.
+
+`PARTIAL` drops the second half of the field list, by position — not at
+random, so the same key always yields the same partial answer and
+`dataAvailabilityPct` is assertable.
+
+The **raw** payload is shaped differently on purpose (`source_system`,
+`queried_establishment_no`, `record`) so that `raw_payload` and
+`normalized_payload` in `government_data_snapshots` are visibly not the
+same object. `payload_hash` is sha256 over the canonicalized **raw**
+payload, so re-fetching the same answer hashes identically while a change
+to our own mapping does not disturb it.
+
 ## 8. Open items
 
-- CCD/ISTD/GAM exact payload shapes — drafted in Phase 2 with the adapters.
+- ~~CCD/ISTD/GAM exact payload shapes~~ — **closed**, §6a above (Phase 2).
 - Which of the 12 invoices sits in which of the 11 scenarios — Seed-Data
   Specification, Phase 9.
+- The seeded public-holiday calendar (`db/seed/0200_seed_phase2.sql`) uses
+  **approximate** dates for the lunar Islamic holidays. Fixed-date holidays
+  are correct. The product owner should replace them with the official
+  Jordanian calendar before any non-demo use.
