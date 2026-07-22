@@ -1,0 +1,498 @@
+# =====================================================================
+# ZIMMAMLESS V3 — API CONTRACT AMENDMENT v3.1.0 (ADDITIVE OVERLAY)
+# =====================================================================
+# Approved by product owner 2026-07-22 (docs/coordination/DECISIONS.md).
+# This overlay ADDS paths, fields, and schemas to 03_API_CONTRACT.yaml
+# (v3.0.0). It changes NOTHING that already exists. Agent A implements
+# these alongside the base contract; Agent B merges this overlay with
+# the base file before generating its client and mocks.
+#
+# All cross-cutting rules of the base contract (auth + X-Organization-Id,
+# confidentiality, money strings, idempotency, language, error envelope)
+# apply to every endpoint below unless explicitly noted (only
+# /onboarding/register is exempt from the org-context header).
+# =====================================================================
+
+info:
+  title: Zimmamless V3 API — Amendment
+  version: 3.1.0
+
+# ---------------------------------------------------------------------
+# ADDITIVE FIELD on an existing response (D-10):
+# GET /auth/me gains an OPTIONAL top-level property:
+#
+#   demo:
+#     type: object
+#     properties:
+#       timeMachineEnabled: { type: boolean }
+#       currentOffsetDays:  { type: integer }
+#
+# Present only when demo_time_machine_enabled=true; ABSENT in production.
+# The frontend shows the time-machine control only when this reports true.
+# ---------------------------------------------------------------------
+
+paths:
+
+  # -------------------------------------------------------------------
+  # D-04 — Supplier bootstrap (org + owner membership + draft application)
+  # -------------------------------------------------------------------
+  /onboarding/register:
+    post:
+      tags: [Onboarding]
+      summary: Bootstrap a supplier — creates organization, SUPPLIER_OWNER membership, and a draft application in one call
+      description: |
+        EXEMPT from the X-Organization-Id requirement — the caller has no
+        organization yet. Requires only a valid Supabase JWT. Idempotent per
+        user: a second call while an ONBOARDING org exists returns the
+        existing ids with 200 instead of creating a duplicate.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [nationalEstablishmentNumber, professionLicenceNumber]
+              properties:
+                nationalEstablishmentNumber: { type: string }
+                professionLicenceNumber: { type: string }
+      responses:
+        '201':
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [organizationId, applicationId]
+                properties:
+                  organizationId: { type: string, format: uuid }
+                  applicationId: { type: string, format: uuid }
+        '200': { description: Already bootstrapped — returns the existing ids }
+        '409': { description: Establishment number already registered to another organization }
+
+  # -------------------------------------------------------------------
+  # D-05 — Application list (supplier resume + reviewer queue)
+  # -------------------------------------------------------------------
+  /onboarding/applications-list:
+    get:
+      tags: [Onboarding, Admin]
+      summary: List applications — supplier sees its own; PLATFORM_SUPPLIER_REVIEWER sees the queue
+      parameters:
+        - name: status
+          in: query
+          schema: { type: string }
+        - name: page
+          in: query
+          schema: { type: integer, default: 1 }
+        - name: pageSize
+          in: query
+          schema: { type: integer, default: 20 }
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  items:
+                    type: array
+                    items: { $ref: '03_API_CONTRACT.yaml#/components/schemas/SupplierApplication' }
+                  pagination: { $ref: '03_API_CONTRACT.yaml#/components/schemas/Pagination' }
+
+  # -------------------------------------------------------------------
+  # D-06 — Transaction → current listing
+  # -------------------------------------------------------------------
+  /transactions/{id}/listing-current:
+    get:
+      tags: [Marketplace]
+      summary: Current-round listing for a transaction (supplier/platform)
+      parameters: [{ $ref: '03_API_CONTRACT.yaml#/components/parameters/PathId' }]
+      responses:
+        '200':
+          content:
+            application/json:
+              schema: { $ref: '03_API_CONTRACT.yaml#/components/schemas/Listing' }
+        '404': { description: No listing exists for this transaction }
+
+  # -------------------------------------------------------------------
+  # D-07 — Bank single-listing underwriting view
+  # -------------------------------------------------------------------
+  /marketplace/listings/{id}:
+    get:
+      tags: [Marketplace]
+      summary: One listing in the bank's view (eligibility enforced)
+      description: Same confidentiality exclusions as BankListingView — no floor, no offerCount, no competitor data.
+      parameters: [{ $ref: '03_API_CONTRACT.yaml#/components/parameters/PathId' }]
+      responses:
+        '200':
+          content:
+            application/json:
+              schema: { $ref: '03_API_CONTRACT.yaml#/components/schemas/BankListingView' }
+        '403': { description: Bank not eligible for this listing }
+
+  # -------------------------------------------------------------------
+  # D-08 — Offer collection (approval queue + my offers)
+  # -------------------------------------------------------------------
+  /offers:
+    get:
+      tags: [Offers]
+      summary: Offers of the active bank organization
+      description: Bank roles only; scoped strictly to the active bank org. Suppliers use /listings/{id}/offers.
+      parameters:
+        - name: status
+          in: query
+          schema: { type: string, description: 'e.g. PENDING_INTERNAL_APPROVAL, ACTIVE' }
+        - name: page
+          in: query
+          schema: { type: integer, default: 1 }
+        - name: pageSize
+          in: query
+          schema: { type: integer, default: 20 }
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  items:
+                    type: array
+                    items: { $ref: '03_API_CONTRACT.yaml#/components/schemas/Offer' }
+                  pagination: { $ref: '03_API_CONTRACT.yaml#/components/schemas/Pagination' }
+
+  # -------------------------------------------------------------------
+  # D-12 — Policy-filter maintenance; supplier cancellation
+  # -------------------------------------------------------------------
+  /banks/policy-filters/{id}:
+    patch:
+      tags: [Marketplace]
+      summary: Update or deactivate a policy filter
+      parameters: [{ $ref: '03_API_CONTRACT.yaml#/components/parameters/PathId' }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '03_API_CONTRACT.yaml#/components/schemas/PolicyFilter' }
+      responses:
+        '200': { description: Updated }
+
+  /transactions/{id}/cancel:
+    post:
+      tags: [Transactions]
+      summary: Supplier-initiated cancellation/withdrawal per stage policy (requirements §16.8)
+      description: |
+        DRAFT: delete-equivalent (soft). SUBMITTED/UNDER_REVIEW: withdrawal,
+        record preserved. OPEN_FOR_OFFERS: per policy, active offers closed.
+        OFFER_ACCEPTED and later: 409 — requires the case workflows.
+      parameters: [{ $ref: '03_API_CONTRACT.yaml#/components/parameters/PathId' }]
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                reason: { type: string }
+      responses:
+        '200': { description: Cancelled/withdrawn per stage rules }
+        '409': { description: Stage does not permit unilateral cancellation }
+
+  # -------------------------------------------------------------------
+  # D-03 — Relisting (manual request + admin queue)
+  # -------------------------------------------------------------------
+  /transactions/{id}/relist-request:
+    post:
+      tags: [Marketplace]
+      summary: Supplier requests manual relisting (never automatic — ZM-MKT-016)
+      parameters: [{ $ref: '03_API_CONTRACT.yaml#/components/parameters/PathId' }]
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                notes: { type: string }
+      responses:
+        '201':
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/RelistingRequest' }
+        '409': { description: Open relisting request already exists, or transaction not eligible to request }
+
+  /admin/relisting-requests:
+    get:
+      tags: [Admin]
+      summary: Relisting review queue
+      parameters:
+        - name: status
+          in: query
+          schema: { type: string, enum: [REQUESTED, UNDER_REVIEW, APPROVED, DENIED] }
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/RelistingRequest' }
+
+  # -------------------------------------------------------------------
+  # D-09 — Case management: list, read, decide
+  # -------------------------------------------------------------------
+  /cases:
+    get:
+      tags: [Cases]
+      summary: Role-scoped case list (fraud, disputes, withdrawal, recourse)
+      description: Platform sees all; bank/supplier see cases on their own transactions only, minus confidential counterpart data.
+      parameters:
+        - name: type
+          in: query
+          schema: { type: string, enum: [FRAUD, DISPUTE, WITHDRAWAL, RECOURSE] }
+        - name: status
+          in: query
+          schema: { type: string }
+        - name: page
+          in: query
+          schema: { type: integer, default: 1 }
+        - name: pageSize
+          in: query
+          schema: { type: integer, default: 20 }
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  items:
+                    type: array
+                    items: { $ref: '#/components/schemas/CaseSummary' }
+                  pagination: { $ref: '03_API_CONTRACT.yaml#/components/schemas/Pagination' }
+
+  /recourse/{id}:
+    get:
+      tags: [Cases]
+      parameters: [{ $ref: '03_API_CONTRACT.yaml#/components/parameters/PathId' }]
+      responses:
+        '200':
+          content:
+            application/json:
+              schema: { $ref: '03_API_CONTRACT.yaml#/components/schemas/RecourseCase' }
+
+  /recourse/{id}/status:
+    post:
+      tags: [Cases]
+      summary: Progress a recourse case (SUPPLIER_NOTIFIED → PAYMENT_PENDING → SETTLED | DISPUTED | LEGAL_ESCALATION)
+      parameters: [{ $ref: '03_API_CONTRACT.yaml#/components/parameters/PathId' }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [status]
+              properties:
+                status: { type: string, enum: [SUPPLIER_NOTIFIED, PAYMENT_PENDING, SETTLED, DISPUTED, LEGAL_ESCALATION] }
+                notes: { type: string }
+      responses:
+        '200': { description: Updated }
+
+  /disputes/{id}:
+    get:
+      tags: [Cases]
+      parameters: [{ $ref: '03_API_CONTRACT.yaml#/components/parameters/PathId' }]
+      responses:
+        '200':
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Dispute' }
+
+  /disputes/{id}/resolve:
+    post:
+      tags: [Cases]
+      summary: Record the resolution the parties submitted (platform does not adjudicate — ZM-REC-012/014)
+      parameters: [{ $ref: '03_API_CONTRACT.yaml#/components/parameters/PathId' }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [resolutionNotes]
+              properties:
+                resolutionNotes: { type: string }
+                outcome: { type: string, enum: [RESOLVED, REJECTED] }
+      responses:
+        '200': { description: Resolution recorded; transaction automation resumes }
+
+  /withdrawal-cases/{id}:
+    get:
+      tags: [Cases]
+      parameters: [{ $ref: '03_API_CONTRACT.yaml#/components/parameters/PathId' }]
+      responses:
+        '200':
+          content:
+            application/json:
+              schema: { $ref: '03_API_CONTRACT.yaml#/components/schemas/WithdrawalCase' }
+
+  /withdrawal-cases/{id}/decide:
+    post:
+      tags: [Cases, Admin]
+      summary: Admin decision — penalty applicability/amount (recorded, never auto-deducted) + relisting eligibility
+      parameters: [{ $ref: '03_API_CONTRACT.yaml#/components/parameters/PathId' }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [penaltyApplicable, relistingEligible]
+              properties:
+                penaltyApplicable: { type: boolean }
+                penaltyAmount: { $ref: '03_API_CONTRACT.yaml#/components/schemas/Money' }
+                relistingEligible: { type: boolean }
+                notes: { type: string }
+      responses:
+        '200': { description: Decided }
+
+  /fraud-cases/{id}:
+    get:
+      tags: [Cases]
+      parameters: [{ $ref: '03_API_CONTRACT.yaml#/components/parameters/PathId' }]
+      responses:
+        '200':
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/FraudCase' }
+
+  /fraud-cases/{id}/decide:
+    post:
+      tags: [Cases, Admin]
+      summary: Compliance decision — only this records confirmed status (ZM-FRD-004)
+      parameters: [{ $ref: '03_API_CONTRACT.yaml#/components/parameters/PathId' }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [decision]
+              properties:
+                decision: { type: string, enum: [CLEARED, RESTRICTED, SUSPENDED, BLACKLISTED, REPORTED] }
+                notes: { type: string }
+      responses:
+        '200': { description: Decided; transaction unfrozen or restrictions applied }
+
+  # -------------------------------------------------------------------
+  # D-11 — In-platform notification inbox
+  # -------------------------------------------------------------------
+  /notifications:
+    get:
+      tags: [Notifications]
+      summary: In-platform notifications for the current user in the active context
+      parameters:
+        - name: unread
+          in: query
+          schema: { type: boolean }
+        - name: page
+          in: query
+          schema: { type: integer, default: 1 }
+        - name: pageSize
+          in: query
+          schema: { type: integer, default: 20 }
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  items:
+                    type: array
+                    items: { $ref: '#/components/schemas/NotificationItem' }
+                  unreadCount: { type: integer }
+                  pagination: { $ref: '03_API_CONTRACT.yaml#/components/schemas/Pagination' }
+
+  /notifications/{id}/read:
+    post:
+      tags: [Notifications]
+      parameters: [{ $ref: '03_API_CONTRACT.yaml#/components/parameters/PathId' }]
+      responses:
+        '200': { description: Marked read }
+
+components:
+  schemas:
+
+    RelistingRequest:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        transactionId: { type: string, format: uuid }
+        status: { type: string, enum: [REQUESTED, UNDER_REVIEW, APPROVED, DENIED] }
+        verification:
+          type: object
+          description: ZM-REC-018 checks, each true|false|null
+          additionalProperties: true
+        notes: { type: string }
+        requestedAt: { type: string, format: date-time }
+        decidedAt: { type: string, format: date-time }
+        decisionNotes: { type: string }
+
+    CaseSummary:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        caseType: { type: string, enum: [FRAUD, DISPUTE, WITHDRAWAL, RECOURSE] }
+        transactionId: { type: string, format: uuid }
+        transactionReference: { type: string }
+        status: { type: string }
+        openedAt: { type: string, format: date-time }
+        assignedToName: { type: string, description: Platform view only }
+
+    Dispute:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        transactionId: { type: string, format: uuid }
+        disputeType: { type: string }
+        amount: { $ref: '03_API_CONTRACT.yaml#/components/schemas/Money' }
+        status: { type: string, enum: [OPEN, UNDER_REVIEW, RESOLVED, REJECTED] }
+        description: { type: string }
+        resolutionNotes: { type: string }
+        raisedAt: { type: string, format: date-time }
+        resolvedAt: { type: string, format: date-time }
+
+    FraudCase:
+      type: object
+      description: Suspected case until a Compliance decision — never presented as confirmed fraud before that (ZM-FRD-004).
+      properties:
+        id: { type: string, format: uuid }
+        transactionId: { type: string, format: uuid }
+        status: { type: string, enum: [OPEN, UNDER_REVIEW, INFORMATION_REQUESTED, CLEARED, RESTRICTED, SUSPENDED, BLACKLISTED, REPORTED, CLOSED] }
+        summary: { type: string }
+        indicators:
+          type: array
+          items:
+            type: object
+            properties:
+              indicatorType: { type: string }
+              detectedAt: { type: string, format: date-time }
+        openedAt: { type: string, format: date-time }
+        decisionNotes: { type: string, description: Platform view only }
+
+    NotificationItem:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        templateKey: { type: string }
+        subject: { type: string }
+        body: { type: string }
+        transactionId: { type: string, format: uuid }
+        read: { type: boolean }
+        queuedAt: { type: string, format: date-time }
+
+# =====================================================================
+# NAMING NOTE (binding): two additions use suffixed paths to avoid any
+# ambiguity with frozen paths on the same resources:
+#   - GET /onboarding/applications-list   (list; the frozen POST/GET-by-id
+#     on /onboarding/applications are untouched)
+#   - GET /transactions/{id}/listing-current  (the frozen POST
+#     /transactions/{id}/listing remains creation-only)
+# Agent A implements exactly these paths; Agent B's client uses them.
+# =====================================================================

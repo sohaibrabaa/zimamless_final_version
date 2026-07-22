@@ -1,0 +1,1843 @@
+openapi: 3.1.0
+
+# =====================================================================
+# ZIMMAMLESS V3 — API CONTRACT (FROZEN)
+# =====================================================================
+# THIS FILE IS THE SEAM BETWEEN THE TWO PARALLEL AGENTS.
+# Agent A (backend) implements it. Agent B (frontend) consumes it.
+# Neither may change it unilaterally. Changes require product-owner
+# approval and a version bump.
+#
+# Contract version: 3.0.0
+# =====================================================================
+
+info:
+  title: Zimmamless V3 API
+  version: 3.0.0
+  description: |
+    Receivables marketplace connecting Jordanian suppliers with banks.
+
+    CROSS-CUTTING RULES — binding on every endpoint:
+
+    1. AUTH. Bearer JWT from Supabase Auth. Every request must also send
+       `X-Organization-Id` naming the active organization context.
+       Requests without it, or naming an org the user does not belong to,
+       return 403.
+
+    2. CONFIDENTIALITY. `minimumAcceptableAmount` MUST NEVER appear in any
+       bank-facing response, including validation errors. A bank MUST NEVER
+       receive another bank's identity, amount, fees, conditions, or the
+       count of competing offers.
+
+    3. MONEY. All monetary values are strings in decimal form with exactly
+       three decimal places, e.g. "1250.000". Never numbers — JSON floats
+       lose precision. Currency is always "JOD" in V3.
+
+    4. IDEMPOTENCY. All POST endpoints that move money or change financial
+       state require an `Idempotency-Key` header.
+
+    5. LANGUAGE. `Accept-Language: en | ar`. Default is `en` (never inferred
+       from locale). Affects messages and generated documents only.
+
+    6. ERRORS. Every error uses the Error schema. `code` is stable and
+       machine-readable; `message` is localized and for humans.
+
+servers:
+  - url: https://api.zimmamless.com/v1
+    description: Production
+  - url: http://localhost:3000/v1
+    description: Local
+
+security:
+  - bearerAuth: []
+
+tags:
+  - name: Auth
+  - name: Onboarding
+  - name: Government
+  - name: Buyers
+  - name: Transactions
+  - name: Documents
+  - name: Marketplace
+  - name: Offers
+  - name: Contracts
+  - name: Funding
+  - name: Payments
+  - name: Cases
+  - name: Admin
+  - name: Demo
+
+paths:
+
+  # ---------------------------------------------------------------
+  # AUTH & CONTEXT
+  # ---------------------------------------------------------------
+  /auth/me:
+    get:
+      tags: [Auth]
+      summary: Current user, memberships, and active context
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [user, memberships]
+                properties:
+                  user: { $ref: '#/components/schemas/User' }
+                  memberships:
+                    type: array
+                    items: { $ref: '#/components/schemas/Membership' }
+                  activeOrganizationId: { type: string, format: uuid }
+
+  /auth/context:
+    post:
+      tags: [Auth]
+      summary: Switch active organization context
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [organizationId]
+              properties:
+                organizationId: { type: string, format: uuid }
+      responses:
+        '200': { description: Context switched }
+        '403': { $ref: '#/components/responses/Forbidden' }
+
+  /auth/language:
+    patch:
+      tags: [Auth]
+      summary: Set preferred language (persists per user)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [language]
+              properties:
+                language: { type: string, enum: [EN, AR] }
+      responses:
+        '200': { description: Updated }
+
+  # ---------------------------------------------------------------
+  # SUPPLIER ONBOARDING
+  # ---------------------------------------------------------------
+  /onboarding/applications:
+    post:
+      tags: [Onboarding]
+      summary: Start a supplier application
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [nationalEstablishmentNumber, professionLicenceNumber]
+              properties:
+                nationalEstablishmentNumber: { type: string }
+                professionLicenceNumber: { type: string }
+      responses:
+        '201':
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/SupplierApplication' }
+
+  /onboarding/applications/{id}:
+    get:
+      tags: [Onboarding]
+      parameters: [{ $ref: '#/components/parameters/PathId' }]
+      responses:
+        '200':
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/SupplierApplication' }
+
+  /onboarding/applications/{id}/submit:
+    post:
+      tags: [Onboarding]
+      summary: Submit for review — starts the 24 business-hour SLA clock
+      parameters: [{ $ref: '#/components/parameters/PathId' }]
+      responses:
+        '200':
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/SupplierApplication' }
+        '422': { $ref: '#/components/responses/Unprocessable' }
+
+  /onboarding/applications/{id}/bank-account:
+    post:
+      tags: [Onboarding]
+      parameters: [{ $ref: '#/components/parameters/PathId' }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [iban, bankName, accountHolderName]
+              properties:
+                iban: { type: string }
+                bankName: { type: string }
+                accountHolderName: { type: string }
+                evidenceDocumentId: { type: string, format: uuid }
+      responses:
+        '201': { description: Created }
+
+  /onboarding/applications/{id}/consents:
+    post:
+      tags: [Onboarding]
+      parameters: [{ $ref: '#/components/parameters/PathId' }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [consents]
+              properties:
+                consents:
+                  type: array
+                  items:
+                    type: object
+                    required: [consentType, consentVersion, granted]
+                    properties:
+                      consentType: { type: string }
+                      consentVersion: { type: string }
+                      granted: { type: boolean }
+      responses:
+        '201': { description: Recorded }
+
+  /onboarding/applications/{id}/information-requests:
+    get:
+      tags: [Onboarding]
+      parameters: [{ $ref: '#/components/parameters/PathId' }]
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/InformationRequest' }
+
+  /onboarding/applications/{id}/respond:
+    post:
+      tags: [Onboarding]
+      summary: Respond to an information request — resumes the SLA clock
+      parameters: [{ $ref: '#/components/parameters/PathId' }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [informationRequestId, response]
+              properties:
+                informationRequestId: { type: string, format: uuid }
+                response: { type: string }
+                documentIds:
+                  type: array
+                  items: { type: string, format: uuid }
+      responses:
+        '200': { description: Recorded }
+
+  /onboarding/applications/{id}/decide:
+    post:
+      tags: [Onboarding, Admin]
+      summary: Reviewer decision (PLATFORM_SUPPLIER_REVIEWER)
+      parameters: [{ $ref: '#/components/parameters/PathId' }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [decision]
+              properties:
+                decision:
+                  type: string
+                  enum: [APPROVED, APPROVED_CONDITIONAL, INFORMATION_REQUIRED, REJECTED]
+                reasonCode: { type: string }
+                notes: { type: string }
+      responses:
+        '200': { description: Decided }
+
+  # ---------------------------------------------------------------
+  # GOVERNMENT VERIFICATION
+  # ---------------------------------------------------------------
+  /government/lookup:
+    post:
+      tags: [Government]
+      summary: Trigger a registry lookup via adapter
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [source, lookupKey]
+              properties:
+                source: { type: string, enum: [CCD, ISTD, GAM, EINVOICE] }
+                lookupKey: { type: string }
+                subjectType: { type: string, enum: [ORGANIZATION, BUYER, INVOICE] }
+                subjectId: { type: string, format: uuid }
+      responses:
+        '202':
+          description: Accepted — poll the request for result
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/GovernmentRequest' }
+
+  /government/requests/{id}:
+    get:
+      tags: [Government]
+      parameters: [{ $ref: '#/components/parameters/PathId' }]
+      responses:
+        '200':
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/GovernmentRequest' }
+
+  # ---------------------------------------------------------------
+  # BUYER RESOLUTION
+  # ---------------------------------------------------------------
+  /buyers/search:
+    get:
+      tags: [Buyers]
+      summary: Search known buyers, then registry
+      description: |
+        Search order: buyers already linked to this supplier, then all
+        platform buyers, then CCD via adapter. The platform NEVER
+        auto-selects on name similarity — the supplier must choose.
+      parameters:
+        - name: q
+          in: query
+          required: true
+          schema: { type: string, minLength: 2 }
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  candidates:
+                    type: array
+                    items: { $ref: '#/components/schemas/BuyerCandidate' }
+                  requiresManualReview:
+                    type: boolean
+                    description: True when results are ambiguous
+
+  /buyers/resolve:
+    post:
+      tags: [Buyers]
+      summary: Confirm buyer selection and create or link the global record
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [nationalEstablishmentNumber, confirmedByUser]
+              properties:
+                nationalEstablishmentNumber: { type: string }
+                confirmedByUser:
+                  type: boolean
+                  description: Must be true — explicit supplier confirmation
+                contact:
+                  $ref: '#/components/schemas/BuyerContactInput'
+      responses:
+        '200':
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Buyer' }
+        '409':
+          description: Buyer blocked (SUSPENDED / STRUCK_OFF)
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+
+  /buyers/{id}:
+    get:
+      tags: [Buyers]
+      parameters: [{ $ref: '#/components/parameters/PathId' }]
+      responses:
+        '200':
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Buyer' }
+
+  # ---------------------------------------------------------------
+  # DOCUMENTS
+  # ---------------------------------------------------------------
+  /documents/upload-url:
+    post:
+      tags: [Documents]
+      summary: Get a short-lived signed upload URL
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [documentType, fileName, mimeType, sizeBytes]
+              properties:
+                documentType: { type: string }
+                fileName: { type: string }
+                mimeType: { type: string }
+                sizeBytes: { type: integer }
+                subjectType: { type: string }
+                subjectId: { type: string, format: uuid }
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  documentId: { type: string, format: uuid }
+                  uploadUrl: { type: string }
+                  expiresAt: { type: string, format: date-time }
+
+  /documents/{id}/download-url:
+    get:
+      tags: [Documents]
+      summary: Short-lived signed download URL (authorization checked server-side)
+      parameters: [{ $ref: '#/components/parameters/PathId' }]
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  url: { type: string }
+                  expiresAt: { type: string, format: date-time }
+
+  /documents/{id}/extraction:
+    get:
+      tags: [Documents]
+      summary: OCR and QR extraction result
+      description: |
+        Returns machine-extracted values. These are suggestions for supplier
+        review — the raw output is preserved separately from any correction.
+      parameters: [{ $ref: '#/components/parameters/PathId' }]
+      responses:
+        '200':
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Extraction' }
+
+  # ---------------------------------------------------------------
+  # TRANSACTIONS (invoice submission)
+  # ---------------------------------------------------------------
+  /transactions:
+    get:
+      tags: [Transactions]
+      summary: List transactions visible in the active context
+      parameters:
+        - { $ref: '#/components/parameters/Page' }
+        - { $ref: '#/components/parameters/PageSize' }
+        - name: state
+          in: query
+          schema: { $ref: '#/components/schemas/TransactionState' }
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  items:
+                    type: array
+                    items: { $ref: '#/components/schemas/TransactionSummary' }
+                  pagination: { $ref: '#/components/schemas/Pagination' }
+    post:
+      tags: [Transactions]
+      summary: Create a draft transaction
+      responses:
+        '201':
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Transaction' }
+
+  /transactions/{id}:
+    get:
+      tags: [Transactions]
+      description: |
+        Response shape varies by caller role. Supplier sees
+        `minimumAcceptableAmount`; a bank NEVER does.
+      parameters: [{ $ref: '#/components/parameters/PathId' }]
+      responses:
+        '200':
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Transaction' }
+
+  /transactions/{id}/invoice:
+    put:
+      tags: [Transactions]
+      summary: Set or update invoice details
+      parameters: [{ $ref: '#/components/parameters/PathId' }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/InvoiceInput' }
+      responses:
+        '200':
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Invoice' }
+
+  /transactions/{id}/buyer:
+    put:
+      tags: [Transactions]
+      parameters: [{ $ref: '#/components/parameters/PathId' }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [buyerId]
+              properties:
+                buyerId: { type: string, format: uuid }
+                contact: { $ref: '#/components/schemas/BuyerContactInput' }
+      responses:
+        '200': { description: Linked }
+
+  /transactions/{id}/minimum-amount:
+    put:
+      tags: [Transactions]
+      summary: Set the supplier's private minimum NET payout floor
+      description: |
+        This is the minimum NET amount the supplier will accept, not a gross
+        floor. It is NEVER disclosed to any bank.
+      parameters: [{ $ref: '#/components/parameters/PathId' }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [minimumAcceptableAmount]
+              properties:
+                minimumAcceptableAmount: { $ref: '#/components/schemas/Money' }
+      responses:
+        '200': { description: Set }
+        '422':
+          description: Exceeds invoice outstanding amount
+
+  /transactions/{id}/declarations:
+    post:
+      tags: [Transactions]
+      summary: Record supplier declarations (all must be true)
+      parameters: [{ $ref: '#/components/parameters/PathId' }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/DeclarationInput' }
+      responses:
+        '201': { description: Recorded }
+
+  /transactions/{id}/submit:
+    post:
+      tags: [Transactions]
+      summary: Submit for verification
+      parameters: [{ $ref: '#/components/parameters/PathId' }]
+      responses:
+        '200':
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Transaction' }
+        '409':
+          description: Duplicate invoice fingerprint detected
+
+  /transactions/{id}/verification:
+    get:
+      tags: [Transactions]
+      parameters: [{ $ref: '#/components/parameters/PathId' }]
+      responses:
+        '200':
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/VerificationRun' }
+
+  /transactions/{id}/risk:
+    get:
+      tags: [Transactions]
+      summary: Trust Score and component indicators
+      parameters: [{ $ref: '#/components/parameters/PathId' }]
+      responses:
+        '200':
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/RiskAssessment' }
+
+  # ---------------------------------------------------------------
+  # MARKETPLACE
+  # ---------------------------------------------------------------
+  /transactions/{id}/listing:
+    post:
+      tags: [Marketplace]
+      summary: Activate a marketplace listing
+      description: |
+        Creates the listing-fee obligation immediately. The fee is incurred
+        at activation regardless of whether financing later succeeds. The
+        supplier must be shown the fee before calling this.
+      parameters: [{ $ref: '#/components/parameters/PathId' }]
+      responses:
+        '201':
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Listing' }
+        '402':
+          description: Listing fee obligation could not be created
+
+  /listings/{id}:
+    get:
+      tags: [Marketplace]
+      parameters: [{ $ref: '#/components/parameters/PathId' }]
+      responses:
+        '200':
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Listing' }
+
+  /listings/{id}/offers:
+    get:
+      tags: [Marketplace, Offers]
+      summary: Offers on a listing
+      description: |
+        Supplier: sees all ACTIVE offers, fully.
+        Bank: sees ONLY its own offer. Never another bank's data, never the
+        count of competitors.
+      parameters: [{ $ref: '#/components/parameters/PathId' }]
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/Offer' }
+
+  /marketplace/eligible:
+    get:
+      tags: [Marketplace]
+      summary: Listings this bank is eligible for
+      parameters:
+        - { $ref: '#/components/parameters/Page' }
+        - { $ref: '#/components/parameters/PageSize' }
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  items:
+                    type: array
+                    items: { $ref: '#/components/schemas/BankListingView' }
+                  pagination: { $ref: '#/components/schemas/Pagination' }
+
+  /banks/policy-filters:
+    get:
+      tags: [Marketplace]
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/PolicyFilter' }
+    post:
+      tags: [Marketplace]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/PolicyFilter' }
+      responses:
+        '201': { description: Created }
+
+  # ---------------------------------------------------------------
+  # OFFERS
+  # ---------------------------------------------------------------
+  /listings/{id}/offers/create:
+    post:
+      tags: [Offers]
+      summary: Create a draft offer (BANK_OFFER_MAKER)
+      description: |
+        Server recomputes netSupplierPayout from the components and rejects
+        any mismatch. If the net falls below the supplier's private floor,
+        the error MUST NOT reveal the floor or the shortfall.
+      parameters: [{ $ref: '#/components/parameters/PathId' }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/OfferInput' }
+      responses:
+        '201':
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Offer' }
+        '422':
+          description: |
+            Offer does not meet requirements. Generic message only —
+            code OFFER_BELOW_SUPPLIER_REQUIREMENT, with no numeric detail.
+
+  /offers/{id}:
+    get:
+      tags: [Offers]
+      parameters: [{ $ref: '#/components/parameters/PathId' }]
+      responses:
+        '200':
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Offer' }
+    patch:
+      tags: [Offers]
+      summary: Revise an offer (creates a new version)
+      parameters: [{ $ref: '#/components/parameters/PathId' }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/OfferInput' }
+      responses:
+        '200': { description: Revised }
+
+  /offers/{id}/approve:
+    post:
+      tags: [Offers]
+      summary: Internal approval (BANK_OFFER_APPROVER)
+      description: Rejected if the approver is the same user who created it.
+      parameters: [{ $ref: '#/components/parameters/PathId' }]
+      responses:
+        '200': { description: Approved and published as ACTIVE }
+        '403':
+          description: Self-approval prohibited (code SELF_APPROVAL_FORBIDDEN)
+
+  /offers/{id}/withdraw:
+    post:
+      tags: [Offers]
+      summary: Withdraw before acceptance (no penalty)
+      parameters: [{ $ref: '#/components/parameters/PathId' }]
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                reason: { type: string }
+      responses:
+        '200': { description: Withdrawn }
+        '409':
+          description: Already accepted — use the withdrawal-case endpoint
+
+  /offers/{id}/accept:
+    post:
+      tags: [Offers]
+      summary: Supplier accepts an offer — ATOMIC AND IRREVERSIBLE
+      description: |
+        Executes in a single database transaction:
+          1. re-validate offer ACTIVE and within validUntil
+          2. re-validate netSupplierPayout >= minimumAcceptableAmount
+          3. re-validate transaction still lockable
+          4. lock the transaction
+          5. mark this offer SELECTED
+          6. mark all other active offers NOT_SELECTED
+          7. write the immutable AcceptedOfferSnapshot
+          8. write audit entries
+        Any failure rolls back entirely. A second acceptance is impossible.
+        May be called at any time while the listing is open — waiting for
+        the offer deadline is NOT required.
+      parameters:
+        - { $ref: '#/components/parameters/PathId' }
+        - { $ref: '#/components/parameters/IdempotencyKey' }
+      responses:
+        '200':
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AcceptedOfferSnapshot' }
+        '409':
+          description: Transaction already locked, or offer no longer active
+
+  /listings/{id}/reject-all:
+    post:
+      tags: [Offers]
+      summary: Reject all offers — transaction returns to ELIGIBLE
+      parameters: [{ $ref: '#/components/parameters/PathId' }]
+      responses:
+        '200': { description: All offers rejected }
+
+  # ---------------------------------------------------------------
+  # CONTRACTS
+  # ---------------------------------------------------------------
+  /transactions/{id}/contract:
+    post:
+      tags: [Contracts]
+      summary: Generate the contract from template + snapshot
+      parameters: [{ $ref: '#/components/parameters/PathId' }]
+      responses:
+        '201':
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Contract' }
+    get:
+      tags: [Contracts]
+      parameters: [{ $ref: '#/components/parameters/PathId' }]
+      responses:
+        '200':
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Contract' }
+
+  /contracts/{id}/sign:
+    post:
+      tags: [Contracts]
+      summary: Sign (authorized signatory only)
+      parameters: [{ $ref: '#/components/parameters/PathId' }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [accepted]
+              properties:
+                accepted: { type: boolean }
+      responses:
+        '200':
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Contract' }
+        '403': { description: Not an authorized signatory }
+
+  /transactions/{id}/conditions:
+    get:
+      tags: [Contracts]
+      parameters: [{ $ref: '#/components/parameters/PathId' }]
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/OfferCondition' }
+
+  /conditions/{id}/fulfil:
+    post:
+      tags: [Contracts]
+      parameters: [{ $ref: '#/components/parameters/PathId' }]
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                documentIds:
+                  type: array
+                  items: { type: string, format: uuid }
+                notes: { type: string }
+      responses:
+        '200': { description: Fulfilled }
+
+  # ---------------------------------------------------------------
+  # FUNDING & OTP
+  # ---------------------------------------------------------------
+  /transactions/{id}/funding/mark-sent:
+    post:
+      tags: [Funding]
+      summary: Bank marks the transfer executed (BANK_OPERATIONS)
+      description: Moves to FUNDING_CONFIRMATION_PENDING. Does NOT set FUNDED.
+      parameters:
+        - { $ref: '#/components/parameters/PathId' }
+        - { $ref: '#/components/parameters/IdempotencyKey' }
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                providerReference: { type: string }
+                evidenceDocumentId: { type: string, format: uuid }
+      responses:
+        '200': { description: Marked }
+
+  /transactions/{id}/funding/otp:
+    post:
+      tags: [Funding]
+      summary: Bank generates the funding OTP
+      description: |
+        Returns the plaintext OTP ONCE, to the bank user only. It is stored
+        hashed. The bank communicates it to the supplier out of band.
+        15 min validity, 5 attempts, 3 resends — all configurable.
+      parameters: [{ $ref: '#/components/parameters/PathId' }]
+      responses:
+        '201':
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  otp:
+                    type: string
+                    description: Shown once, to the bank user only
+                  expiresAt: { type: string, format: date-time }
+                  resendsRemaining: { type: integer }
+        '429': { description: Max resends exceeded }
+
+  /transactions/{id}/funding/confirm:
+    post:
+      tags: [Funding]
+      summary: Supplier enters the OTP — cross-party confirmation
+      description: |
+        On success AND with settlement evidence present, the transaction
+        becomes FUNDED. Both are required; neither alone suffices.
+        Failure messages are generic and reveal nothing about the code.
+      parameters:
+        - { $ref: '#/components/parameters/PathId' }
+        - { $ref: '#/components/parameters/IdempotencyKey' }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [otp]
+              properties:
+                otp: { type: string }
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  transactionState: { $ref: '#/components/schemas/TransactionState' }
+                  fundedAt: { type: string, format: date-time }
+        '401':
+          description: |
+            Invalid OTP. Body contains only attemptsRemaining — never a hint
+            about correctness, expiry, or prior use.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  code: { type: string, example: OTP_INVALID }
+                  attemptsRemaining: { type: integer }
+
+  /transactions/{id}/settlement:
+    get:
+      tags: [Funding]
+      parameters: [{ $ref: '#/components/parameters/PathId' }]
+      responses:
+        '200':
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Settlement' }
+
+  /settlements/{id}/retry:
+    post:
+      tags: [Funding, Admin]
+      summary: Retry a failed payout (idempotent — never double-pays)
+      parameters:
+        - { $ref: '#/components/parameters/PathId' }
+        - { $ref: '#/components/parameters/IdempotencyKey' }
+      responses:
+        '200': { description: Retry initiated }
+
+  # ---------------------------------------------------------------
+  # POST-FUNDING PAYMENTS
+  # ---------------------------------------------------------------
+  /transactions/{id}/payments:
+    get:
+      tags: [Payments]
+      description: |
+        Supplier sees amounts, dates, and status. Supplier NEVER sees
+        bankInternalNotes or reconciliation evidence.
+      parameters: [{ $ref: '#/components/parameters/PathId' }]
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  payments:
+                    type: array
+                    items: { $ref: '#/components/schemas/BuyerPayment' }
+                  outstandingAmount: { $ref: '#/components/schemas/Money' }
+                  overdueDays: { type: integer }
+    post:
+      tags: [Payments]
+      summary: Bank reports a buyer payment (BANK_OPERATIONS)
+      parameters:
+        - { $ref: '#/components/parameters/PathId' }
+        - { $ref: '#/components/parameters/IdempotencyKey' }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [amount, paymentDate]
+              properties:
+                amount: { $ref: '#/components/schemas/Money' }
+                paymentDate: { type: string, format: date }
+                bankReference: { type: string }
+                evidenceDocumentId: { type: string, format: uuid }
+                bankInternalNotes:
+                  type: string
+                  description: Bank-only. Never returned to the supplier.
+      responses:
+        '201': { description: Recorded }
+
+  /transactions/{id}/confirm-status:
+    post:
+      tags: [Payments]
+      summary: Bank confirms status of an OVERDUE_UNCONFIRMED transaction
+      description: |
+        Absence of a bank report is NEVER treated as proven default. The
+        transaction sits in OVERDUE_UNCONFIRMED until the bank confirms.
+      parameters: [{ $ref: '#/components/parameters/PathId' }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [status]
+              properties:
+                status: { type: string, enum: [PAID, PARTIALLY_PAID, OVERDUE] }
+                notes: { type: string }
+      responses:
+        '200': { description: Confirmed }
+
+  /transactions/{id}/close:
+    post:
+      tags: [Payments]
+      parameters: [{ $ref: '#/components/parameters/PathId' }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [closureReason]
+              properties:
+                closureReason:
+                  type: string
+                  enum: [PAID_IN_FULL, RECOURSE_SETTLED, WRITTEN_OFF, DEFAULTED, CANCELLED_BEFORE_FUNDING, SETTLED_BY_AGREEMENT, OTHER]
+                notes: { type: string }
+      responses:
+        '200': { description: Closed }
+
+  # ---------------------------------------------------------------
+  # CASES
+  # ---------------------------------------------------------------
+  /transactions/{id}/recourse:
+    post:
+      tags: [Cases]
+      summary: Initiate recourse (BANK ONLY — admin may not do this)
+      parameters: [{ $ref: '#/components/parameters/PathId' }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [reason, requestedAmount]
+              properties:
+                reason:
+                  type: string
+                  enum: [INVALID_INVOICE, HIDDEN_DISPUTE_OR_RETURN, DOUBLE_FINANCING, NON_DELIVERY, NON_PAYMENT, OTHER]
+                requestedAmount: { $ref: '#/components/schemas/Money' }
+                notes: { type: string }
+                evidenceDocumentIds:
+                  type: array
+                  items: { type: string, format: uuid }
+      responses:
+        '201':
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/RecourseCase' }
+        '403': { description: Only a bank user may initiate recourse }
+
+  /recourse/{id}/repay:
+    post:
+      tags: [Cases]
+      parameters:
+        - { $ref: '#/components/parameters/PathId' }
+        - { $ref: '#/components/parameters/IdempotencyKey' }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [amount]
+              properties:
+                amount: { $ref: '#/components/schemas/Money' }
+      responses:
+        '200': { description: Recorded }
+
+  /transactions/{id}/disputes:
+    post:
+      tags: [Cases]
+      parameters: [{ $ref: '#/components/parameters/PathId' }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [disputeType, description]
+              properties:
+                disputeType: { type: string }
+                description: { type: string }
+                amount: { $ref: '#/components/schemas/Money' }
+      responses:
+        '201': { description: Dispute opened; automation paused }
+
+  /offers/{id}/withdrawal-case:
+    post:
+      tags: [Cases]
+      summary: Post-acceptance bank withdrawal
+      parameters: [{ $ref: '#/components/parameters/PathId' }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [reason]
+              properties:
+                reason:
+                  type: string
+                  enum: [BANK_COMMERCIAL_DECISION, SUPPLIER_MISREPRESENTATION, FRAUD_DISCOVERED, INVOICE_CHANGED, CONDITION_NOT_MET, TECHNICAL_FAILURE, OTHER]
+                notes: { type: string }
+      responses:
+        '201':
+          description: |
+            Case opened. Penalty is calculated per configurable policy but
+            NOT automatically deducted. Relisting requires manual review.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/WithdrawalCase' }
+
+  /transactions/{id}/fraud-review:
+    post:
+      tags: [Cases]
+      summary: Open a fraud review — freezes the transaction
+      parameters: [{ $ref: '#/components/parameters/PathId' }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [summary]
+              properties:
+                summary: { type: string }
+                indicators:
+                  type: array
+                  items: { type: string }
+      responses:
+        '201': { description: Frozen; compliance notified }
+
+  # ---------------------------------------------------------------
+  # ADMIN
+  # ---------------------------------------------------------------
+  /admin/settings:
+    get:
+      tags: [Admin]
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: true
+    patch:
+      tags: [Admin]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: true
+      responses:
+        '200': { description: Updated }
+
+  /admin/commission-tiers:
+    get:
+      tags: [Admin]
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/CommissionTier' }
+    post:
+      tags: [Admin]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/CommissionTier' }
+      responses:
+        '201': { description: Created }
+
+  /admin/risk-models:
+    get:
+      tags: [Admin]
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/RiskModelVersion' }
+    post:
+      tags: [Admin]
+      summary: Create a new scoring version (never edits an active one)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/RiskModelVersion' }
+      responses:
+        '201': { description: Created }
+
+  /admin/relisting-requests/{id}/approve:
+    post:
+      tags: [Admin]
+      summary: Approve manual relisting after review
+      parameters: [{ $ref: '#/components/parameters/PathId' }]
+      responses:
+        '200': { description: Approved }
+
+  /admin/audit-logs:
+    get:
+      tags: [Admin]
+      parameters:
+        - { $ref: '#/components/parameters/Page' }
+        - { $ref: '#/components/parameters/PageSize' }
+        - name: targetEntityId
+          in: query
+          schema: { type: string, format: uuid }
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  items:
+                    type: array
+                    items: { $ref: '#/components/schemas/AuditLog' }
+                  pagination: { $ref: '#/components/schemas/Pagination' }
+
+  # ---------------------------------------------------------------
+  # DEMO (non-production only)
+  # ---------------------------------------------------------------
+  /demo/time-travel:
+    post:
+      tags: [Demo]
+      summary: Advance simulated clock — DISABLED IN PRODUCTION
+      description: |
+        Guarded server-side by demo_time_machine_enabled. Returns 404 in
+        production. Hiding the UI is NOT sufficient protection.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [offsetDays]
+              properties:
+                offsetDays: { type: integer }
+      responses:
+        '200': { description: Clock advanced; scheduled jobs re-evaluated }
+        '404': { description: Not available in this environment }
+
+components:
+
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+
+  parameters:
+    PathId:
+      name: id
+      in: path
+      required: true
+      schema: { type: string, format: uuid }
+    Page:
+      name: page
+      in: query
+      schema: { type: integer, default: 1, minimum: 1 }
+    PageSize:
+      name: pageSize
+      in: query
+      schema: { type: integer, default: 20, maximum: 100 }
+    IdempotencyKey:
+      name: Idempotency-Key
+      in: header
+      required: true
+      schema: { type: string }
+
+  responses:
+    Forbidden:
+      description: Forbidden
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+    Unprocessable:
+      description: Validation failed
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+
+  schemas:
+
+    Money:
+      type: string
+      pattern: '^-?\d+\.\d{3}$'
+      description: Decimal string, exactly 3 dp. Never a JSON number.
+      example: "1250.000"
+
+    Error:
+      type: object
+      required: [code, message]
+      properties:
+        code: { type: string, description: Stable machine-readable code }
+        message: { type: string, description: Localized human message }
+        details: { type: object, additionalProperties: true }
+        correlationId: { type: string, format: uuid }
+
+    Pagination:
+      type: object
+      properties:
+        page: { type: integer }
+        pageSize: { type: integer }
+        total: { type: integer }
+        totalPages: { type: integer }
+
+    User:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        fullName: { type: string }
+        email: { type: string }
+        phoneNumber: { type: string }
+        preferredLanguage: { type: string, enum: [EN, AR] }
+        mfaEnabled: { type: boolean }
+        status: { type: string, enum: [ACTIVE, SUSPENDED, DEACTIVATED] }
+
+    Membership:
+      type: object
+      properties:
+        organizationId: { type: string, format: uuid }
+        organizationName: { type: string }
+        organizationType: { type: string, enum: [SUPPLIER, BANK, PLATFORM] }
+        roles:
+          type: array
+          items: { type: string }
+        isAuthorizedSignatory: { type: boolean }
+
+    SupplierApplication:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        organizationId: { type: string, format: uuid }
+        status: { type: string }
+        slaDeadlineAt: { type: string, format: date-time }
+        slaRemainingBusinessSeconds: { type: integer }
+        slaPaused: { type: boolean }
+        submittedAt: { type: string, format: date-time }
+        decidedAt: { type: string, format: date-time }
+        decisionReasonCode: { type: string }
+        governmentData:
+          type: object
+          description: Read-only. Never user-editable.
+          additionalProperties: true
+
+    InformationRequest:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        requestedItem: { type: string }
+        description: { type: string }
+        status: { type: string, enum: [OPEN, FULFILLED, CANCELLED] }
+        requestedAt: { type: string, format: date-time }
+
+    GovernmentRequest:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        source: { type: string, enum: [CCD, ISTD, GAM, EINVOICE] }
+        status: { type: string, enum: [PENDING, SUCCESS, PARTIAL, NOT_FOUND, UNAVAILABLE, ERROR] }
+        sourceAvailable:
+          type: boolean
+          description: |
+            CRITICAL. false means the source did not answer — this MUST NOT
+            reduce any risk score. Distinct from an adverse finding.
+        normalizedData: { type: object, additionalProperties: true }
+        retrievedAt: { type: string, format: date-time }
+        validUntil: { type: string, format: date-time }
+
+    BuyerCandidate:
+      type: object
+      properties:
+        nationalEstablishmentNumber: { type: string }
+        legalCompanyName: { type: string }
+        companyType: { type: string }
+        registryStatus: { type: string }
+        governorate: { type: string }
+
+    Buyer:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        nationalEstablishmentNumber: { type: string }
+        legalCompanyName: { type: string }
+        registryStatus: { type: string, enum: [ACTIVE, SUSPENDED, STRUCK_OFF, UNDER_LIQUIDATION, UNKNOWN] }
+        governorate: { type: string }
+        registeredAddress: { type: string }
+        registrationDate: { type: string, format: date }
+        lastVerifiedAt: { type: string, format: date-time }
+
+    BuyerContactInput:
+      type: object
+      required: [contactName, contactRole, contactPhone]
+      properties:
+        contactName: { type: string }
+        contactRole: { type: string }
+        contactPhone: { type: string }
+        contactEmail: { type: string }
+
+    InvoiceInput:
+      type: object
+      required: [invoiceNumber, einvoiceIdentifier, issueDate, dueDate, subtotalAmount, taxAmount, faceValue]
+      properties:
+        invoiceNumber: { type: string }
+        einvoiceIdentifier: { type: string }
+        issueDate: { type: string, format: date }
+        dueDate: { type: string, format: date }
+        subtotalAmount: { $ref: '#/components/schemas/Money' }
+        taxAmount: { $ref: '#/components/schemas/Money' }
+        faceValue: { $ref: '#/components/schemas/Money' }
+        paidAmount: { $ref: '#/components/schemas/Money' }
+        paymentTerms: { type: string }
+        goodsDescription: { type: string }
+        purchaseOrderNumber: { type: string }
+        deliveryNoteNumber: { type: string }
+        items:
+          type: array
+          items:
+            type: object
+            properties:
+              description: { type: string }
+              quantity: { $ref: '#/components/schemas/Money' }
+              unitPrice: { $ref: '#/components/schemas/Money' }
+              lineAmount: { $ref: '#/components/schemas/Money' }
+
+    Invoice:
+      allOf:
+        - $ref: '#/components/schemas/InvoiceInput'
+        - type: object
+          properties:
+            id: { type: string, format: uuid }
+            outstandingAmount: { $ref: '#/components/schemas/Money' }
+            currency: { type: string, enum: [JOD] }
+
+    DeclarationInput:
+      type: object
+      required: [isAuthentic, goodsDelivered, unpaidAndNotCancelled, noKnownDispute, notPreviouslyFinanced, buyerIsNamedEntity, contactIsBuyerRep, acceptsRecourse, declarationTemplateVersion]
+      properties:
+        declarationTemplateVersion: { type: string }
+        isAuthentic: { type: boolean, enum: [true] }
+        goodsDelivered: { type: boolean, enum: [true] }
+        unpaidAndNotCancelled: { type: boolean, enum: [true] }
+        noKnownDispute: { type: boolean, enum: [true] }
+        notPreviouslyFinanced: { type: boolean, enum: [true] }
+        buyerIsNamedEntity: { type: boolean, enum: [true] }
+        contactIsBuyerRep: { type: boolean, enum: [true] }
+        acceptsRecourse: { type: boolean, enum: [true] }
+
+    TransactionState:
+      type: string
+      enum: [DRAFT, SUBMITTED, AUTOMATED_CHECKS, UNDER_REVIEW, INFORMATION_REQUIRED,
+             ELIGIBLE, OPEN_FOR_OFFERS, OFFER_ACCEPTED, CONDITIONS_PENDING,
+             CONTRACTED, READY_FOR_DISBURSEMENT, FUNDING_CONFIRMATION_PENDING, FUNDED,
+             PARTIALLY_PAID, PAID, OVERDUE_UNCONFIRMED, OVERDUE,
+             RECOURSE_ACTIVE, DISPUTED, FRAUD_REVIEW, CLOSED, REJECTED, CANCELLED]
+
+    TransactionSummary:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        referenceNumber: { type: string }
+        state: { $ref: '#/components/schemas/TransactionState' }
+        invoiceNumber: { type: string }
+        buyerName: { type: string }
+        faceValue: { $ref: '#/components/schemas/Money' }
+        outstandingAmount: { $ref: '#/components/schemas/Money' }
+        dueDate: { type: string, format: date }
+        createdAt: { type: string, format: date-time }
+
+    Transaction:
+      allOf:
+        - $ref: '#/components/schemas/TransactionSummary'
+        - type: object
+          properties:
+            minimumAcceptableAmount:
+              allOf: [{ $ref: '#/components/schemas/Money' }]
+              description: |
+                SUPPLIER AND PLATFORM ONLY. This field MUST be absent from
+                every bank-facing response.
+            invoice: { $ref: '#/components/schemas/Invoice' }
+            buyer: { $ref: '#/components/schemas/Buyer' }
+            closureReason: { type: string }
+            lockedAt: { type: string, format: date-time }
+
+    Extraction:
+      type: object
+      properties:
+        documentId: { type: string, format: uuid }
+        ocr:
+          type: object
+          properties:
+            rawOutput: { type: object, additionalProperties: true }
+            extractedFields: { type: object, additionalProperties: true }
+            confidence: { type: number }
+        qr:
+          type: object
+          properties:
+            parsed: { type: boolean }
+            extractedFields: { type: object, additionalProperties: true }
+            validationStatus: { type: string, enum: [VALID, INVALID, UNAVAILABLE, UNPARSED] }
+        mismatches:
+          type: array
+          items:
+            type: object
+            properties:
+              field: { type: string }
+              ocrValue: { type: string }
+              qrValue: { type: string }
+              userValue: { type: string }
+
+    VerificationRun:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        overallResult: { type: string, enum: [PASS, FAIL, REVIEW] }
+        checks:
+          type: array
+          items:
+            type: object
+            properties:
+              checkType: { type: string }
+              result: { type: string, enum: [PASS, FAIL, REVIEW, MISSING, UNPARSED, NOT_APPLICABLE] }
+              details: { type: object, additionalProperties: true }
+
+    RiskAssessment:
+      type: object
+      properties:
+        compositeScore: { type: integer, minimum: 0, maximum: 100 }
+        band: { type: string, enum: [LOW, MEDIUM, HIGH, CRITICAL] }
+        components:
+          type: object
+          properties:
+            supplierVerification: { type: integer }
+            dataConfidence: { type: integer }
+            buyerProfile: { type: integer }
+            invoiceScore: { type: integer }
+            platformBehavior: { type: integer }
+        dataAvailabilityPct:
+          type: number
+          description: |
+            Separate from the score. Government downtime reduces THIS,
+            never the score itself.
+        positiveFactors:
+          type: array
+          items: { type: string }
+        riskFactors:
+          type: array
+          items: { type: string }
+        reasonCodes:
+          type: array
+          items: { type: string }
+        modelVersion: { type: string }
+        mlUsed: { type: boolean }
+        mlFallbackReason: { type: string }
+        calculatedAt: { type: string, format: date-time }
+        disclaimer:
+          type: string
+          description: Decision support only. Not a guarantee or credit rating.
+
+    Listing:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        transactionId: { type: string, format: uuid }
+        roundNumber: { type: integer }
+        status: { type: string, enum: [OPEN_FOR_OFFERS, OFFER_PERIOD_CLOSED, AWAITING_SELECTION, OFFER_SELECTED, EXPIRED, CANCELLED] }
+        activatedAt: { type: string, format: date-time }
+        offerSubmissionDeadline: { type: string, format: date-time }
+        supplierSelectionDeadline: { type: string, format: date-time }
+        listingFeeAmount: { $ref: '#/components/schemas/Money' }
+        offerCount:
+          type: integer
+          description: SUPPLIER ONLY. Never returned to a bank.
+
+    BankListingView:
+      type: object
+      description: |
+        The bank's view of a listing. Deliberately excludes
+        minimumAcceptableAmount, offerCount, and all competitor data.
+      properties:
+        listingId: { type: string, format: uuid }
+        offerSubmissionDeadline: { type: string, format: date-time }
+        supplier:
+          type: object
+          properties:
+            legalName: { type: string }
+            nationalEstablishmentNumber: { type: string }
+            registryStatus: { type: string }
+        buyer: { $ref: '#/components/schemas/Buyer' }
+        invoice: { $ref: '#/components/schemas/Invoice' }
+        risk: { $ref: '#/components/schemas/RiskAssessment' }
+        documents:
+          type: array
+          items:
+            type: object
+            properties:
+              id: { type: string, format: uuid }
+              documentType: { type: string }
+        myOffer:
+          allOf: [{ $ref: '#/components/schemas/Offer' }]
+          description: This bank's own offer only, if any.
+
+    PolicyFilter:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        name: { type: string }
+        isActive: { type: boolean }
+        minAmount: { $ref: '#/components/schemas/Money' }
+        maxAmount: { $ref: '#/components/schemas/Money' }
+        minTenorDays: { type: integer }
+        maxTenorDays: { type: integer }
+        acceptedTransactionTypes:
+          type: array
+          items: { type: string }
+        acceptedRecourseTypes:
+          type: array
+          items: { type: string }
+        minTrustScore: { type: integer }
+        maxRiskBand: { type: string }
+        sectorsInclude: { type: array, items: { type: string } }
+        sectorsExclude: { type: array, items: { type: string } }
+        defaultTransactionType: { type: string }
+
+    OfferInput:
+      type: object
+      required: [transactionType, recourseType, grossFundingAmount, validUntil]
+      properties:
+        transactionType:
+          type: string
+          enum: [INVOICE_FINANCING, RECEIVABLE_PURCHASE, RECEIVABLE_ASSIGNMENT, OTHER]
+        recourseType:
+          type: string
+          enum: [FULL_RECOURSE, LIMITED_RECOURSE, NON_RECOURSE, OTHER]
+        grossFundingAmount: { $ref: '#/components/schemas/Money' }
+        bankDiscountAmount: { $ref: '#/components/schemas/Money' }
+        bankFeesAmount: { $ref: '#/components/schemas/Money' }
+        otherDeductionsAmount: { $ref: '#/components/schemas/Money' }
+        expectedPayoutDate: { type: string, format: date }
+        validUntil: { type: string, format: date-time }
+        conditions:
+          type: array
+          items:
+            type: object
+            properties:
+              conditionType:
+                type: string
+                enum: [REQUIRED_GUARANTEE, REQUIRED_DOCUMENT, RECOURSE_TERM, FUNDING_TIMELINE, CONTRACTUAL_CONDITION, OTHER]
+              title: { type: string }
+              description: { type: string }
+              isMandatory: { type: boolean }
+
+    Offer:
+      type: object
+      description: |
+        Full money breakdown. platformCommissionAmount and listingFeeAmount
+        are computed server-side, not supplied by the bank.
+      properties:
+        id: { type: string, format: uuid }
+        listingId: { type: string, format: uuid }
+        bankName:
+          type: string
+          description: Visible to the supplier and the owning bank only.
+        status: { type: string }
+        versionNumber: { type: integer }
+        transactionType: { type: string }
+        recourseType: { type: string }
+        grossFundingAmount: { $ref: '#/components/schemas/Money' }
+        bankDiscountAmount: { $ref: '#/components/schemas/Money' }
+        bankFeesAmount: { $ref: '#/components/schemas/Money' }
+        platformCommissionAmount: { $ref: '#/components/schemas/Money' }
+        listingFeeAmount: { $ref: '#/components/schemas/Money' }
+        otherDeductionsAmount: { $ref: '#/components/schemas/Money' }
+        netSupplierPayout: { $ref: '#/components/schemas/Money' }
+        expectedPayoutDate: { type: string, format: date }
+        validUntil: { type: string, format: date-time }
+        conditions:
+          type: array
+          items: { $ref: '#/components/schemas/OfferCondition' }
+        submittedAt: { type: string, format: date-time }
+
+    OfferCondition:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        conditionType: { type: string }
+        title: { type: string }
+        description: { type: string }
+        isMandatory: { type: boolean }
+        fulfilment: { type: string, enum: [PENDING, FULFILLED, WAIVED, FAILED] }
+
+    AcceptedOfferSnapshot:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        transactionId: { type: string, format: uuid }
+        bankName: { type: string }
+        transactionType: { type: string }
+        recourseType: { type: string }
+        grossFundingAmount: { $ref: '#/components/schemas/Money' }
+        platformCommissionAmount: { $ref: '#/components/schemas/Money' }
+        listingFeeAmount: { $ref: '#/components/schemas/Money' }
+        netSupplierPayout: { $ref: '#/components/schemas/Money' }
+        conditionsSnapshot: { type: array, items: { type: object } }
+        snapshotHash: { type: string }
+        capturedAt: { type: string, format: date-time }
+
+    Contract:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        contractNumber: { type: string }
+        status: { type: string, enum: [GENERATED, PENDING_SIGNATURES, FULLY_SIGNED, ACTIVE, CANCELLED] }
+        templateVersion: { type: string }
+        canonicalLanguage: { type: string, enum: [EN, AR] }
+        documentId: { type: string, format: uuid }
+        documentHash: { type: string }
+        signatures:
+          type: array
+          items:
+            type: object
+            properties:
+              signerName: { type: string }
+              signerCapacity: { type: string }
+              status: { type: string }
+              signedAt: { type: string, format: date-time }
+        generatedAt: { type: string, format: date-time }
+        fullySignedAt: { type: string, format: date-time }
+
+    Settlement:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        status: { type: string, enum: [PENDING, FUNDING_RECEIVED, PAYOUT_INITIATED, PAYOUT_COMPLETED, PAYOUT_FAILED, RETRYING, MANUAL_REVIEW, REVERSED] }
+        grossFundingAmount: { $ref: '#/components/schemas/Money' }
+        platformCommissionAmount: { $ref: '#/components/schemas/Money' }
+        listingFeeDeducted: { $ref: '#/components/schemas/Money' }
+        netSupplierPayout: { $ref: '#/components/schemas/Money' }
+        providerReference: { type: string }
+        retryCount: { type: integer }
+        failureReason: { type: string }
+        payoutCompletedAt: { type: string, format: date-time }
+
+    BuyerPayment:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        amount: { $ref: '#/components/schemas/Money' }
+        paymentDate: { type: string, format: date }
+        bankReference: { type: string }
+        reportedAt: { type: string, format: date-time }
+
+    RecourseCase:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        reason: { type: string }
+        requestedAmount: { $ref: '#/components/schemas/Money' }
+        repaidAmount: { $ref: '#/components/schemas/Money' }
+        remainingAmount: { $ref: '#/components/schemas/Money' }
+        status: { type: string, enum: [RECOURSE_INITIATED, SUPPLIER_NOTIFIED, PAYMENT_PENDING, SETTLED, DISPUTED, LEGAL_ESCALATION] }
+        initiatedAt: { type: string, format: date-time }
+
+    WithdrawalCase:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        reason: { type: string }
+        status: { type: string }
+        penaltyApplicable: { type: boolean }
+        penaltyAmount: { $ref: '#/components/schemas/Money' }
+        relistingEligible: { type: boolean }
+        requestedAt: { type: string, format: date-time }
+
+    CommissionTier:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        minTransactionAmount: { $ref: '#/components/schemas/Money' }
+        maxTransactionAmount: { $ref: '#/components/schemas/Money' }
+        commissionPercentage: { type: number }
+        fixedCommissionAmount: { $ref: '#/components/schemas/Money' }
+        feePayer: { type: string, enum: [SUPPLIER, BANK, SPLIT, CUSTOM] }
+        effectiveFrom: { type: string, format: date-time }
+        isActive: { type: boolean }
+
+    RiskModelVersion:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        versionLabel: { type: string }
+        modelType: { type: string, enum: [RULES, ML, HYBRID] }
+        weights: { type: object, additionalProperties: true }
+        bandThresholds: { type: object, additionalProperties: true }
+        isActive: { type: boolean }
+        trainingMetrics: { type: object, additionalProperties: true }
+
+    AuditLog:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        actorUserId: { type: string, format: uuid }
+        actorOrgId: { type: string, format: uuid }
+        actionType: { type: string }
+        targetEntityType: { type: string }
+        targetEntityId: { type: string, format: uuid }
+        previousValue: { type: object, additionalProperties: true }
+        newValue: { type: object, additionalProperties: true }
+        occurredAt: { type: string, format: date-time }
