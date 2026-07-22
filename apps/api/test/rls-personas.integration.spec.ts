@@ -217,8 +217,43 @@ describeIfDb('RLS persona isolation', () => {
       expect(message).toMatch(/permission denied/i);
     });
 
-    it('cannot delete audit rows (INV-7)', async () => {
-      const message = await db.expectRejected(PERSONA.platformAdmin, 'DELETE FROM audit_logs');
+    it('cannot delete or mutate audit rows — the statement is a silent no-op (INV-7)', async () => {
+      // Deliberately asserts row counts rather than an error. The frozen
+      // schema protects audit_logs with `CREATE RULE ... DO INSTEAD NOTHING`,
+      // and PostgreSQL rewrites such a statement to nothing at all — so the
+      // DELETE reports success, never reaches a permission check, and
+      // removes zero rows. Asserting "it throws" would fail here while the
+      // data was perfectly safe; asserting "nothing changed" is the property
+      // INV-7 actually claims ("rejected or no-op'd; row counts unchanged").
+      await db.asUserTx(PERSONA.platformAdmin, async (q) => {
+        const [before] = await q<{ n: string }>('SELECT count(*)::text AS n FROM audit_logs');
+        await q('DELETE FROM audit_logs');
+        await q(`UPDATE audit_logs SET action_type = 'TAMPERED'`);
+        const [after] = await q<{ n: string }>('SELECT count(*)::text AS n FROM audit_logs');
+        const [tampered] = await q<{ n: string }>(
+          `SELECT count(*)::text AS n FROM audit_logs WHERE action_type = 'TAMPERED'`,
+        );
+
+        expect(after.n).toBe(before.n);
+        expect(tampered.n).toBe('0');
+      });
+    });
+
+    it('cannot delete or mutate ledger entries (INV-7)', async () => {
+      await db.asUserTx(PERSONA.platformAdmin, async (q) => {
+        const [before] = await q<{ n: string }>('SELECT count(*)::text AS n FROM ledger_entries');
+        await q('DELETE FROM ledger_entries');
+        const [after] = await q<{ n: string }>('SELECT count(*)::text AS n FROM ledger_entries');
+        expect(after.n).toBe(before.n);
+      });
+    });
+
+    it('cannot hard-delete financial rows that have no protective rule', async () => {
+      // settlements has no DO INSTEAD NOTHING rule, so here the write revoke
+      // is the only thing standing in the way and a permission error IS the
+      // expected outcome. Kept as a separate case precisely because the two
+      // protections fail in different ways.
+      const message = await db.expectRejected(PERSONA.platformAdmin, 'DELETE FROM settlements');
       expect(message).toMatch(/permission denied/i);
     });
   });

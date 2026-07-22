@@ -75,10 +75,20 @@ ON CONFLICT (id) DO UPDATE
 -- bcrypt via pgcrypto is exactly what GoTrue itself stores. email_confirmed_at
 -- is set because verification is Agent B's client-side flow (PA-04) and
 -- seeded personas must be able to log in without an inbox.
+-- The token columns below are set to '' rather than left to default.
+-- They are NULLABLE in the table but GoTrue scans them into non-nullable Go
+-- strings, so a row inserted without them authenticates with:
+--   "Database error querying schema"
+-- — an error that names neither the column nor the table, and appears at
+-- login rather than at insert. Supabase's own signup path always writes '',
+-- which is why this only bites seeds written in raw SQL.
 INSERT INTO auth.users (
   instance_id, id, aud, role, email, encrypted_password,
   email_confirmed_at, created_at, updated_at,
-  raw_app_meta_data, raw_user_meta_data, is_super_admin
+  raw_app_meta_data, raw_user_meta_data, is_super_admin,
+  confirmation_token, recovery_token, email_change,
+  email_change_token_new, email_change_token_current,
+  phone_change, phone_change_token, reauthentication_token
 )
 SELECT
   '00000000-0000-0000-0000-000000000000',
@@ -87,7 +97,8 @@ SELECT
   now(), now(), now(),
   '{"provider":"email","providers":["email"]}'::jsonb,
   jsonb_build_object('full_name', s.full_name, 'seeded', true),
-  false
+  false,
+  '', '', '', '', '', '', '', ''
 FROM (VALUES
   ('0e200000-0000-4000-8000-000000000001'::uuid,'owner@alnoor.zimmamless.test','Rania Haddad'),
   ('0e200000-0000-4000-8000-000000000002','uploader@alnoor.zimmamless.test','Omar Khalil'),
@@ -109,6 +120,21 @@ ON CONFLICT (id) DO UPDATE
   SET encrypted_password = EXCLUDED.encrypted_password,
       email_confirmed_at = now(),
       updated_at         = now();
+
+-- 2b. Heal rows written by an earlier version of this seed, whose ON
+-- CONFLICT branch does not touch the token columns. Without this, re-running
+-- the seed on a database already carrying NULLs leaves login broken and the
+-- fix above looks ineffective.
+UPDATE auth.users SET
+  confirmation_token         = coalesce(confirmation_token, ''),
+  recovery_token             = coalesce(recovery_token, ''),
+  email_change               = coalesce(email_change, ''),
+  email_change_token_new     = coalesce(email_change_token_new, ''),
+  email_change_token_current = coalesce(email_change_token_current, ''),
+  phone_change               = coalesce(phone_change, ''),
+  phone_change_token         = coalesce(phone_change_token, ''),
+  reauthentication_token     = coalesce(reauthentication_token, '')
+WHERE email LIKE '%zimmamless.test';
 
 -- 3. Identities. GoTrue requires a matching identity row for email/password
 -- sign-in; without it the account exists but authentication fails.

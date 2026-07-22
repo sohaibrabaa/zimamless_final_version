@@ -78,6 +78,33 @@ export class PersonaDb {
     );
   }
 
+  /**
+   * Run several statements as one persona inside a single transaction.
+   *
+   * Needed for before/after assertions — INV-7's "no-op'd; row counts
+   * unchanged" cannot be checked with one-shot queries, because asUser
+   * rolls back after each call and every count would read the same
+   * pre-state regardless of what happened.
+   */
+  async asUserTx<T>(
+    authUserId: string,
+    fn: (q: <R = Record<string, unknown>>(sql: string, params?: unknown[]) => Promise<R[]>) => Promise<T>,
+  ): Promise<T> {
+    await this.client.query('BEGIN');
+    try {
+      await this.client.query(`SELECT set_config('request.jwt.claims', $1, true)`, [
+        JSON.stringify({ sub: authUserId, role: 'authenticated' }),
+      ]);
+      await this.client.query('SET LOCAL ROLE authenticated');
+      return await fn(async (sql, params = []) => {
+        const result = await this.client.query(sql, params);
+        return result.rows as never[];
+      });
+    } finally {
+      await this.client.query('ROLLBACK');
+    }
+  }
+
   /** Admin read, for arranging fixtures and reading expected values. */
   async asAdmin<T = Record<string, unknown>>(sql: string, params: unknown[] = []): Promise<T[]> {
     const result = await this.client.query(sql, params);

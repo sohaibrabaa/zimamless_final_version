@@ -1,4 +1,10 @@
 import 'reflect-metadata';
+import { loadEnv } from './config/load-env';
+
+// Before anything constructs a Nest module: configuration is validated
+// during dependency injection, so loading later has no effect.
+loadEnv();
+
 import { NestFactory } from '@nestjs/core';
 import { ValidationPipe } from '@nestjs/common';
 import { SwaggerModule } from '@nestjs/swagger';

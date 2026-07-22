@@ -11,10 +11,12 @@ import { AppException } from '../../common/errors/app.exception';
  *   - current projects use asymmetric keys (ES256/RS256) published at
  *     /auth/v1/.well-known/jwks.json.
  *
- * Which one applies is decided by whether SUPABASE_JWT_SECRET is set, so a
- * project migrating from one to the other is a config change rather than a
- * code change. Getting this wrong presents as "every request is 401", which
- * is why the failure messages below distinguish the causes.
+ * The choice is made PER TOKEN, from its own `alg` header — not from whether
+ * SUPABASE_JWT_SECRET happens to be configured. A project part-way through
+ * Supabase's migration to asymmetric keys still displays a legacy JWT secret
+ * in its dashboard while already issuing ES256 tokens, so keying off config
+ * presence rejects every valid token with a 401 that blames the token. Both
+ * verifiers are therefore prepared at boot and selected at verify time.
  *
  * PA-04: registration, email, and phone verification happen client-side
  * against Supabase directly. This API never issues a token — it only
@@ -38,32 +40,52 @@ export class JwtVerifierService implements OnModuleInit {
   constructor(private readonly config: AppConfig) {}
 
   onModuleInit(): void {
+    // Both paths are prepared unconditionally; the token decides which runs.
     if (this.config.supabase.jwtSecret) {
       this.hmacKey = new TextEncoder().encode(this.config.supabase.jwtSecret);
-      this.logger.log('JWT verification: HS256 using the project JWT secret.');
-    } else {
-      const url = new URL('/auth/v1/.well-known/jwks.json', this.config.supabase.url);
-      // Keys are fetched on demand and cached by jose, with rotation handled
-      // for us. Doing this at boot would make startup depend on Supabase
-      // being reachable, which is a worse failure mode.
-      this.jwks = createRemoteJWKSet(url, { cooldownDuration: 30_000 });
-      this.logger.log(`JWT verification: asymmetric via JWKS at ${url.href}`);
     }
+
+    const url = new URL('/auth/v1/.well-known/jwks.json', this.config.supabase.url);
+    // Keys are fetched on demand and cached by jose, with rotation handled
+    // for us. Doing this at boot would make startup depend on Supabase being
+    // reachable, which is a worse failure mode.
+    this.jwks = createRemoteJWKSet(url, { cooldownDuration: 30_000 });
+
+    this.logger.log(
+      `JWT verification ready: asymmetric via JWKS (${url.href})` +
+        (this.hmacKey ? ', plus HS256 for legacy tokens.' : '.'),
+    );
   }
 
   async verify(token: string): Promise<VerifiedToken> {
+    // Read the algorithm from the token's own header. `alg` is unauthenticated
+    // input, so it selects a verifier but never relaxes one: an HS256 token is
+    // checked against the shared secret and nothing else, and an ES256 token
+    // against the JWKS and nothing else. Passing both key types to a single
+    // jwtVerify call is what enables algorithm-confusion attacks; this does
+    // not do that.
+    const algorithm = readAlgorithm(token);
+
     let payload: JWTPayload;
     try {
-      const result = this.hmacKey
-        ? await jwtVerify(token, this.hmacKey, { algorithms: ['HS256'] })
-        : await jwtVerify(token, this.jwks!, { algorithms: ['ES256', 'RS256'] });
-      payload = result.payload;
+      if (algorithm === 'HS256') {
+        if (!this.hmacKey) {
+          this.logger.warn(
+            'Received an HS256 token but SUPABASE_JWT_SECRET is not configured.',
+          );
+          throw AppException.invalidToken();
+        }
+        payload = (await jwtVerify(token, this.hmacKey, { algorithms: ['HS256'] })).payload;
+      } else {
+        payload = (await jwtVerify(token, this.jwks!, { algorithms: ['ES256', 'RS256'] })).payload;
+      }
     } catch (err) {
+      if (err instanceof AppException) throw err;
       const reason = (err as Error).message;
       // Logged, not returned: the client learns only that the token failed.
       // Telling an attacker "signature invalid" vs "expired" is free
       // information about how far they got.
-      this.logger.debug(`Token verification failed: ${reason}`);
+      this.logger.debug(`Token verification failed (alg=${algorithm}): ${reason}`);
       throw AppException.invalidToken();
     }
 
@@ -85,5 +107,24 @@ export class JwtVerifierService implements OnModuleInit {
       phone: typeof payload.phone === 'string' ? payload.phone : undefined,
       expiresAt: payload.exp,
     };
+  }
+}
+
+/**
+ * Reads `alg` from the JOSE header without verifying anything.
+ *
+ * Safe because the value only routes to a verifier — every algorithm is then
+ * pinned explicitly at the jwtVerify call, so a forged header cannot cause a
+ * token to be accepted under weaker terms. Anything unrecognised falls
+ * through to the asymmetric path, which will reject it.
+ */
+function readAlgorithm(token: string): string {
+  try {
+    const [header] = token.split('.');
+    const json = Buffer.from(header, 'base64url').toString('utf8');
+    const alg = (JSON.parse(json) as { alg?: unknown }).alg;
+    return typeof alg === 'string' ? alg : 'unknown';
+  } catch {
+    return 'unknown';
   }
 }

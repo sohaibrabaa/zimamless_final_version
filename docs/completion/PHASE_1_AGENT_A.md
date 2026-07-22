@@ -6,146 +6,189 @@
 **Dates:** 2026-07-22 → 2026-07-22
 **Phase file:** `docs/plan/phases/PHASE_1_FOUNDATION_SHELL.md`
 
-> **Status: NOT COMPLETE.** Every deliverable is built, but the phase's
-> integration checkpoint has not been met and cannot be until the API can
-> reach the database. This report is filed as an honest interim record —
-> the phase gate stays shut. See §4.
+> **Status: Agent A's half is COMPLETE and verified against the live
+> Supabase project.** All 78 automated checks pass and the four endpoints
+> serve real traffic authenticated by real Supabase tokens.
+>
+> The **joint** checkpoint remains open on two counts: the API is not yet
+> deployed to a public URL (it runs locally against the hosted database),
+> and Agent B has not yet driven it through the UI. §8.
 
 ## 1. Delivered vs. planned
 
-| Planned item | Status | Notes |
+| Planned item | Status | Evidence |
 |---|---|---|
-| Migration `0001` = frozen schema with the D-01 fix; `0002` = approved additive; both apply cleanly to fresh local **and** hosted | 🔶 partial | Written; **applied to hosted by the product owner**. Local not possible (no Docker). `0001` is generated from the frozen file so fidelity is mechanical. Also added `0000` (citext / D-15) and `0003` (RLS completion). **Not verified by me** — `db:verify` has never connected. |
-| Supabase Auth JWT validation; `users` row sync on first request (PA-04) | 🔶 partial | Implemented for both HS256 and JWKS projects. **Never executed against a real token.** |
-| `X-Organization-Id` context guard: 403 when missing or non-member; role checks | ✅ done | 15 unit tests green, including that malformed and non-member are indistinguishable. |
-| RLS: helpers + policies for **every** tenant table + coverage checklist | ✅ done | 58 policies across all 61 tables, deny-by-default grants, 3 column revokes. Checklist in `ARCHITECTURE.md` §4.2, enforced by `db:verify`. **Never executed.** |
-| Audit-log interceptor on every mutation | ✅ done | Global, opt-out only for richer in-transaction writes. **Never written a row.** |
-| Error envelope per contract `Error`; correlation IDs; structured logging | ✅ done | `AsyncLocalStorage`; redaction over floor/OTP/IBAN/keys. |
-| `TimeProvider` via DI; lint ban on `new Date()`/`Date.now()` in `modules/**`, `jobs/**` | ✅ done | Ban verified firing. Two-part demo guard; refuses to boot enabled in production. |
-| Money: decimal library + lint ban on float arithmetic | ✅ done | 25 unit tests. `Money.from()` rejects JS numbers so the ban is not cosmetic. |
-| Endpoints live: `/health`, `/auth/me` (+D-10 demo block), `/auth/context`, `/auth/language` | 🔶 built-not-deployed | Implemented and registered; **not deployed, never served a request.** |
-| Dev seed: one user per persona | ✅ done | `db/seed/0100_seed_dev.sql`, pure SQL, idempotent, fixed UUIDs. |
-| First RLS persona test in CI | 🔶 partial | Suite written (`rls-personas.integration.spec.ts`), CI job written. **Never executed.** |
-| Serve OpenAPI at `/docs-json`; CI conformance diff | ✅ done | Gate passes: 3/82 paths, no drift. Emitter shares the document builder with the server. |
-| Deploy api; draft `DEPLOY_RUNBOOK.md` | ⛔ carried over | Blocked on a reachable `DATABASE_URL`. |
+| Migration `0001` = frozen schema with the D-01 fix; `0002` = approved additive; both apply cleanly | ✅ done | Applied to the hosted project; `db:verify` 15/15. `0001` is generated from the frozen file and CI re-checks it. Also `0000` (citext/D-15) and `0003` (RLS) and `0004` (§4). |
+| Supabase Auth JWT validation; `users` row sync (PA-04) | ✅ done | Live login as `owner@alnoor` → verified ES256 token → `/auth/me` returns the platform user. |
+| `X-Organization-Id` guard: 403 missing or non-member; role checks | ✅ done | 15 unit tests + live: switching to a non-member org returns 403 `ORGANIZATION_CONTEXT_INVALID`. |
+| RLS: helpers + policies for **every** tenant table + coverage checklist | ✅ done | 62 tables, 62 RLS-enabled, 61 policies, 0 uncovered. **23 persona tests green against the live database.** |
+| Audit-log interceptor on every mutation | ✅ done | Live rows for `AUTH_CONTEXT_SWITCHED` and `USER_LANGUAGE_CHANGED` with actor user, actor org, and correlation id. |
+| Error envelope; correlation IDs; structured logging | ✅ done | Live 401/403 bodies match the contract `Error`; `x-correlation-id` echoed in the header. |
+| `TimeProvider` via DI; lint ban on direct clock reads | ✅ done | Ban verified firing; two-part demo guard; refuses to boot enabled in production. |
+| Money: decimal library + float ban | ✅ done | 25 unit tests; `Money.from()` rejects JS numbers so the ban is not cosmetic. |
+| Endpoints live: `/health`, `/auth/me`, `/auth/context`, `/auth/language` | ✅ serving | Full smoke in §2. Not yet deployed to a public URL. |
+| Dev seed: one user per persona | ✅ done | 6 orgs, 15 users with working logins, 16 memberships, 20 role grants, 6 buyers. |
+| First RLS persona test in CI | ✅ done | 23 tests; CI runs them on plain Postgres via the compat shim. |
+| `/docs-json` + CI conformance diff | ✅ done | Gate green: 3/82 paths, no drift. |
+| Deploy api; `DEPLOY_RUNBOOK.md` | 🔶 partial | Runbook written and its database half executed. Hosting deploy carried to Phase 2. |
 
-## 2. Endpoints
+## 2. Endpoints — live smoke results
 
-| Endpoint | Status | Verified how |
+| # | Check | Result |
 |---|---|---|
-| `GET /health` | built-not-deployed | Registered outside `/v1`; excluded from the OpenAPI doc |
-| `GET /auth/me` | built-not-deployed | Compile + guard unit tests only |
-| `POST /auth/context` | built-not-deployed | Compile + guard unit tests only |
-| `PATCH /auth/language` | built-not-deployed | Compile + guard unit tests only |
+| 1 | `GET /health` | ✅ `{"status":"ok","database":"ok"}` — includes a real DB probe |
+| 2 | `/auth/me` no token | ✅ 401 `UNAUTHENTICATED` + `correlationId` |
+| 3 | `x-correlation-id` response header | ✅ present and exposed via CORS |
+| 4 | Supabase password login as a seeded persona | ✅ ES256 token issued |
+| 5 | `/auth/me` + token, no org header | ✅ 200 with memberships, no `activeOrganizationId` |
+| 6 | `/auth/me` + token, org the user is not in | ✅ 200, `activeOrganizationId` correctly **absent** |
+| 7 | `/auth/me` + token + correct org | ✅ 200 with user, memberships, `activeOrganizationId` |
+| 8 | `POST /auth/context` to a non-member org | ✅ 403 `ORGANIZATION_CONTEXT_INVALID` |
+| 9 | `POST /auth/context` to own org | ✅ **200** (was 201 — §4) |
+| 10 | `PATCH /auth/language` → AR | ✅ 200 |
+| 11 | Language persisted | ✅ `/auth/me` reports `AR` |
+| 12 | Audit rows for 9 and 10 | ✅ actor user + actor org + correlation id |
 
-**Conformance gate: green.** 3 documented paths served, zero not in the
-contract, no verb mismatches. (`/health` is absent from the contract by
-design — served outside `/v1` and excluded from the document, recorded as an
-explicit allowance in the gate.)
-
-`ENDPOINT_STATUS.md` is **not** updated to `live` for any endpoint, because
-none is.
+`/auth/me` and `/auth/context` are context-**exempt** by necessity: a client
+cannot know which organization to name until `/auth/me` has told it. Checks
+5 and 6 confirm the exemption does not become a hole — an org the user does
+not belong to is silently not adopted rather than accepted.
 
 ## 3. Tests added
 
-| Test / suite | Covers | Status |
+| Suite | Covers | Result |
 |---|---|---|
-| `money.spec.ts` (25) | Money precision, HALF_UP, INV-2 boundary, JSON-as-string | ✅ green |
-| `auth.guard.spec.ts` (15) | Cross-cutting rule 1, 403 indistinguishability, per-membership roles | ✅ green |
-| `rls-personas.integration.spec.ts` | INV-11, D-02 floor revoke, `otp_hash`, `bank_internal_notes`, write refusal | ⚠️ **never run** |
-| `db:verify` (13 checks) | RLS coverage, grants, D-01/D-02, helpers, append-only rules | ⚠️ **never run** |
-| `build-0001.mjs --check` | Migration 0001 has not drifted from the frozen schema | ✅ green |
-| Contract conformance | Served routes vs. contract + overlay | ✅ green |
+| `money.spec.ts` | Precision, HALF_UP, INV-2 boundary, JSON-as-string | ✅ 25/25 |
+| `auth.guard.spec.ts` | Rule 1, 403 indistinguishability, per-membership roles | ✅ 15/15 |
+| `rls-personas.integration.spec.ts` | INV-11, D-02 floor, `otp_hash`, `bank_internal_notes`, INV-7, write refusal | ✅ **23/23 live** |
+| `db:verify` | RLS coverage, grants, D-01/D-02, helpers, append-only | ✅ 15/15 |
+| `build-0001.mjs --check` | 0001 has not drifted from the frozen schema | ✅ |
+| Contract conformance | Served routes vs. contract + overlay | ✅ 3/82, no drift |
 
-**40 unit tests green. Zero database-dependent tests have executed.**
+**78 checks total, all passing.**
 
-Invariants scheduled for Phase 1: none are fully closable this phase, since
-INV-8 and INV-11 need rows that only Phase 5 creates. The Phase 1 portions
-(D-02 column revoke, cross-bank policies, append-only rules) are written and
-unverified. Per the phase gate's own rule — *any invariant scheduled for
-this phase without a green test means the phase is not done* — this is
-recorded as not done rather than as partial credit.
+Invariant status — the Phase 1 portions are now **proven, not asserted**:
 
-## 4. Deviations and carry-overs
+- **INV-8** (floor absent): the D-02 revoke holds at the RLS layer for a bank
+  user, for the owning supplier, and against `SELECT *`. The serializer and
+  sentinel-scan layers land in Phase 5 with the first bank-facing payload.
+- **INV-11** (cross-bank): bank A cannot read bank B's policy filters,
+  eligibility, offers, or settlements, and `count(*)` does not leak
+  competitor presence.
+- **INV-7** (no hard delete): audit and ledger deletes are silent no-ops with
+  row counts unchanged; unprotected financial tables reject the write.
 
-**The blocker.** `DATABASE_URL` is unusable: the value points at the direct
-host `db.<ref>.supabase.co`, which resolves to IPv6 only
-(`2406:da14:311:1500:…`), and this machine has no IPv6 route — so every
-connection fails `ENOTFOUND`, which reads like a wrong hostname rather than
-a routing problem. The password placeholder is also unreplaced. The fix is
-the **session pooler** string (`aws-1-<region>.pooler.supabase.com:5432`,
-user `postgres.<ref>`), which answers on IPv4 and still permits DDL.
+These ran against **empty** offer and settlement tables, so they prove the
+policies are correct and not that they behave correctly with data in them.
+Both are re-run in Phase 5 once rows exist — listed in the Phase 5 tasks,
+not left to memory.
 
-Consequences, stated plainly:
+## 4. Deviations, and five real defects found by running things
 
-- The API has **never started**.
-- The migrations were applied by the product owner, not by me, and I have
-  **not verified what actually landed**. "The migrations ran" and "the
-  schema is correct" are different claims; `db:verify` exists to settle the
-  second and has not run.
-- The RLS suite — the most security-critical code in this phase — is
-  **unexecuted**. It is written against seeded persona ids and could fail on
-  first contact.
+Everything in this section was found **because** the code was executed. None
+of it was visible to typecheck, lint, or unit tests.
 
-**Deviations:**
+1. **`business_calendar_holidays` had RLS enabled and no policy** — deny-all.
+   Mine, in `0003`. The API reads holidays through the service role, which
+   bypasses RLS, so Phase 2's SLA business-day arithmetic would have passed
+   every test while the table stayed invisible to everything else. Fixed by
+   migration `0004`. Caught by `db:verify`'s coverage check.
+2. **The API never loaded the repo-root `.env`.** It depended on variables
+   being exported by hand. Fixed with a shared `loadEnv()` imported first by
+   both entry points.
+3. **JWT verification chose HS256 because a secret was configured** — but
+   this project issues **ES256**, as Supabase migrates projects to
+   asymmetric keys while still displaying a legacy JWT secret. Every valid
+   token was rejected with a 401 blaming the token. Now decided **per token**
+   from its own `alg` header, with each algorithm pinned at its own verify
+   call so the header selects a verifier but never relaxes one.
+4. **`POST /auth/context` returned 201 where the contract specifies 200** —
+   NestJS's POST default, and the `@ApiResponse` decorator documented 200
+   while the runtime did otherwise. Note the path-level conformance gate
+   **cannot** catch this: both sides agreed on `POST /auth/context`. Status
+   codes are a gap in the gate, recorded in §6.
+5. **Audit rows had `actor_org_id` NULL**, violating hard rule 6, because
+   context-exempt routes skipped org resolution entirely. Exempt now means
+   "not required" rather than "ignored": a valid header is resolved anyway,
+   and `/auth/context` audits the org being switched **to**.
 
-- **Migration `0000` added** (not in the phase plan) for D-15. Additive,
-  frozen file untouched. Awaiting ratification.
-- **Migration `0003` added** for RLS completion. The phase file assigns the
-  work; a separate migration keeps `0001`/`0002` byte-faithful to their
-  sources.
-- **`db/ci/000_supabase_compat.sql` added** — not a migration. Lets CI run
-  the RLS suite on plain Postgres rather than skipping it.
-- **Seed delivered as SQL rather than the Node script**, at the product
-  owner's request. Both exist; the SQL is authoritative.
-- **`/health` excluded from the OpenAPI document.** Required by the phase
-  file, absent from the frozen contract. Including it would make the
-  conformance gate fail on Agent A's own endpoint; excluding it keeps the
-  gate meaningful. Recorded rather than assumed.
-- **Build layout fixed** — `rootDir` sent output to `dist/src/`, so
-  `start:prod` and the emitter both pointed at nonexistent paths; a stale
-  `.tsbuildinfo` also let `tsc` "succeed" while emitting nothing.
+Plus, from the seed and build:
 
-**Carried to Phase 2:** deploy the API; run `db:verify`; run the RLS suite;
-execute CI once; `DEPLOY_RUNBOOK.md`; `/services/ml` scaffold (Phase 3).
+- **GoTrue login failed with "Database error querying schema"** — a raw-SQL
+  insert into `auth.users` leaves four token columns NULL that GoTrue scans
+  into non-nullable Go strings. The error names neither column nor table and
+  appears at login rather than at insert. Seed now writes `''` and heals
+  existing rows.
+- **The Supabase SQL editor does not keep temp tables across statements**, so
+  the first seed failed with `relation "_seed_users" does not exist`. The
+  persona list is now inlined per statement.
+- **Build output went to `dist/src/`** (`rootDir`), so `start:prod` and the
+  emitter pointed at nonexistent paths; and a stale `.tsbuildinfo` outside
+  `dist` let `tsc` "succeed" while emitting nothing.
+- **`logger: false` in the emitter** silenced Nest's ExceptionHandler,
+  turning a config failure into a bare exit 1 with no diagnostic.
+
+**Additions beyond the phase plan:** migration `0000` (D-15), `0003` (RLS),
+`0004` (holidays); `db/ci/000_supabase_compat.sql` so CI runs the RLS suite
+without a hosted project; `--baseline` on the migration runner to adopt
+hand-applied migrations; the seed delivered as SQL at the product owner's
+request.
+
+**Carried to Phase 2:** deploy to a public URL; execute CI once; the joint
+checkpoint with Agent B; `/services/ml` scaffold (Phase 3).
 
 ## 5. Open questions raised
 
 | Ref | Subject | Status |
 |---|---|---|
 | Q-01 / D-15 | `citext` never enabled — frozen schema does not execute | OPEN, needs ratification |
-| Q-02 | RLS 8/59 with zero GRANTs — 51 tables open on Supabase | OPEN (informational), closed by `0003` |
+| Q-02 | RLS 8/59 with zero GRANTs | OPEN (informational), closed by `0003`/`0004` |
 
 ## 6. Risks observed
 
-- **R-13 (Supabase coupling) is now the top risk.** Its stated mitigation is
-  "deploy the stack in Phase 1, not Phase 9" — and that is exactly what has
-  not happened. Every Supabase-specific assumption (JWT algorithm,
-  `auth.users` column set, `auth.uid()` behaviour, pooler DDL) is currently
-  unverified.
-- **R-04 (RLS gap) was larger than assessed** — 59 tables, not ~40; no
-  GRANTs at all. Closed in code, unverified in practice.
-- **R-01 understated.** Two execution-blocking defects in the frozen schema,
-  not one.
-- **New: verification debt.** A phase built entirely without a database
-  accumulates work that all comes due at once. The longer it runs, the more
-  likely several things fail together and interact.
+- **R-13 (Supabase coupling) was real and is now largely retired.** Three of
+  the five defects above were Supabase-specific and *none* was detectable
+  without the live project: ES256 tokens, GoTrue's NULL-token-column
+  behaviour, and the SQL editor's temp-table handling. The Master Plan's
+  instruction to deploy in Phase 1 rather than Phase 9 was correct, and
+  deferring it would have delivered all three at once during demo prep.
+- **New: the conformance gate does not compare status codes.** Defect 4
+  passed it. The gate compares paths and verbs only. Worth extending before
+  Phase 5, where response shapes start carrying money.
+- **R-04 (RLS gap) closed and verified**, including one policy I had missed.
+- **R-01 understated**: two execution-blocking defects in the frozen schema.
+- **Verification debt is now cleared**, which was the standing concern in the
+  first draft of this report.
 
 ## 7. Handoff notes for the other agent
 
-- Seed personas, the multi-org account, the maker/approver split, the
-  blocked buyers, the uniform 403, `/health`'s absence from the client, and
-  the `demo` block on `/auth/me` — all detailed in today's `DAILY_LOG.md`
-  entry.
-- **Do not flip anything to `live` in `ENDPOINT_STATUS.md` yet.** Nothing is
-  deployed. I will announce in the daily log when it is.
-- Nothing was renamed; no frozen file, and nothing under `/apps/web`, was
-  touched.
+- **The API is not deployed yet** — it runs locally against the hosted
+  database. Do not flip anything to `live` in `ENDPOINT_STATUS.md` until I
+  announce a URL in the daily log.
+- Seeded logins all use `Zimmamless#2026`. Start with
+  `owner@alnoor.zimmamless.test`, `maker@jnb.zimmamless.test`, and
+  `admin@platform.zimmamless.test`.
+- `multi@platform.zimmamless.test` has two memberships — it is how the
+  context switcher gets tested at all.
+- **Your Supabase client will receive ES256 tokens**, not HS256. If you
+  decode tokens anywhere, do not assume the legacy algorithm.
+- `/auth/me` works **without** `X-Organization-Id` — send it after login to
+  discover memberships, then include the header on everything else.
+- Missing header, malformed uuid, and non-member org all return the **same**
+  403 on non-exempt routes, deliberately. There is no difference to branch on.
+- `/health` is absent from the contract and from `/docs-json`, so it will not
+  appear in your generated client. Intentional.
+- Every error carries `correlationId`, matched by the `x-correlation-id`
+  response header.
 
 ## 8. Checkpoint countersignature
 
-- [ ] **Not run.** The Phase 1 checkpoint requires the deployed stack:
-  seeded login → live `/auth/me` memberships → context switch → language
-  persistence → audit rows → RLS smoke green. None of it is executable
-  without a reachable database. No `PHASE_1_CHECKPOINT.md` is filed, and no
-  `phase-1-checkpoint` tag exists, because claiming either would be false.
+- [ ] **Not yet run as a joint checkpoint.** The phase file requires it on
+  the **deployed** stack, driven through the real UI. What is proven today is
+  the whole server-side half of that flow — live login, live memberships,
+  context switch, language persistence, audit rows, and the RLS smoke test —
+  against the hosted database, but from `curl` on localhost rather than from
+  Agent B's browser against a deployed URL.
+
+  No `PHASE_1_CHECKPOINT.md` is filed and no `phase-1-checkpoint` tag exists,
+  because the checkpoint as written has not happened.

@@ -55,7 +55,32 @@ export class AuthGuard implements CanActivate {
 
     // --- 2. Establish organization context -------------------------------
     const exempt = this.reflector.getAllAndOverride<boolean>(ORG_CONTEXT_EXEMPT_KEY, targets);
-    if (exempt) return true;
+    if (exempt) {
+      // Exempt means the header is not REQUIRED, not that it is ignored.
+      // When a valid one is supplied, resolve it anyway so the audit
+      // interceptor can record actor_org_id — hard rule 6 requires every
+      // mutation to name the acting organization, and /auth/language is a
+      // mutation. Failures are swallowed rather than raised: on an exempt
+      // route a bad header must not turn a legitimate bootstrap call into a
+      // 403, so the context simply stays unset.
+      const candidate = req.header(ORGANIZATION_HEADER)?.trim();
+      if (candidate && isUuid(candidate)) {
+        try {
+          const membership = await this.auth.resolveContext(user.id, candidate);
+          req.membership = membership;
+          req.organizationId = candidate;
+          RequestContextStore.patch({
+            organizationId: candidate,
+            organizationType: membership.organization_type,
+            roles: membership.roles,
+          });
+        } catch {
+          // Not a member: leave the context unset. /auth/me then reports no
+          // activeOrganizationId, which is the honest answer.
+        }
+      }
+      return true;
+    }
 
     const orgId = req.header(ORGANIZATION_HEADER)?.trim();
     if (!orgId) throw AppException.organizationContextRequired();

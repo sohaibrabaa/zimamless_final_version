@@ -1,4 +1,14 @@
-import { Body, Controller, Get, Headers, Inject, Patch, Post } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Get,
+  Headers,
+  HttpCode,
+  HttpStatus,
+  Inject,
+  Patch,
+  Post,
+} from '@nestjs/common';
 import { ApiOperation, ApiResponse, ApiTags } from '@nestjs/swagger';
 import { AuthService, PlatformUser, MembershipRow } from './auth.service';
 import { CurrentUser, OrgContextExempt } from './decorators';
@@ -6,6 +16,7 @@ import { AuthMeDto, MembershipDto, SetLanguageDto, SwitchContextDto } from './dt
 import { Audit } from '../../common/audit/audit.interceptor';
 import { TIME_PROVIDER, TimeProvider, SystemTimeProvider } from '../../common/time/time.provider';
 import { ORGANIZATION_HEADER } from './auth.guard';
+import { RequestContextStore } from '../../common/context/request-context';
 
 /**
  * Auth and organization context.
@@ -60,6 +71,12 @@ export class AuthController {
   }
 
   @Post('auth/context')
+  // The contract specifies 200, not the 201 NestJS returns for POST by
+  // default. Nothing is created here — the context is re-checked from the
+  // header on every request — so 201 would also be the wrong semantics.
+  // Worth noting the path-level conformance gate cannot catch this: it
+  // compares paths and verbs, and both sides agreed on POST /auth/context.
+  @HttpCode(HttpStatus.OK)
   @OrgContextExempt()
   @Audit('AUTH_CONTEXT_SWITCHED', 'ORGANIZATION')
   @ApiOperation({ summary: 'Switch active organization context' })
@@ -77,6 +94,17 @@ export class AuthController {
     // produces the audit record of the switch, which the Phase 1 checkpoint
     // requires to be visible in audit_logs.
     const membership = await this.auth.resolveContext(user.id, body.organizationId);
+
+    // Audit this against the organization being switched TO. The interceptor
+    // reads actor org from the request context, which at this point still
+    // holds the org the caller arrived with — recording that would file the
+    // switch under the old context and make the trail read backwards.
+    RequestContextStore.patch({
+      organizationId: membership.organization_id,
+      organizationType: membership.organization_type,
+      roles: membership.roles,
+    });
+
     return { organizationId: membership.organization_id };
   }
 

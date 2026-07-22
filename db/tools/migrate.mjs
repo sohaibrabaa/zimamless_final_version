@@ -6,6 +6,8 @@
  *   node db/tools/migrate.mjs --status   list applied / pending, apply nothing
  *   node db/tools/migrate.mjs --dry-run  parse and order, apply nothing
  *   node db/tools/migrate.mjs --reset    DROP and recreate the public schema first
+ *   node db/tools/migrate.mjs --baseline <name>|all
+ *                                        record as applied WITHOUT running
  *
  * Connection comes from DATABASE_URL. For Supabase use the session-mode
  * pooler (port 5432) or the direct connection — DDL does not work over the
@@ -23,11 +25,54 @@ import { dirname, join } from 'node:path';
 import pg from 'pg';
 
 const MIGRATIONS_DIR = join(dirname(fileURLToPath(import.meta.url)), '..', 'migrations');
+const REPO_ROOT = join(dirname(fileURLToPath(import.meta.url)), '..', '..');
+
+// Load the repo-root .env, as verify.mjs and seed.mjs do. Without this the
+// runner is the only tool in the set that needs DATABASE_URL exported by
+// hand, which is the kind of inconsistency that gets "fixed" by pasting a
+// live connection string onto a command line.
+try {
+  for (const line of readFileSync(join(REPO_ROOT, '.env'), 'utf8').split('\n')) {
+    const m = line.match(/^\s*([A-Z0-9_]+)\s*=\s*(.*)\s*$/);
+    if (m && !process.env[m[1]]) process.env[m[1]] = m[2].trim().replace(/^["']|["']$/g, '');
+  }
+} catch {
+  // Absent in CI, where DATABASE_URL comes from the environment.
+}
 
 const args = new Set(process.argv.slice(2));
 const statusOnly = args.has('--status');
 const dryRun = args.has('--dry-run');
 const reset = args.has('--reset');
+/**
+ * --baseline <name>: record a migration as applied WITHOUT running it.
+ *
+ * For a database whose early migrations were applied by hand (pasted into
+ * the Supabase SQL editor, say) before the runner existed. Without this the
+ * runner sees them as pending and re-running them fails on the first
+ * CREATE TYPE that already exists — leaving no way to adopt the database
+ * short of dropping it.
+ *
+ * Deliberately per-migration and explicit rather than a blanket "mark
+ * everything applied": baselining a migration that was NOT actually applied
+ * silently skips it forever, and the failure surfaces much later as a
+ * missing table. `db:verify` is the check that the claim was true.
+ */
+const baselineNames = [];
+{
+  const argv = process.argv.slice(2);
+  for (let i = 0; i < argv.length; i++) {
+    if (argv[i] === '--baseline') {
+      const value = argv[i + 1];
+      if (!value || value.startsWith('--')) {
+        console.error('FATAL: --baseline requires a migration name, or "all".');
+        process.exit(1);
+      }
+      baselineNames.push(value);
+      i++;
+    }
+  }
+}
 
 const connectionString = process.env.DATABASE_URL;
 if (!connectionString) {
@@ -109,6 +154,37 @@ try {
         'new migration, or rebuild the database with --reset if it is disposable.',
     );
     process.exit(1);
+  }
+
+  // --baseline: record as applied without executing. Runs before the
+  // pending calculation so a baselined migration is not then applied.
+  if (baselineNames.length > 0) {
+    const wanted = baselineNames.includes('all')
+      ? migrations.map((m) => m.name)
+      : baselineNames;
+
+    for (const name of wanted) {
+      const migration = migrations.find((m) => m.name === name);
+      if (!migration) {
+        console.error(`FATAL: no migration file named "${name}".`);
+        process.exit(1);
+      }
+      if (applied.has(name)) {
+        console.log(`  [baseline] ${name} — already recorded, skipping`);
+        continue;
+      }
+      await client.query(
+        'INSERT INTO schema_migrations (name, checksum) VALUES ($1, $2) ON CONFLICT (name) DO NOTHING',
+        [migration.name, migration.checksum],
+      );
+      applied.set(name, { name, checksum: migration.checksum, applied_at: new Date() });
+      console.log(`  [baseline] ${name} — recorded as applied (NOT executed)`);
+    }
+    console.log(
+      '\nBaselined. Run `npm run db:verify` to confirm the database really does\n' +
+        'contain what these migrations describe — baselining asserts it, and\n' +
+        'only verification checks it.\n',
+    );
   }
 
   const pending = migrations.filter((m) => !applied.has(m.name));
