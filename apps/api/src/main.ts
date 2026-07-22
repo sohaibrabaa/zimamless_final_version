@@ -1,11 +1,12 @@
 import 'reflect-metadata';
 import { NestFactory } from '@nestjs/core';
 import { ValidationPipe } from '@nestjs/common';
-import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
+import { SwaggerModule } from '@nestjs/swagger';
 import { AppModule } from './app.module';
 import { AppConfig } from './config/configuration';
 import { AppLogger } from './common/logging/app-logger.service';
 import { SystemTimeProvider } from './common/time/time.provider';
+import { buildOpenApiDocument } from './openapi.config';
 
 async function bootstrap(): Promise<void> {
   const app = await NestFactory.create(AppModule, { bufferLogs: true });
@@ -52,23 +53,10 @@ async function bootstrap(): Promise<void> {
   // --- OpenAPI ---------------------------------------------------------
   // Served at /docs-json for the CI conformance gate, which diffs it against
   // 03_API_CONTRACT.yaml + the v3.1.0 overlay. Divergence fails the build.
-  const openApiConfig = new DocumentBuilder()
-    .setTitle('Zimmamless V3 API')
-    .setDescription('Receivables marketplace connecting Jordanian suppliers with banks.')
-    .setVersion('3.1.0')
-    .addBearerAuth({ type: 'http', scheme: 'bearer', bearerFormat: 'JWT' }, 'bearerAuth')
-    .addGlobalParameters({
-      name: 'X-Organization-Id',
-      in: 'header',
-      required: true,
-      schema: { type: 'string', format: 'uuid' },
-      description: 'Active organization context. Missing or non-member → 403.',
-    })
-    .addServer(`http://localhost:${config.port}/${config.globalPrefix}`, 'Local')
-    .addServer('https://api.zimmamless.com/v1', 'Production')
-    .build();
-
-  const document = SwaggerModule.createDocument(app, openApiConfig);
+  // The document is built by the shared helper that the CI emitter also
+  // uses, so the gate can never check a document that differs from the one
+  // clients actually receive.
+  const document = buildOpenApiDocument(app, config.port);
   SwaggerModule.setup('docs', app, document, {
     jsonDocumentUrl: 'docs-json',
     yamlDocumentUrl: 'docs-yaml',

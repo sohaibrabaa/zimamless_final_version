@@ -26,3 +26,6 @@ _manual/
 
 # Agent worktrees and local agent state
 .claude/
+
+# Generated OpenAPI (emitted by CI for the conformance gate)
+apps/api/openapi.generated.json

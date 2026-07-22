@@ -16,6 +16,7 @@
     "test": "npm run test --workspaces --if-present",
     "build": "npm run build --workspaces --if-present",
     "db:migrate": "npm run migrate -w db",
+    "db:verify": "npm run verify -w db",
     "db:seed": "npm run seed -w db",
     "db:reset": "npm run reset -w db",
     "contract:check": "node scripts/contract-conformance.mjs"

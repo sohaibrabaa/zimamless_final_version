@@ -9,6 +9,7 @@
     "migrate:status": "node tools/migrate.mjs --status",
     "build:0001": "node tools/build-0001.mjs",
     "check:0001": "node tools/build-0001.mjs --check",
+    "verify": "node tools/verify.mjs",
     "seed": "node tools/seed.mjs",
     "reset": "node tools/migrate.mjs --reset"
   },

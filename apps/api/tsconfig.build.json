@@ -1,0 +1,16 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    // Build output is src/ only, so the entry points are dist/main.js and
+    // dist/openapi.js. Without this, rootDir "./" (which typecheck needs in
+    // order to see test/) nests everything under dist/src/ and every
+    // "node dist/..." path silently breaks.
+    "rootDir": "./src",
+    // Keep the incremental cache inside the output directory. Left at the
+    // package root it survives nest-cli's deleteOutDir, after which tsc
+    // believes the (now deleted) output is current and emits nothing —
+    // a build that "succeeds" with an empty dist.
+    "tsBuildInfoFile": "./dist/.tsbuildinfo"
+  },
+  "exclude": ["node_modules", "dist", "test", "**/*.spec.ts"]
+}

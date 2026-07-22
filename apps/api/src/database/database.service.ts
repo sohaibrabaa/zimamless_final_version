@@ -23,6 +23,16 @@ export class DatabaseService implements OnModuleInit, OnModuleDestroy {
   constructor(private readonly config: AppConfig) {}
 
   async onModuleInit(): Promise<void> {
+    // The OpenAPI emitter (src/openapi.ts) builds the document from the same
+    // module graph but must run in CI with no database reachable — the
+    // conformance gate compares routes, which are metadata, not data.
+    // Guarded to a single explicit flag so it can never be mistaken for a
+    // way to start the API without a database.
+    if (process.env.ZM_SPEC_ONLY === 'true') {
+      this.logger.warn('ZM_SPEC_ONLY: skipping database connection (OpenAPI emit only).');
+      return;
+    }
+
     const url = this.config.database.url;
     const needsTls = /supabase\.(com|co)/.test(url) || process.env.PGSSLMODE === 'require';
 
