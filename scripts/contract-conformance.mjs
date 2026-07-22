@@ -23,6 +23,12 @@
  *
  * Method-level checks run for paths present on both sides, because a path
  * that exists with the wrong verb is the drift this gate is for.
+ *
+ * Success STATUS CODES are compared too, for path+verb pairs implemented on
+ * both sides. This was added after `POST /auth/context` shipped returning
+ * NestJS's default 201 where the contract specifies 200: the path and the
+ * verb matched, so the gate passed while the generated client and the server
+ * disagreed about the response. A status code is part of the contract.
  */
 import { readFileSync, existsSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
@@ -57,9 +63,13 @@ function extractPaths(file) {
   const text = readFileSync(file, 'utf8');
   const lines = text.split('\n');
   const result = new Map();
+  /** `${path} ${METHOD}` → Set of success status codes. */
+  const statuses = new Map();
 
   let inPaths = false;
   let current = null;
+  let currentMethod = null;
+  let inResponses = false;
 
   for (const raw of lines) {
     const line = raw.replace(/\r$/, '');
@@ -75,17 +85,39 @@ function extractPaths(file) {
     const pathMatch = line.match(/^ {2}(\/[^\s:]*):\s*$/);
     if (pathMatch) {
       current = pathMatch[1];
+      currentMethod = null;
+      inResponses = false;
       result.set(current, new Set());
       continue;
     }
 
     const methodMatch = line.match(/^ {4}(get|post|put|patch|delete|head|options):\s*$/);
     if (methodMatch && current) {
-      result.get(current).add(methodMatch[1].toUpperCase());
+      currentMethod = methodMatch[1].toUpperCase();
+      inResponses = false;
+      result.get(current).add(currentMethod);
+      continue;
+    }
+
+    // `responses:` and its sibling keys sit at six spaces; the status codes
+    // themselves at eight, in either block or flow style.
+    const siblingKey = line.match(/^ {6}([a-zA-Z$][\w$-]*):/);
+    if (siblingKey && currentMethod) {
+      inResponses = siblingKey[1] === 'responses';
+      continue;
+    }
+
+    if (inResponses && currentMethod) {
+      const status = line.match(/^ {8}'?(\d{3})'?:/);
+      if (status && status[1].startsWith('2')) {
+        const key = `${current} ${currentMethod}`;
+        if (!statuses.has(key)) statuses.set(key, new Set());
+        statuses.get(key).add(status[1]);
+      }
     }
   }
 
-  return result;
+  return { paths: result, statuses };
 }
 
 /** Normalizes {id} vs {applicationId} so parameter naming is not a diff. */
@@ -93,8 +125,10 @@ const normalize = (p) => p.replace(/\{[^}]+\}/g, '{}').replace(/\/$/, '');
 
 // --- Load the three documents ----------------------------------------------
 
-const contractPaths = extractPaths(CONTRACT);
-const overlayPaths = extractPaths(OVERLAY);
+const contract = extractPaths(CONTRACT);
+const overlay = extractPaths(OVERLAY);
+const contractPaths = contract.paths;
+const overlayPaths = overlay.paths;
 
 const expected = new Map();
 for (const [p, methods] of [...contractPaths, ...overlayPaths]) {
@@ -103,8 +137,18 @@ for (const [p, methods] of [...contractPaths, ...overlayPaths]) {
   for (const m of methods) expected.get(key).methods.add(m);
 }
 
+/** `${normalizedPath} ${METHOD}` → expected success codes. Overlay wins. */
+const expectedStatuses = new Map();
+for (const source of [contract.statuses, overlay.statuses]) {
+  for (const [key, codes] of source) {
+    const [p, method] = key.split(' ');
+    expectedStatuses.set(`${normalize(p)} ${method}`, codes);
+  }
+}
+
 const served = JSON.parse(readFileSync(servedPath, 'utf8'));
 const servedMap = new Map();
+const servedStatuses = new Map();
 const GLOBAL_PREFIX = /^\/v1/;
 
 for (const [rawPath, item] of Object.entries(served.paths ?? {})) {
@@ -119,6 +163,13 @@ for (const [rawPath, item] of Object.entries(served.paths ?? {})) {
   );
   if (!servedMap.has(key)) servedMap.set(key, { original: rawPath, methods: new Set() });
   for (const m of methods) servedMap.get(key).methods.add(m);
+
+  for (const m of methods) {
+    const codes = Object.keys(item[m.toLowerCase()]?.responses ?? {}).filter((c) =>
+      c.startsWith('2'),
+    );
+    if (codes.length) servedStatuses.set(`${key} ${m}`, new Set(codes));
+  }
 }
 
 /**
@@ -153,6 +204,22 @@ for (const [key, { original, methods }] of expected) {
   if (!servedMap.has(key)) missing.push({ path: original, methods: [...methods] });
 }
 
+/**
+ * Status codes, for implemented path+verb pairs only. A served code that the
+ * contract does not declare is drift — the generated client will not have a
+ * type for it. Contract codes that are not served are not checked here: a
+ * route may legitimately not produce every documented response.
+ */
+const statusMismatches = [];
+for (const [key, servedCodes] of servedStatuses) {
+  const expectedCodes = expectedStatuses.get(key);
+  if (!expectedCodes) continue;
+  const unexpected = [...servedCodes].filter((c) => !expectedCodes.has(c));
+  if (unexpected.length) {
+    statusMismatches.push({ key, served: [...servedCodes], expected: [...expectedCodes] });
+  }
+}
+
 // --- Report ----------------------------------------------------------------
 
 const totalExpected = expected.size;
@@ -183,6 +250,18 @@ if (methodMismatches.length) {
     console.error(`  ${m.path}: serves ${m.unexpected.join(',')}, contract has ${m.expected.join(',')}`);
   }
   console.error('');
+}
+
+if (statusMismatches.length) {
+  failed = true;
+  console.error('FAIL — success status codes served that the contract does not declare:');
+  for (const s of statusMismatches) {
+    console.error(`  ${s.key}: serves ${s.served.join(',')}, contract declares ${s.expected.join(',')}`);
+  }
+  console.error(
+    '\n  The generated client has no type for an undeclared status. Either fix\n' +
+      '  the handler (e.g. @HttpCode) or amend the contract first.\n',
+  );
 }
 
 if (missing.length) {

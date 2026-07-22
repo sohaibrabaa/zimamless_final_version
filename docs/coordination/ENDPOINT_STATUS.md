@@ -4,9 +4,13 @@ Mirror of `apps/web/lib/api/endpoint-status.ts`. Agent A flips **Announced live*
 
 Legend: `mock` = MSW mock · `live` = real API, smoke-passed · `n/a` = not yet generated.
 
+`GET /health` is deliberately **not** on this board. It is served outside the
+`/v1` prefix, excluded from the frozen contract and from `/docs-json`, and so
+never appears in the generated client — it is infrastructure, not a contract
+endpoint, and has no mock→live promotion to track.
+
 | Endpoint | Phase | Announced live (A, date) | B status | Notes |
 |---|---|---|---|---|
-| GET /health | 1 | — | mock | |
 | GET /auth/me | 1 | — | mock | demo flag (D-10) included |
 | POST /auth/context | 1 | — | mock | |
 | PATCH /auth/language | 1 | — | mock | |

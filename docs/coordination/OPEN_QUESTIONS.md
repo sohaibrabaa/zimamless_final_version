@@ -36,3 +36,24 @@ Options considered: n/a — completing the policy set is an assigned Phase 1 tas
 Recommendation: No ruling needed. Implemented in `db/migrations/0003_rls_policies.sql`: deny-by-default posture (revoke all writes and `anon` reads across `public`), per-table SELECT policies for every tenant table, column-level revokes on `funding_otps.otp_hash` and `buyer_payments.bank_internal_notes` (ZM-PMT-018) following the D-02 pattern, and a coverage checklist in `docs/specs/ARCHITECTURE.md` enforced by a CI test that fails when a new table appears without a policy entry.
 Needed by: n/a
 Status: OPEN (informational)
+
+## Q-03 — Which digit set does Arabic use for money amounts?
+Raised by: Phase 1 unification session, 2026-07-23, blocking: not blocking (current behaviour preserved)
+Question: `ZM-I18N-004` requires dates, numbers, and currency to be "localized", and mandates JOD with three decimal places — but it does not say whether the Arabic locale renders amounts in Western digits (1,250.000) or Arabic-Indic digits (١٬٢٥٠٫٠٠٠). `apps/web/lib/money.ts` currently formats with `en-US` grouping in both locales. That was not a decision so much as a leftover: the code contained a dead ternary (`numeralLocale === "ar-JO" ? "en-US" : "en-US"`) whose two branches were identical, so the Arabic branch had never actually been reachable.
+Options considered:
+1. Western digits in both locales (current behaviour). Consistent with IBANs, establishment numbers and invoice references, which are Latin-numeric everywhere in the product; avoids bidi complications when an amount sits inside Arabic prose (ZM-I18N-006).
+2. Arabic-Indic digits when `locale === "ar"`. More faithfully "localized", but changes every amount on every Arabic screen and in generated Arabic documents, and interacts with the contract's canonical-English rule (ZM-I18N-003b).
+Recommendation: **Option 1**, i.e. ratify what ships today, on the grounds that money strings are compared against contract and ledger values that are Latin-numeric everywhere else. The dead branch has been removed and the choice is now stated explicitly in `lib/money.ts` with a pointer here. Cheap to reverse — one `Intl.NumberFormat` locale argument — until Arabic contract/notification templates are written in Phase 6+.
+Needed by: before Arabic document templates are authored (Phase 6), after which the choice is baked into rendered PDFs.
+Status: OPEN
+
+## Q-04 — `POST /auth/context` returns a response body the contract does not declare
+Raised by: Phase 1 unification session, 2026-07-23, blocking: not blocking
+Question: The frozen contract declares `POST /auth/context` → `200 { description: Context switched }` with **no content**. The implementation (`apps/api/src/modules/auth/auth.controller.ts`) returns `{ organizationId }`. Because the contract declares no schema, `openapi-typescript` generates `content?: never`, so Agent B's typed client cannot read the field without casting past its own types — the body is invisible to the consumer it was presumably added for. This is undeclared-but-harmless drift rather than a defect: nothing breaks, but the two documents disagree, and the new status-code check in the conformance gate does not compare response *bodies*.
+Options considered:
+1. Drop the body; return an empty 200. Matches the contract exactly, costs nothing — the client already re-reads context from `/auth/me`, and the accepted id is the id it just sent.
+2. Amend the overlay to declare the body. Makes the field usable and typed, but is a contract amendment needing a ruling for a field with no established consumer.
+3. Leave as is. Rejected: an undeclared body is exactly the silent divergence the conformance gate exists to prevent, and it teaches that the contract is approximate.
+Recommendation: **Option 1** unless a consumer for the field is identified. The web client has been written not to depend on it either way (`SessionProvider.switchOrganization` uses the requested id), so this can be settled without blocking anyone. Worth noting the gate compares paths, verbs, and now success status codes — but not response schemas; extending it to bodies is the durable fix and is a candidate for Phase 5, when payloads start carrying money.
+Needed by: before Phase 5, when response-shape drift starts to matter financially.
+Status: OPEN

@@ -174,8 +174,16 @@ checkpoint with Agent B; `/services/ml` scaffold (Phase 3).
   decode tokens anywhere, do not assume the legacy algorithm.
 - `/auth/me` works **without** `X-Organization-Id` — send it after login to
   discover memberships, then include the header on everything else.
-- Missing header, malformed uuid, and non-member org all return the **same**
-  403 on non-exempt routes, deliberately. There is no difference to branch on.
+- ~~Missing header, malformed uuid, and non-member org all return the **same**
+  403 on non-exempt routes, deliberately. There is no difference to branch on.~~
+  **Corrected by the Phase 1 audit (unification session):** this was wrong as
+  written. A **missing** header returns `ORGANIZATION_CONTEXT_REQUIRED`; a
+  **malformed uuid** and a **non-member org** both return
+  `ORGANIZATION_CONTEXT_INVALID`. Only the latter two are deliberately
+  indistinguishable — that pair is the enumeration oracle worth closing, and
+  it stays closed. A missing header is not an oracle (the caller knows it sent
+  nothing), so it keeps its own actionable code. Both codes were already
+  documented in `error-codes.ts`; the handoff note, not the code, was at fault.
 - `/health` is absent from the contract and from `/docs-json`, so it will not
   appear in your generated client. Intentional.
 - Every error carries `correlationId`, matched by the `x-correlation-id`
