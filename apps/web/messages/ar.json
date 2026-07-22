@@ -61,6 +61,8 @@
     "verifyPhoneBody": "أدخل الرمز المرسل إلى {phone}.",
     "resendCode": "إعادة إرسال الرمز",
     "orgSwitcherLabel": "المؤسسة",
+    "orgSwitchFailed": "تعذّر تبديل المؤسسة.",
+    "wrongPortal": "هذه البوابة تخص نوعاً آخر من المؤسسات.",
     "invalidCredentials": "البريد الإلكتروني أو كلمة المرور غير صحيحة."
   },
   "portal": {

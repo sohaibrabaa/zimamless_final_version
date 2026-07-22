@@ -15,10 +15,23 @@ const eslintConfig = defineConfig([
         { name: "parseFloat", message: "Money values are decimal strings — use parseMoney() from @/lib/money instead of parseFloat." },
         { name: "parseInt", message: "Money values are decimal strings — use parseMoney() from @/lib/money instead of parseInt." },
       ],
+      // no-restricted-globals only matches bare identifiers, so the member
+      // forms (Number.parseFloat, globalThis.parseInt) walked straight past
+      // it. These selectors close that door.
       "no-restricted-syntax": [
         "error",
         {
           selector: "CallExpression[callee.name='Number'][arguments.0.type!='Literal']",
+          message: "Do not coerce values to Number for money math — use parseMoney()/Decimal from @/lib/money.",
+        },
+        {
+          selector:
+            "MemberExpression[object.name=/^(Number|globalThis|window|global)$/][property.name=/^(parseFloat|parseInt)$/]",
+          message: "Money values are decimal strings — use parseMoney() from @/lib/money.",
+        },
+        {
+          selector:
+            "MemberExpression[object.name=/^(globalThis|window|global)$/][property.name='Number']",
           message: "Do not coerce values to Number for money math — use parseMoney()/Decimal from @/lib/money.",
         },
       ],
