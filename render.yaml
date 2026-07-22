@@ -1,0 +1,54 @@
+# Render blueprint — Zimmamless V3 API
+#
+# Deploy: Render Dashboard → New → Blueprint → point at this repo.
+# Everything marked `sync: false` is a secret and must be pasted into the
+# Render dashboard once; nothing secret lives in this file (hard rule 8 —
+# SUPABASE_SERVICE_ROLE_KEY never enters the repo or the web app).
+#
+# Verified locally against the production build before first deploy:
+# `npm run build -w @zimmamless/api` then `NODE_ENV=production node
+# apps/api/dist/main.js` boots, connects to the hosted database, serves
+# /health, and 404s /v1/demo/time-travel. See docs/ops/DEPLOY_RUNBOOK.md §2.
+
+services:
+  - type: web
+    name: zimmamless-api
+    runtime: node
+    plan: free
+    region: frankfurt
+    branch: main
+    rootDir: .
+    buildCommand: npm ci && npm run build -w @zimmamless/api
+    startCommand: node apps/api/dist/main.js
+    healthCheckPath: /health
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: NODE_VERSION
+        value: "22"
+      - key: API_GLOBAL_PREFIX
+        value: v1
+      - key: LOG_LEVEL
+        value: info
+      # ZM-DEMO-004: the API refuses to boot if this is true in production.
+      - key: DEMO_TIME_MACHINE_ENABLED
+        value: "false"
+      # Session pooler (port 5432). NOT the direct host (IPv6-only) and NOT
+      # the transaction pooler (6543, cannot run DDL). Runbook §0.1.
+      - key: DATABASE_URL
+        sync: false
+      - key: SUPABASE_URL
+        sync: false
+      - key: SUPABASE_ANON_KEY
+        sync: false
+      # Server-only. Bypasses RLS entirely.
+      - key: SUPABASE_SERVICE_ROLE_KEY
+        sync: false
+      # Leave UNSET for this project — it issues ES256 and verifies via JWKS.
+      # Setting it only matters for legacy HS256 projects.
+      # - key: SUPABASE_JWT_SECRET
+      #   sync: false
+      # Agent B's deployed web origin, comma-separated. Must be set before
+      # the browser can call the API at all.
+      - key: CORS_ORIGINS
+        sync: false
