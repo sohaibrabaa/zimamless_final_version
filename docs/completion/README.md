@@ -29,7 +29,7 @@ Keep this table updated (append a row edit as a new commit; the table is the one
 | Phase | Agent A report | Agent B report | Checkpoint | PO closed |
 |---|---|---|---|---|
 | 0 | — | n/a | n/a | — |
-| 1 | — | — | — | — |
+| 1 | — | [PHASE_1_AGENT_B.md](PHASE_1_AGENT_B.md) | — | — |
 | 2 | — | — | — | — |
 | 3 | — | — | — | — |
 | 4 | — | — | — | — |
