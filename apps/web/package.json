@@ -7,6 +7,9 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
+    "test": "node --experimental-strip-types --test \"tests/*.test.ts\"",
+    "check:i18n": "node scripts/check-i18n-parity.mjs",
+    "check": "npm run lint && npm run check:i18n && npm run test",
     "generate:contract": "node scripts/merge-openapi.mjs && openapi-typescript lib/api/generated/openapi.merged.yaml -o lib/api/generated/schema.d.ts"
   },
   "dependencies": {

@@ -32,6 +32,52 @@ export const mockUsers: Record<string, AuthMeResponse> = {
     ],
     activeOrganizationId: "10000000-0000-0000-0000-000000000001",
   },
+  // Phase 2: two extra supplier personas so the APPROVED_CONDITIONAL and
+  // ineligibility screens are directly reachable, rather than only via driving
+  // a reviewer decision. Their organizationIds match the fixtures in
+  // lib/mocks/onboarding-store.ts.
+  "supplier-conditional": {
+    user: {
+      id: "00000000-0000-0000-0000-000000000004",
+      fullName: "Yousef Barakat",
+      email: "yousef@aqaba-marine.jo",
+      phoneNumber: "+962790000004",
+      preferredLanguage: "EN",
+      mfaEnabled: false,
+      status: "ACTIVE",
+    },
+    memberships: [
+      {
+        organizationId: "10000000-0000-0000-0000-000000000004",
+        organizationName: "Aqaba Marine Supplies",
+        organizationType: "SUPPLIER",
+        roles: ["SUPPLIER_OWNER_ADMIN"],
+        isAuthorizedSignatory: true,
+      },
+    ],
+    activeOrganizationId: "10000000-0000-0000-0000-000000000004",
+  },
+  "supplier-ineligible": {
+    user: {
+      id: "00000000-0000-0000-0000-000000000005",
+      fullName: "Huda Zaid",
+      email: "huda@madaba-textiles.jo",
+      phoneNumber: "+962790000005",
+      preferredLanguage: "EN",
+      mfaEnabled: false,
+      status: "ACTIVE",
+    },
+    memberships: [
+      {
+        organizationId: "10000000-0000-0000-0000-000000000005",
+        organizationName: "Madaba Textiles Est.",
+        organizationType: "SUPPLIER",
+        roles: ["SUPPLIER_OWNER_ADMIN"],
+        isAuthorizedSignatory: true,
+      },
+    ],
+    activeOrganizationId: "10000000-0000-0000-0000-000000000005",
+  },
   "bank-admin": {
     user: {
       id: "00000000-0000-0000-0000-000000000002",
@@ -68,7 +114,7 @@ export const mockUsers: Record<string, AuthMeResponse> = {
         organizationId: "30000000-0000-0000-0000-000000000001",
         organizationName: "Zimmamless Platform",
         organizationType: "PLATFORM",
-        roles: ["SUPER_ADMIN"],
+        roles: ["SUPER_ADMIN", "PLATFORM_SUPPLIER_REVIEWER"],
         isAuthorizedSignatory: false,
       },
     ],

@@ -70,5 +70,287 @@
     "emptyDashboard": "There's nothing here yet.",
     "errorLoadingData": "We couldn't load this data.",
     "demoModeLabel": "Demo mode"
+  },
+  "onboarding": {
+    "field": {
+      "nationalEstablishmentNumber": "National establishment number",
+      "nationalEstablishmentNumberHint": "We use this to retrieve your registry record from the Companies Control Department.",
+      "professionLicenceNumber": "Profession licence number",
+      "professionLicenceNumberHint": "We use this to retrieve your licence details from the licensing authority."
+    },
+    "bootstrap": {
+      "title": "Start your application",
+      "subtitle": "Two numbers are all we need to begin.",
+      "derivedNotice": "You won't be asked to type your company name, legal type, address, capital, partners, signatories or tax number — we retrieve those from the official registries.",
+      "submit": "Begin application",
+      "created": "Application created.",
+      "alreadyRegistered": "This establishment number is already registered to another organization. Contact us if you believe this is an error."
+    },
+    "wizard": {
+      "progressLabel": "Application progress",
+      "step": {
+        "identity": "Business identification",
+        "licence": "Profession licence",
+        "consents": "Consents",
+        "bankAccount": "Disbursement account"
+      },
+      "identityIntro": "This is what the registries returned for the numbers you provided. These values are read-only — corrections are made by re-querying the source, not by editing here.",
+      "licenceIntro": "Licence details retrieved from the licensing authority.",
+      "submit": "Submit for review",
+      "submitNotice": "Submitting starts the 24 business-hour review target.",
+      "submitted": "Application submitted for review."
+    },
+    "consents": {
+      "intro": "All of the following are required before your application can be reviewed.",
+      "version": "Version {version}",
+      "allRequired": "All consents are required to submit your application.",
+      "GOVERNMENT_LOOKUP_AUTHORIZATION": {
+        "label": "Government registry lookup authorization",
+        "description": "You authorize us to query the Companies Control Department, the Income and Sales Tax Department, and your licensing authority for the records relating to your business."
+      },
+      "BANK_DISCLOSURE_AUTHORIZATION": {
+        "label": "Disclosure to financing banks",
+        "description": "You authorize us to share your verified business and invoice information with banks on the platform so they can assess a financing request."
+      },
+      "TERMS_OF_SERVICE": {
+        "label": "Terms of service",
+        "description": "You accept the platform terms governing listings, offers, contracts and settlement."
+      },
+      "PRIVACY_POLICY": {
+        "label": "Privacy policy",
+        "description": "You acknowledge how your business and personal data is stored, used and retained."
+      }
+    },
+    "bankAccount": {
+      "intro": "Funds are disbursed to this account. It must belong to the business, not to an individual.",
+      "iban": "IBAN",
+      "ibanHint": "Jordanian IBAN, 30 characters, starting with JO.",
+      "bankName": "Bank name",
+      "accountHolderName": "Account holder name",
+      "accountHolderHint": "As it appears on the account — this is checked against your registry record.",
+      "evidenceTitle": "Account ownership evidence",
+      "evidencePlaceholder": "Document upload is not available yet — it ships with the documents feature. Your reviewer will request evidence if it's needed.",
+      "ibanError": {
+        "FORMAT": "This doesn't look like an IBAN. Check for typos.",
+        "COUNTRY": "Only Jordanian (JO) IBANs are accepted.",
+        "LENGTH": "A Jordanian IBAN is 30 characters long.",
+        "CHECKSUM": "This IBAN's check digits don't match. Please re-enter it."
+      }
+    },
+    "status": {
+      "DRAFT": "Draft",
+      "SUBMITTED": "Submitted",
+      "AUTOMATED_VERIFICATION": "Automated verification",
+      "UNDER_REVIEW": "Under review",
+      "INFORMATION_REQUIRED": "Information required",
+      "INFORMATION_RESUBMITTED": "Information provided",
+      "GOVERNMENT_SERVICE_UNAVAILABLE": "Awaiting registry response",
+      "FINAL_REVIEW": "Final review",
+      "APPROVED": "Approved",
+      "APPROVED_CONDITIONAL": "Approved with conditions",
+      "REJECTED": "Not approved",
+      "UNKNOWN": "In progress"
+    },
+    "sla": {
+      "title": "Review time",
+      "remainingLabel": "of business time remaining",
+      "remainingValue": "{hours}h {minutes}m",
+      "notStarted": "The review clock starts when you submit your application.",
+      "stopped": "The review is complete.",
+      "decidedOn": "Decided on {date}.",
+      "pausedTitle": "The review clock is paused",
+      "targetDecisionBy": "Target decision by {date}.",
+      "submittedOn": "Submitted on {date}.",
+      "businessHoursNote": "Business time is counted Sunday to Thursday, 08:00–17:00 Amman time, excluding public holidays.",
+      "pauseReason": {
+        "INFORMATION_REQUIRED": "We've asked you for something. The clock resumes as soon as you respond.",
+        "GOVERNMENT_SERVICE_UNAVAILABLE": "A government registry hasn't responded yet. The clock is paused until it does — this has no bearing on your application's outcome.",
+        "UNSPECIFIED": "The clock is paused. It resumes automatically once the review continues."
+      }
+    },
+    "government": {
+      "registryDataTitle": "Registry data",
+      "readOnlyNotice": "These values come from official registries and can't be edited by anyone, including us. If something is wrong, we re-query the source.",
+      "nothingRetrievedYet": "Nothing has been retrieved from the registries yet.",
+      "notProvidedBySource": "Not provided by the source",
+      "selfDeclared": "Self-declared",
+      "retrievedOn": "Retrieved {date}",
+      "validUntil": "Current until {date}",
+      "sourcesTitle": "Registry sources",
+      "sourcesExplainer": "Which registries we've queried and whether each has responded. Whether a source responded is separate from what it said.",
+      "noResponseExplainer": "A registry that hasn't responded tells us nothing about your business. It doesn't affect your assessment, and it can't cause a rejection.",
+      "availability": {
+        "ANSWERED": "Responded",
+        "PENDING": "In progress",
+        "NO_RESPONSE": "No response yet"
+      },
+      "source": {
+        "CCD": "CCD",
+        "ISTD": "ISTD",
+        "GAM": "Licensing authority",
+        "EINVOICE": "E-invoice system"
+      },
+      "sourceDescription": {
+        "CCD": "Companies Control Department — company registration record",
+        "ISTD": "Income and Sales Tax Department — tax registration",
+        "GAM": "Greater Amman Municipality / licensing authority — profession licence",
+        "EINVOICE": "National e-invoicing system"
+      },
+      "field": {
+        "legalCompanyName": "Legal company name",
+        "companyNumber": "Company number",
+        "companyType": "Legal type",
+        "registryStatus": "Registry status",
+        "registrationDate": "Registration date",
+        "lastModificationDate": "Last modified",
+        "registeredAddress": "Registered address",
+        "governorate": "Governorate",
+        "registeredContacts": "Registered contacts",
+        "capital": "Capital",
+        "authorizedSignatories": "Authorized signatories",
+        "businessPurposes": "Business purposes",
+        "partners": "Partners",
+        "management": "Management",
+        "announcements": "Announcements",
+        "taxNumber": "Tax number",
+        "taxRegistrationStatus": "Tax registration status",
+        "taxRegisteredName": "Tax-registered name",
+        "licenceNumber": "Licence number",
+        "licenceStatus": "Licence status",
+        "licenceActivity": "Licensed activity",
+        "licenceAddress": "Licensed address",
+        "licenceIssueDate": "Licence issued",
+        "licenceExpiryDate": "Licence expires"
+      }
+    },
+    "informationRequests": {
+      "title": "Requests for information",
+      "emptyTitle": "Nothing is outstanding",
+      "emptyBody": "We'll show anything we need from you here.",
+      "requestedOn": "Requested {date}",
+      "respond": "Respond",
+      "responseLabel": "Your response",
+      "responded": "Response sent.",
+      "resumesClock": "Sending your response resumes the review clock.",
+      "attachmentPlaceholder": "Attaching a document isn't available yet — describe what you have and your reviewer will follow up.",
+      "status": {
+        "OPEN": "Awaiting your response",
+        "FULFILLED": "Answered",
+        "CANCELLED": "Withdrawn"
+      }
+    },
+    "conditional": {
+      "title": "Your account is approved, with one condition outstanding",
+      "body": "You can use the platform and complete what's outstanding. Submitting invoices and creating listings stay unavailable until the condition is cleared."
+    },
+    "financingGate": {
+      "title": "Not available yet",
+      "conditional": "Your account is approved with a condition still outstanding. Financing actions become available once it's cleared.",
+      "pending": "Financing actions become available once your application is approved.",
+      "notApproved": "Your application wasn't approved, so financing actions aren't available.",
+      "goToOnboarding": "Go to your application"
+    },
+    "ineligibility": {
+      "title": "We can't onboard this business in the current version",
+      "body": "Zimmamless currently works with companies registered with the Companies Control Department. Sole proprietorships and businesses that can't be verified through CCD or a supported licensing authority aren't supported in this version.",
+      "whyNow": "This is a limitation of what we can verify today, not an assessment of your business.",
+      "whatNext": "If your business is registered under a different legal form, or you register one, you're welcome to apply again. Support for more entity types is planned.",
+      "reference": "Reference:"
+    },
+    "queue": {
+      "title": "Application review queue",
+      "filterByStatus": "Status",
+      "allStatuses": "All statuses",
+      "resultCount": "{count} applications",
+      "empty": "No applications match this filter.",
+      "slaPaused": "Paused",
+      "pageOf": "Page {page} of {totalPages}",
+      "column": {
+        "organization": "Organization",
+        "status": "Status",
+        "submitted": "Submitted",
+        "slaRemaining": "SLA remaining"
+      }
+    },
+    "decision": {
+      "title": "Record a decision",
+      "outcome": "Decision",
+      "choose": "Choose…",
+      "reasonCode": "Reason code",
+      "notes": "Notes",
+      "notesHint": "Recorded with the decision in the audit trail.",
+      "notesBecomeRequest": "These notes are sent to the supplier as the information request.",
+      "submit": "Record decision",
+      "recorded": "Decision recorded.",
+      "alreadyDecided": "This application has already been decided.",
+      "decidedTitle": "Decision",
+      "soleProprietorshipNotice": "The registry records this entity as a sole proprietorship, which is not eligible in V3 (ZM-SON-013). Use the reason code \"Entity type not eligible in this version\".",
+      "option": {
+        "APPROVED": "Approve",
+        "APPROVED_CONDITIONAL": "Approve with conditions",
+        "INFORMATION_REQUIRED": "Request information",
+        "REJECTED": "Reject"
+      },
+      "effect": {
+        "APPROVED": "The organization becomes active and can submit invoices.",
+        "APPROVED_CONDITIONAL": "The supplier can log in and complete outstanding items, but financing actions stay disabled.",
+        "INFORMATION_REQUIRED": "The review clock pauses until the supplier responds.",
+        "REJECTED": "The application is closed with the reason code recorded."
+      }
+    },
+    "reasonCode": {
+      "COMPANY_NOT_ACTIVE": {
+        "label": "Company suspended or struck off",
+        "supplier": "The registry shows this company as suspended or struck off. Once the registry record is active again, you're welcome to apply."
+      },
+      "COMPANY_NOT_FOUND": {
+        "label": "Company not found in the registry",
+        "supplier": "We couldn't find a registry record for the establishment number provided. Please check the number and apply again."
+      },
+      "COMPANY_IN_LIQUIDATION": {
+        "label": "Company in liquidation or insolvency",
+        "supplier": "The registry shows this company as being in liquidation or insolvency proceedings, which we can't onboard."
+      },
+      "LICENCE_NOT_VALID": {
+        "label": "Profession licence suspended, cancelled, or activity prohibited",
+        "supplier": "The licensing authority shows the profession licence as not currently valid for this activity."
+      },
+      "SIGNATORY_AUTHENTICITY_FAILED": {
+        "label": "Signatory authenticity could not be established",
+        "supplier": "We couldn't establish the authenticity of the authorized signatory documentation."
+      },
+      "ESSENTIAL_CONSENT_REFUSED": {
+        "label": "Essential consent refused",
+        "supplier": "One of the consents required to verify your business and share information with banks wasn't granted, so we can't proceed."
+      },
+      "BANK_ACCOUNT_OWNERSHIP_UNPROVEN": {
+        "label": "Bank account ownership not established",
+        "supplier": "We couldn't confirm that the disbursement account belongs to your business. Ownership evidence or a corrected account will let us continue."
+      },
+      "LEGAL_PROHIBITION_OR_SANCTIONS_MATCH": {
+        "label": "Legal prohibition or sanctions match",
+        "supplier": "We're unable to onboard this business for legal or compliance reasons."
+      },
+      "ENTITY_TYPE_NOT_ELIGIBLE_V3": {
+        "label": "Entity type not eligible in this version",
+        "supplier": "This entity type isn't supported in the current version of the platform."
+      },
+      "ESSENTIAL_FIELD_MISSING": {
+        "label": "Essential information missing",
+        "supplier": "We need one more piece of information before the review can continue."
+      },
+      "SIGNATORY_EVIDENCE_REQUIRED": {
+        "label": "Signatory evidence required",
+        "supplier": "The account user doesn't appear among the authorized signatories on the registry record. A recent signatory certificate or authorization document will resolve this."
+      },
+      "LICENCE_COPY_REQUIRED": {
+        "label": "Licence copy or correct number required",
+        "supplier": "We need a current copy of the profession licence, or a corrected licence number."
+      },
+      "OPERATIONAL_ITEM_OUTSTANDING": {
+        "label": "Operational item outstanding",
+        "supplier": "One non-material item is still outstanding. Financing actions become available once it's cleared."
+      }
+    }
   }
 }
