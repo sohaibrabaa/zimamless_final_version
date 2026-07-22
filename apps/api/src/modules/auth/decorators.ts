@@ -1,0 +1,48 @@
+import { SetMetadata, createParamDecorator, ExecutionContext } from '@nestjs/common';
+import { Request } from 'express';
+import { PlatformUser, MembershipRow } from './auth.service';
+
+export const IS_PUBLIC_KEY = 'auth:public';
+export const ORG_CONTEXT_EXEMPT_KEY = 'auth:orgContextExempt';
+export const REQUIRED_ROLES_KEY = 'auth:requiredRoles';
+
+/**
+ * No token required. Reserved for /health — every other route in the
+ * contract sits behind `security: bearerAuth`.
+ */
+export const Public = () => SetMetadata(IS_PUBLIC_KEY, true);
+
+/**
+ * Authenticated, but exempt from X-Organization-Id.
+ *
+ * The exemption exists for exactly two situations, both of which are
+ * chicken-and-egg by nature:
+ *   - /auth/me and /auth/context, which are how a client discovers and
+ *     chooses a context in the first place;
+ *   - /onboarding/register (D-04), where the caller has no organization yet.
+ *     The amendment documents that exemption explicitly.
+ *
+ * Anything else carrying this decorator is a bug: cross-cutting rule 1 says
+ * every request names its active organization.
+ */
+export const OrgContextExempt = () => SetMetadata(ORG_CONTEXT_EXEMPT_KEY, true);
+
+/** Require any one of these role_key values in the active org context. */
+export const RequireRoles = (...roles: string[]) => SetMetadata(REQUIRED_ROLES_KEY, roles);
+
+export interface AuthenticatedRequest extends Request {
+  user?: PlatformUser;
+  authUserId?: string;
+  membership?: MembershipRow;
+  organizationId?: string;
+}
+
+/** The platform `users` row for the caller. */
+export const CurrentUser = createParamDecorator((_data: unknown, ctx: ExecutionContext) => {
+  return ctx.switchToHttp().getRequest<AuthenticatedRequest>().user;
+});
+
+/** The active organization context — membership, roles, org type. */
+export const CurrentContext = createParamDecorator((_data: unknown, ctx: ExecutionContext) => {
+  return ctx.switchToHttp().getRequest<AuthenticatedRequest>().membership;
+});

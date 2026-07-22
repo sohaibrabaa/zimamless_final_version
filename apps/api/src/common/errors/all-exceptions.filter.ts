@@ -1,0 +1,141 @@
+import {
+  ArgumentsHost,
+  Catch,
+  ExceptionFilter,
+  HttpException,
+  HttpStatus,
+} from '@nestjs/common';
+import { Response } from 'express';
+import { AppException } from './app.exception';
+import { ErrorCode } from './error-codes';
+import { RequestContextStore } from '../context/request-context';
+import { AppLogger } from '../logging/app-logger.service';
+
+/**
+ * Every error leaves the API in the contract's Error shape:
+ *
+ *   { code, message, details?, correlationId? }
+ *
+ * Nothing else. Nest's default error body ({ statusCode, message, error })
+ * would break Agent B's generated client, so this filter is registered
+ * globally and is the only writer of error responses.
+ *
+ * Unexpected exceptions are logged in full and reported as a bare
+ * INTERNAL_ERROR with the correlation id: stack traces, driver messages, and
+ * SQL text must not reach a client, least of all a bank-facing one where a
+ * leaked query could carry the supplier's floor (contract rule 2, INV-8).
+ */
+@Catch()
+export class AllExceptionsFilter implements ExceptionFilter {
+  constructor(private readonly logger: AppLogger) {}
+
+  catch(exception: unknown, host: ArgumentsHost): void {
+    const res = host.switchToHttp().getResponse<Response>();
+    const correlationId = RequestContextStore.correlationId();
+
+    const { status, body, logLevel, internal } = this.describe(exception);
+
+    this.logger.event(logLevel, `${body.code}: ${body.message}`, {
+      status,
+      ...(internal ? { internal } : {}),
+    });
+
+    if (correlationId) body.correlationId = correlationId;
+
+    // Errors are never cached: a 403 from a missing org context becomes a
+    // 200 the moment the header is supplied.
+    res.setHeader('Cache-Control', 'no-store');
+    res.status(status).json(body);
+  }
+
+  private describe(exception: unknown): {
+    status: number;
+    body: { code: string; message: string; details?: Record<string, unknown>; correlationId?: string };
+    logLevel: 'warn' | 'error';
+    internal?: string;
+  } {
+    if (exception instanceof AppException) {
+      const payload = exception.getResponse() as {
+        code: string;
+        message: string;
+        details?: Record<string, unknown>;
+      };
+      return {
+        status: exception.getStatus(),
+        body: {
+          code: payload.code,
+          message: payload.message,
+          ...(payload.details ? { details: payload.details } : {}),
+        },
+        // Expected, handled outcomes are not errors in the operational
+        // sense; a wall of ERROR lines for ordinary 403s hides real faults.
+        logLevel: exception.getStatus() >= 500 ? 'error' : 'warn',
+      };
+    }
+
+    if (exception instanceof HttpException) {
+      const status = exception.getStatus();
+      const raw = exception.getResponse();
+      return {
+        status,
+        body: {
+          code: this.codeForStatus(status),
+          message: extractMessage(raw) ?? exception.message,
+          ...(isValidationPayload(raw) ? { details: { violations: raw.message } } : {}),
+        },
+        logLevel: status >= 500 ? 'error' : 'warn',
+      };
+    }
+
+    const err = exception as Error;
+    return {
+      status: HttpStatus.INTERNAL_SERVER_ERROR,
+      body: {
+        code: ErrorCode.INTERNAL_ERROR,
+        message: 'An unexpected error occurred. Quote the correlation id when reporting this.',
+      },
+      logLevel: 'error',
+      // Full detail goes to the log, never to the response.
+      internal: err?.stack ?? String(exception),
+    };
+  }
+
+  private codeForStatus(status: number): string {
+    switch (status) {
+      case HttpStatus.UNAUTHORIZED:
+        return ErrorCode.UNAUTHENTICATED;
+      case HttpStatus.FORBIDDEN:
+        return ErrorCode.ORGANIZATION_CONTEXT_REQUIRED;
+      case HttpStatus.NOT_FOUND:
+        return ErrorCode.NOT_FOUND;
+      case HttpStatus.CONFLICT:
+        return ErrorCode.CONFLICT;
+      case HttpStatus.BAD_REQUEST:
+      case HttpStatus.UNPROCESSABLE_ENTITY:
+        return ErrorCode.VALIDATION_FAILED;
+      case HttpStatus.SERVICE_UNAVAILABLE:
+        return ErrorCode.SERVICE_UNAVAILABLE;
+      default:
+        return ErrorCode.INTERNAL_ERROR;
+    }
+  }
+}
+
+function extractMessage(raw: unknown): string | undefined {
+  if (typeof raw === 'string') return raw;
+  if (raw && typeof raw === 'object' && 'message' in raw) {
+    const m = (raw as { message: unknown }).message;
+    if (typeof m === 'string') return m;
+    if (Array.isArray(m)) return 'Request validation failed.';
+  }
+  return undefined;
+}
+
+function isValidationPayload(raw: unknown): raw is { message: string[] } {
+  return (
+    !!raw &&
+    typeof raw === 'object' &&
+    'message' in raw &&
+    Array.isArray((raw as { message: unknown }).message)
+  );
+}
