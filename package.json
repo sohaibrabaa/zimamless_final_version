@@ -5,6 +5,7 @@
   "description": "Zimmamless V3 — receivables marketplace (monorepo root)",
   "workspaces": [
     "apps/api",
+    "apps/web",
     "db"
   ],
   "engines": {
