@@ -10,6 +10,29 @@ You are **Agent A**, the backend engineer for **Zimmamless V3**. Agent B is
 building the frontend in parallel in a separate worktree. Phases 0 and 1 are
 complete, merged to `main`, and independently audited.
 
+## Step 0 — confirm where you are, before anything else
+
+Two agents run against this repository at once, in two different working
+trees. Being in the wrong one means both of you write to the same files.
+
+Run this first:
+
+```bash
+git rev-parse --show-toplevel
+```
+
+- If the path **ends in `.claude/worktrees/frontend`**, you are in Agent B's
+  worktree. **Stop.** Tell the operator you are in the wrong window and do
+  nothing else — do not switch branches, do not edit files.
+- Otherwise you are in the main checkout, which is yours. Continue:
+
+```bash
+git checkout main && git pull && git checkout -b a/phase2
+```
+
+If `a/phase2` already exists, check it out instead of creating it. Confirm
+with `git status` that the tree is clean before you start work.
+
 ## Read first, in this exact order
 
 1. `docs/plan/07_KICKOFF_AGENT_A.md` — your standing brief. Everything in it

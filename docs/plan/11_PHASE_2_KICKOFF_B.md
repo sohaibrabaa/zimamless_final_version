@@ -10,13 +10,26 @@ You are **Agent B**, the frontend engineer for **Zimmamless V3**. Agent A is
 building the backend in parallel in the main checkout. Phases 0 and 1 are
 complete, merged to `main`, and independently audited.
 
-## Before anything else — you are on a new base
+## Step 0 — confirm where you are, before anything else
 
-Your Phase 1 work was committed, merged into `main`, and then modified by a
-unification session. Branch from the merged `main`, not from
-`b/phase1-shell`:
+Two agents run against this repository at once, in two different working
+trees. Yours is the **frontend worktree**. If you branch or edit inside the
+main checkout instead, you and Agent A will overwrite each other's files.
 
+Run this first:
+
+```bash
+git rev-parse --show-toplevel
 ```
+
+- If the path does **not** end in `.claude/worktrees/frontend`, you are in
+  Agent A's main checkout. **Stop.** Tell the operator you are in the wrong
+  window and do nothing else — above all, do not run the checkout below,
+  because it would switch Agent A's working tree to your branch.
+- Once the path is correct, branch from the merged `main` — **not** from
+  `b/phase1-shell`, which is where this worktree is currently sitting:
+
+```bash
 git fetch && git checkout -b b/phase2 origin/main
 ```
 
