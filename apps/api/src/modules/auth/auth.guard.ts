@@ -13,6 +13,9 @@ import {
 
 export const ORGANIZATION_HEADER = 'x-organization-id';
 
+/** Mirrors AuditInterceptor.MUTATING — these write, so they must have an actor org. */
+const MUTATING_METHODS = new Set(['POST', 'PUT', 'PATCH', 'DELETE']);
+
 /**
  * The primary authorization layer (ZM-ARC-003..005), applied globally.
  *
@@ -79,6 +82,24 @@ export class AuthGuard implements CanActivate {
           // activeOrganizationId, which is the honest answer.
         }
       }
+
+      // Hard rule 6: a mutation must name the acting organization, so an
+      // exempt *mutation* that still has no context cannot be allowed to
+      // write an audit row with actor_org_id NULL. One unambiguous
+      // membership is adopted silently; anything else has to be told.
+      if (MUTATING_METHODS.has(req.method) && !req.organizationId) {
+        const memberships = await this.auth.listMemberships(user.id);
+        if (memberships.length !== 1) throw AppException.organizationContextRequired();
+        const only = memberships[0];
+        req.membership = only;
+        req.organizationId = only.organization_id;
+        RequestContextStore.patch({
+          organizationId: only.organization_id,
+          organizationType: only.organization_type,
+          roles: only.roles,
+        });
+      }
+
       return true;
     }
 

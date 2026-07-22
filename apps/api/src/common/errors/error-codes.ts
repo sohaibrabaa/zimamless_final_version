@@ -22,6 +22,12 @@ export const ErrorCode = {
 
   // --- Generic ----------------------------------------------------------
   VALIDATION_FAILED: 'VALIDATION_FAILED',
+  /**
+   * A 403 that is not one of the specific context/role refusals above.
+   * The fallback for a bare ForbiddenException — never guess a more
+   * specific code on the client's behalf.
+   */
+  FORBIDDEN: 'FORBIDDEN',
   NOT_FOUND: 'NOT_FOUND',
   CONFLICT: 'CONFLICT',
   IDEMPOTENCY_KEY_REQUIRED: 'IDEMPOTENCY_KEY_REQUIRED',

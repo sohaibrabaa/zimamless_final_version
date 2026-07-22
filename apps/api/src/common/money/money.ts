@@ -93,8 +93,22 @@ export class Money {
     return new Money(this.value.minus(other.value));
   }
 
-  /** Multiply by a dimensionless factor (a percentage, a quantity). */
+  /**
+   * Multiply by a dimensionless factor (a rate, a quantity).
+   *
+   * A JS `number` is accepted only when it is a safe integer — a count of
+   * invoices or instalments, which cannot carry a fractional-binary error.
+   * A fractional number (0.1, a rate read from JSON) is rejected for the same
+   * reason `from()` rejects one: by the time it arrives the precision is
+   * already gone. Pass rates as strings or Decimals.
+   */
   multiply(factor: Decimal | string | number): Money {
+    if (typeof factor === 'number' && !Number.isSafeInteger(factor)) {
+      throw new TypeError(
+        `Money.multiply() refuses the JS number ${factor}: only safe integers are exact. ` +
+          `Pass a string or Decimal for any fractional factor.`,
+      );
+    }
     return new Money(this.value.times(new Decimal(factor)).toDecimalPlaces(SCALE));
   }
 

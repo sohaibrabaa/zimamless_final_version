@@ -54,11 +54,15 @@ export const APP_CONFIG = 'APP_CONFIG';
       useFactory: (config: AppConfig) => config.demo.timeMachineEnabled,
       inject: [AppConfig],
     },
+    // useExisting, not useClass: useClass would construct a *second*
+    // SystemTimeProvider with its own cache, so priming at boot and calling
+    // refresh() on the demo controller would act on an instance no injection
+    // site ever sees.
+    SystemTimeProvider,
     {
       provide: TIME_PROVIDER,
-      useClass: SystemTimeProvider,
+      useExisting: SystemTimeProvider,
     },
-    SystemTimeProvider,
 
     { provide: APP_GUARD, useClass: AuthGuard },
     { provide: APP_INTERCEPTOR, useClass: AuditInterceptor },

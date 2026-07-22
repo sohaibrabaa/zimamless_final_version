@@ -13,7 +13,7 @@
  * visible later without asking the database directly. CI runs this after
  * migrating, and it doubles as the post-deploy smoke check in the runbook.
  */
-import { readFileSync } from 'node:fs';
+import { readFileSync, readdirSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 import pg from 'pg';
@@ -37,10 +37,40 @@ if (!connectionString) {
 }
 
 const needsTls = /supabase\.(com|co)/.test(connectionString) || process.env.PGSSLMODE === 'require';
-const client = new pg.Client({
-  connectionString,
-  ssl: needsTls ? { rejectUnauthorized: false } : undefined,
-});
+
+/**
+ * TLS posture.
+ *
+ * Supabase's poolers present a chain rooted in their own CA, which is not in
+ * Node's trust store, so full verification requires their CA certificate —
+ * point PGSSLROOTCERT at it (downloadable from the project's database
+ * settings) and the connection is genuinely verified.
+ *
+ * Without it the connection is still encrypted but the peer is unauthenticated.
+ * That is the historical behaviour and it stays the fallback, because a tool
+ * that cannot connect verifies nothing — but it now says so on every run
+ * rather than passing silently. `--insecure-tls` acknowledges the trade-off
+ * and quiets the warning.
+ */
+const caPath = process.env.PGSSLROOTCERT;
+const acknowledged = process.argv.includes('--insecure-tls');
+let ssl;
+if (needsTls) {
+  if (caPath) {
+    ssl = { ca: readFileSync(caPath, 'utf8'), rejectUnauthorized: true };
+  } else {
+    ssl = { rejectUnauthorized: false };
+    if (!acknowledged) {
+      console.warn(
+        'WARNING: connecting with TLS but NOT verifying the server certificate.\n' +
+          '         Set PGSSLROOTCERT to the Supabase CA to verify it, or pass\n' +
+          '         --insecure-tls to acknowledge and silence this.\n',
+      );
+    }
+  }
+}
+
+const client = new pg.Client({ connectionString, ssl });
 
 const results = [];
 const check = (name, pass, detail) => {
@@ -53,7 +83,11 @@ try {
   console.log(`Verifying ${connectionString.replace(/:\/\/[^@]*@/, '://***:***@')}\n`);
 
   // --- 1. Migrations recorded ------------------------------------------
-  const expected = ['0000_prerequisites.sql', '0001_frozen_schema.sql', '0002_additive_amendment.sql', '0003_rls_policies.sql'];
+  // Derived from the directory, never a hand-kept list: the previous literal
+  // silently stopped covering 0004 the moment it was added.
+  const expected = readdirSync(join(repoRoot, 'db/migrations'))
+    .filter((f) => /^\d{4}_.*\.sql$/.test(f))
+    .sort();
   let applied = [];
   try {
     const { rows } = await client.query('SELECT name FROM schema_migrations ORDER BY name');
@@ -63,7 +97,7 @@ try {
   }
   const missing = expected.filter((e) => !applied.includes(e));
   check(
-    'all four migrations recorded',
+    `all ${expected.length} migrations recorded`,
     missing.length === 0,
     missing.length ? `missing: ${missing.join(', ')}` : `${applied.length} recorded`,
   );
@@ -83,7 +117,11 @@ try {
   // 59 frozen + 2 from 0002 + schema_migrations = 62.
   check('table count', tables >= 62, `${tables} (expected >= 62)`);
   check('policy count', policies >= 45, `${policies} (expected ~50)`);
-  check('RLS-enabled tables', rls_enabled >= 61, `${rls_enabled} (expected 61)`);
+  // Floor, not a target: every table in public carries RLS today (62 of 62,
+  // schema_migrations included). The label used to read "expected 61", which
+  // made a passing run look like a discrepancy and misled a review into
+  // "correcting" the completion report's correct figure.
+  check('RLS-enabled tables', rls_enabled >= 61, `${rls_enabled} of ${tables} (minimum 61)`);
 
   // --- 4. No table left unprotected (the coverage invariant) ------------
   const { rows: unprotected } = await client.query(`

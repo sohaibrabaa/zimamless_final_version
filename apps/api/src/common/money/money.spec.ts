@@ -112,6 +112,22 @@ describe('Money', () => {
       expect(Money.from('1000.000').multiply('3').toString()).toBe('3000.000');
     });
 
+    it('multiplies by a safe-integer count', () => {
+      // A count of instalments is exact as a JS number; nothing is lost.
+      expect(Money.from('1000.000').multiply(3).toString()).toBe('3000.000');
+    });
+
+    it('refuses a fractional JS number factor', () => {
+      // The float ban is not cosmetic: 0.1 has already lost precision by the
+      // time multiply() sees it, exactly as with Money.from(0.1).
+      expect(() => Money.from('1000.000').multiply(0.1)).toThrow(TypeError);
+      expect(() => Money.from('1000.000').multiply(1.25)).toThrow(/safe integers/);
+    });
+
+    it('accepts a fractional factor as a string', () => {
+      expect(Money.from('1000.000').multiply('0.1').toString()).toBe('100.000');
+    });
+
     it('computes the net-payout formula exactly as the DB CHECK does', () => {
       // chk_net_formula: net = gross - discount - fees - commission - listingFee - other
       const net = Money.from('10000.000')

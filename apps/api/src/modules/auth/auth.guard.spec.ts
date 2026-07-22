@@ -22,12 +22,14 @@ function makeContext(options: {
   authorization?: string;
   organizationId?: string;
   metadata?: Record<string, unknown>;
+  method?: string;
 }): { context: ExecutionContext; req: Record<string, unknown> } {
   const headers: Record<string, string> = {};
   if (options.authorization) headers.authorization = options.authorization;
   if (options.organizationId) headers[ORGANIZATION_HEADER] = options.organizationId;
 
   const req: Record<string, unknown> = {
+    method: options.method ?? 'GET',
     header: (name: string) => headers[name.toLowerCase()],
   };
 
@@ -45,6 +47,7 @@ function makeGuard(overrides: {
   verify?: jest.Mock;
   syncUser?: jest.Mock;
   resolveContext?: jest.Mock;
+  listMemberships?: jest.Mock;
 }) {
   const reflector = {
     getAllAndOverride: (key: string) => overrides.metadata?.[key],
@@ -60,6 +63,7 @@ function makeGuard(overrides: {
         organization_type: 'BANK',
         roles: ['BANK_OFFER_MAKER'],
       }),
+    listMemberships: overrides.listMemberships ?? jest.fn().mockResolvedValue([]),
   };
 
   return {
@@ -192,6 +196,73 @@ describe('AuthGuard', () => {
         expect(RequestContextStore.get()?.organizationId).toBe(ORG_ID);
         expect(RequestContextStore.get()?.userId).toBe(USER.id);
       });
+    });
+  });
+
+  describe('exempt mutations still name an actor organization (hard rule 6)', () => {
+    // The audit interceptor reads actor_org_id straight out of the request
+    // context. An exempt *mutation* — PATCH /auth/language is one — that runs
+    // with no context therefore writes an audit row with a null actor org,
+    // which hard rule 6 forbids. A GET may legitimately have no context.
+    const ONE_MEMBERSHIP = [
+      { organization_id: ORG_ID, organization_type: 'SUPPLIER', roles: ['SUPPLIER_OWNER'] },
+    ];
+    const TWO_MEMBERSHIPS = [
+      ...ONE_MEMBERSHIP,
+      { organization_id: OTHER_ORG_ID, organization_type: 'PLATFORM', roles: ['PLATFORM_SUPPORT'] },
+    ];
+
+    it('adopts the sole membership when an exempt mutation sends no header', async () => {
+      const listMemberships = jest.fn().mockResolvedValue(ONE_MEMBERSHIP);
+      const { guard } = makeGuard({
+        metadata: { [ORG_CONTEXT_EXEMPT_KEY]: true },
+        listMemberships,
+      });
+      const { context, req } = makeContext({ authorization: 'Bearer ok', method: 'PATCH' });
+
+      await expect(run(guard, context)).resolves.toBe(true);
+      expect(req.organizationId).toBe(ORG_ID);
+    });
+
+    it('refuses an exempt mutation from a multi-org user with no header', async () => {
+      // Guessing would attribute the write to an arbitrary one of their orgs.
+      const { guard } = makeGuard({
+        metadata: { [ORG_CONTEXT_EXEMPT_KEY]: true },
+        listMemberships: jest.fn().mockResolvedValue(TWO_MEMBERSHIPS),
+      });
+      const { context } = makeContext({ authorization: 'Bearer ok', method: 'PATCH' });
+
+      await expect(run(guard, context)).rejects.toMatchObject({
+        code: ErrorCode.ORGANIZATION_CONTEXT_REQUIRED,
+        status: 403,
+      });
+    });
+
+    it('leaves the actor org in the context for the audit interceptor', async () => {
+      const { guard } = makeGuard({
+        metadata: { [ORG_CONTEXT_EXEMPT_KEY]: true },
+        listMemberships: jest.fn().mockResolvedValue(ONE_MEMBERSHIP),
+      });
+      const { context } = makeContext({ authorization: 'Bearer ok', method: 'PATCH' });
+
+      await RequestContextStore.run({ correlationId: 'c1' }, async () => {
+        await guard.canActivate(context);
+        expect(RequestContextStore.get()?.organizationId).toBe(ORG_ID);
+      });
+    });
+
+    it('still allows an exempt GET with no context at all', async () => {
+      // /auth/me has to work before the client knows any organization id.
+      const listMemberships = jest.fn();
+      const { guard } = makeGuard({
+        metadata: { [ORG_CONTEXT_EXEMPT_KEY]: true },
+        listMemberships,
+      });
+      const { context, req } = makeContext({ authorization: 'Bearer ok', method: 'GET' });
+
+      await expect(run(guard, context)).resolves.toBe(true);
+      expect(req.organizationId).toBeUndefined();
+      expect(listMemberships).not.toHaveBeenCalled();
     });
   });
 

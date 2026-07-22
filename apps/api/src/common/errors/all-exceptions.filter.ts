@@ -105,7 +105,11 @@ export class AllExceptionsFilter implements ExceptionFilter {
       case HttpStatus.UNAUTHORIZED:
         return ErrorCode.UNAUTHENTICATED;
       case HttpStatus.FORBIDDEN:
-        return ErrorCode.ORGANIZATION_CONTEXT_REQUIRED;
+        // Deliberately neutral: the specific context/role codes are thrown by
+        // AppException, which never reaches this fallback. Guessing
+        // ORGANIZATION_CONTEXT_REQUIRED here would mislabel every unrelated
+        // ForbiddenException the codebase grows later.
+        return ErrorCode.FORBIDDEN;
       case HttpStatus.NOT_FOUND:
         return ErrorCode.NOT_FOUND;
       case HttpStatus.CONFLICT:

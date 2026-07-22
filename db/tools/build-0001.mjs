@@ -47,6 +47,17 @@ const HEADER = `-- =============================================================
 
 `;
 
+/**
+ * Compare content, not line-ending encoding.
+ *
+ * The header above is written with \n, but a Windows checkout with
+ * core.autocrlf materializes the frozen schema and the migration with CRLF.
+ * Without normalizing, this check passes on Linux CI and fails on every
+ * Windows dev machine — a false alarm about the one file where a false alarm
+ * is most expensive.
+ */
+const lf = (s) => s.replace(/\r\n/g, '\n');
+
 const frozen = readFileSync(FROZEN, 'utf8');
 
 if (!D01_STATEMENT.test(frozen)) {
@@ -73,7 +84,7 @@ if (process.argv.includes('--check')) {
     console.error(`FAIL: ${OUT} does not exist. Run: node db/tools/build-0001.mjs`);
     process.exit(1);
   }
-  if (current !== generated) {
+  if (lf(current) !== lf(generated)) {
     console.error(
       'FAIL: db/migrations/0001_frozen_schema.sql does not match the frozen schema.\n' +
         'Migration 0001 must be the frozen schema verbatim minus the D-01 statement.\n' +
@@ -83,6 +94,7 @@ if (process.argv.includes('--check')) {
   }
   console.log('OK: migration 0001 matches docs/02_DATABASE_SCHEMA.sql (D-01 omitted).');
 } else {
-  writeFileSync(OUT, generated);
-  console.log(`Wrote ${OUT} (${generated.length} bytes).`);
+  // Always LF on disk, so the committed file is identical on every platform.
+  writeFileSync(OUT, lf(generated));
+  console.log(`Wrote ${OUT} (${lf(generated).length} bytes).`);
 }

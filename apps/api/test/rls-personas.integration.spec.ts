@@ -12,6 +12,17 @@ import { PersonaDb, PERSONA, ORG } from './helpers/persona-db';
  */
 
 const connectionString = process.env.DATABASE_URL;
+
+// Skipping locally (no database configured) is a convenience. Skipping in CI
+// would turn the security suite green by not running it, which is the one
+// failure mode that must never look like a pass.
+if (!connectionString && process.env.CI) {
+  throw new Error(
+    'DATABASE_URL is not set in CI. The RLS persona suite is a required gate — ' +
+      'it must run, not skip. Check the workflow’s database service and env wiring.',
+  );
+}
+
 const describeIfDb = connectionString ? describe : describe.skip;
 
 describeIfDb('RLS persona isolation', () => {
