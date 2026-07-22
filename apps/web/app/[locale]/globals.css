@@ -1,0 +1,64 @@
+@import "tailwindcss";
+
+:root {
+  --color-bg: #ffffff;
+  --color-fg: #0f172a;
+  --color-muted: #64748b;
+  --color-border: #e2e8f0;
+  --color-surface: #f8fafc;
+
+  --color-primary: #1d4ed8;
+  --color-primary-fg: #ffffff;
+  --color-primary-hover: #1e40af;
+
+  --color-danger: #b91c1c;
+  --color-danger-bg: #fef2f2;
+  --color-warning: #92400e;
+  --color-warning-bg: #fffbeb;
+  --color-success: #166534;
+  --color-success-bg: #f0fdf4;
+  --color-neutral-bg: #f1f5f9;
+  --color-neutral-fg: #334155;
+
+  --focus-ring: 0 0 0 2px var(--color-bg), 0 0 0 4px var(--color-primary);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --color-bg: #0b1120;
+    --color-fg: #e2e8f0;
+    --color-muted: #94a3b8;
+    --color-border: #1e293b;
+    --color-surface: #111827;
+
+    --color-primary: #3b82f6;
+    --color-primary-fg: #0b1120;
+    --color-primary-hover: #60a5fa;
+
+    --color-danger: #f87171;
+    --color-danger-bg: #2a1112;
+    --color-warning: #fbbf24;
+    --color-warning-bg: #2a2110;
+    --color-success: #4ade80;
+    --color-success-bg: #0f2a18;
+    --color-neutral-bg: #1e293b;
+    --color-neutral-fg: #cbd5e1;
+  }
+}
+
+html,
+body {
+  background: var(--color-bg);
+  color: var(--color-fg);
+}
+
+* {
+  border-color: var(--color-border);
+}
+
+/* Numerals, IBANs, and Latin names stay LTR even inside Arabic text (brief §6). */
+.zm-ltr-embed {
+  direction: ltr;
+  unicode-bidi: isolate;
+  display: inline-block;
+}
