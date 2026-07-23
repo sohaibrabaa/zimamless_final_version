@@ -1,4 +1,5 @@
 import {
+  Logger,
   Body,
   Controller,
   Get,
@@ -10,6 +11,7 @@ import {
 } from '@nestjs/common';
 import { ApiOperation, ApiResponse, ApiTags } from '@nestjs/swagger';
 import { FundingService, SettlementRow } from './funding.service';
+import { SettlementService } from './settlement.service';
 import { ConfirmFundingDto, MarkSentDto } from './dto';
 import { Idempotent } from '../../common/idempotency/idempotency.interceptor';
 import { CurrentContext, CurrentUser, RequireRoles } from '../auth/decorators';
@@ -30,7 +32,12 @@ function contextOf(user: PlatformUser, membership: MembershipRow | undefined): A
 @ApiTags('Funding')
 @Controller()
 export class FundingController {
-  constructor(private readonly funding: FundingService) {}
+  private readonly logger = new Logger(FundingController.name);
+
+  constructor(
+    private readonly funding: FundingService,
+    private readonly settlements: SettlementService,
+  ) {}
 
   @Post('transactions/:id/funding/mark-sent')
   @HttpCode(HttpStatus.OK)
@@ -106,7 +113,52 @@ export class FundingController {
     @Param('id', ParseUUIDPipe) id: string,
     @Body() body: ConfirmFundingDto,
   ): Promise<Record<string, unknown>> {
-    return this.funding.confirm(id, contextOf(user, membership), body.otp);
+    const result = await this.funding.confirm(id, contextOf(user, membership), body.otp);
+
+    // The payout follows funding, in its own transaction. Deliberately after
+    // the confirmation has committed and deliberately not allowed to fail it:
+    // FUNDED is the cross-party fact that both parties confirmed, and it stays
+    // true whether or not the rail cooperates a moment later. A failed payout
+    // is recorded as PAYOUT_FAILED and retried; it does not un-fund a
+    // transaction the supplier has already confirmed receipt for.
+    if (result.transactionState === 'FUNDED') {
+      const settlement = await this.funding.findSettlement(id);
+      if (settlement) {
+        try {
+          await this.settlements.executePayout(settlement.id);
+        } catch (err) {
+          this.logger.error(
+            `Funding confirmed for ${id} but the payout attempt could not start: ` +
+              `${err instanceof Error ? err.message : String(err)}`,
+          );
+        }
+      }
+    }
+
+    return result;
+  }
+
+  @Post('settlements/:id/retry')
+  @HttpCode(HttpStatus.OK)
+  @Idempotent()
+  @RequireRoles('PLATFORM_OPERATIONS_ADMIN', 'PLATFORM_SUPER_ADMIN', 'BANK_OPERATIONS', 'BANK_ADMIN')
+  @ApiOperation({
+    summary: 'Retry a failed payout — idempotent, never double-pays (INV-13)',
+    description:
+      'Retrying a completed settlement is a no-op that returns it unchanged; the payout rail is ' +
+      'not called. Concurrent retries are serialized by a row lock and only one can claim the ' +
+      'settlement, so two simultaneous retries produce exactly one payout. Past the automatic ' +
+      'retry allowance the settlement is under manual review and only platform staff may retry.',
+  })
+  @ApiResponse({ status: 200, description: 'Retried, or already complete' })
+  @ApiResponse({ status: 403, description: 'Under manual review — platform staff only' })
+  async retry(
+    @CurrentUser() user: PlatformUser,
+    @CurrentContext() membership: MembershipRow,
+    @Param('id', ParseUUIDPipe) id: string,
+  ): Promise<Record<string, unknown>> {
+    const settlement = await this.settlements.retry(id, contextOf(user, membership));
+    return describeSettlement(settlement);
   }
 
   @Get('transactions/:id/settlement')

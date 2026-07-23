@@ -13,6 +13,11 @@ import { LedgerService } from './modules/ledger/ledger.service';
 import { OtpService } from './modules/funding/otp.service';
 import { FundingService } from './modules/funding/funding.service';
 import { FundingController } from './modules/funding/funding.controller';
+import { SettlementService } from './modules/funding/settlement.service';
+import {
+  DummySettlementProvider,
+  SETTLEMENT_PROVIDER,
+} from './modules/funding/settlement.provider';
 import { TIME_PROVIDER, SystemTimeProvider } from './common/time/time.provider';
 import { AuthGuard } from './modules/auth/auth.guard';
 import { AuthService } from './modules/auth/auth.service';
@@ -179,6 +184,11 @@ export const APP_CONFIG = 'APP_CONFIG';
     LedgerService,
     FundingService,
     OtpService,
+    SettlementService,
+    // Bound to a symbol, never named by domain code, so swapping in a real
+    // payout rail is a one-line change here (ZM-FND-013/014).
+    DummySettlementProvider,
+    { provide: SETTLEMENT_PROVIDER, useExisting: DummySettlementProvider },
     // The provider is bound to a symbol, not to its class, so ZM-CON-009's
     // "insertable without core domain changes" is a one-line swap here and
     // nothing else. Nothing outside this file names DummySignatureProvider.
