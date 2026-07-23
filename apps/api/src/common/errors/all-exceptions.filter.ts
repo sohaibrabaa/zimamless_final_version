@@ -66,6 +66,7 @@ export class AllExceptionsFilter implements ExceptionFilter {
           code: payload.code,
           message: payload.message,
           ...(payload.details ? { details: payload.details } : {}),
+          ...promotedFields(payload.details),
         },
         // Expected, handled outcomes are not errors in the operational
         // sense; a wall of ERROR lines for ordinary 403s hides real faults.
@@ -142,4 +143,30 @@ function isValidationPayload(raw: unknown): raw is { message: string[] } {
     'message' in raw &&
     Array.isArray((raw as { message: unknown }).message)
   );
+}
+
+/**
+ * Fields the contract declares at the top level of an error body.
+ *
+ * The Error envelope puts everything situational under `details`, and that is
+ * right for almost every failure. `POST /transactions/{id}/funding/confirm`
+ * is the exception: its 401 is declared with an inline schema of
+ * `{ code, attemptsRemaining }` — not a `$ref` to Error — so a client reading
+ * the contract expects `attemptsRemaining` beside `code`, not nested.
+ *
+ * Rather than special-case one endpoint in the filter, one named field is
+ * promoted wherever it appears. It stays in `details` too, so nothing that
+ * reads the envelope shape breaks. The list is deliberately closed: adding to
+ * it means the contract declares another top-level field, not that it would
+ * be convenient.
+ */
+const PROMOTED_TO_TOP_LEVEL = ['attemptsRemaining'] as const;
+
+function promotedFields(details?: Record<string, unknown>): Record<string, unknown> {
+  if (!details) return {};
+  const promoted: Record<string, unknown> = {};
+  for (const field of PROMOTED_TO_TOP_LEVEL) {
+    if (details[field] !== undefined) promoted[field] = details[field];
+  }
+  return promoted;
 }

@@ -61,11 +61,11 @@ endpoint, and has no mock→live promotion to track.
 | POST /contracts/{id}/sign | 6 | — | mock | built. **200**. Body `{accepted:true}`; `false` is 422, not a no-op. 403 for a non-signatory. A signature counts only at `status:'VERIFIED'` — `SIGNED` is an intermediate. Contract reaches FULLY_SIGNED and the transaction CONTRACTED when all are verified · UI: click-to-accept signing · FULLY_SIGNED only once both sides sign |
 | GET …/{id}/conditions | 6 | — | mock | built. Conditions on the ACCEPTED offer only; an empty array before acceptance, not a 404 · UI: conditions checklist |
 | POST /conditions/{id}/fulfil | 6 | — | mock | built. **200**. Supplier records fulfilment with `documentIds` (must already be attached to the transaction); only the BANK may send `waiverReason`, and a blank one is 422. CONDITIONS_PENDING is derived — it clears itself · UI: conditions checklist · fulfil action |
-| POST …/{id}/funding/mark-sent | 7 | — | mock | |
-| POST …/{id}/funding/otp | 7 | — | mock | |
-| POST …/{id}/funding/confirm | 7 | — | mock | |
-| GET …/{id}/settlement | 7 | — | mock | |
-| POST /settlements/{id}/retry | 7 | — | mock | |
+| POST …/{id}/funding/mark-sent | 7 | **2026-07-23** | mock | 200 + Settlement body. Idempotent by observation — a repeat returns the same settlement, no second journal. 409 only if never contracted. Does NOT set FUNDED (INV-10) |
+| POST …/{id}/funding/otp | 7 | **2026-07-23** | mock | **201**. Plaintext returned once, to the bank only. 429 past `otp_max_resends` (3) |
+| POST …/{id}/funding/confirm | 7 | **2026-07-23** | mock | 200 `{transactionState, fundedAt}`. **401 carries `attemptsRemaining` at the top level** (inline schema, not the Error envelope) and also under `details`. Wrong/expired/used are one identical failure (ZM-FND-009) |
+| GET …/{id}/settlement | 7 | **2026-07-23** | mock | 404 before mark-sent — the normal pre-funding state, not an error |
+| POST /settlements/{id}/retry | 7 | **2026-07-23** | mock | Retrying a completed settlement is a no-op returning it unchanged, not an error (INV-13). `MANUAL_REVIEW` is platform-staff only (AS-03) |
 | GET/POST …/{id}/payments | 8 | — | mock | |
 | POST …/{id}/confirm-status | 8 | — | mock | |
 | POST …/{id}/close | 8 | — | mock | |

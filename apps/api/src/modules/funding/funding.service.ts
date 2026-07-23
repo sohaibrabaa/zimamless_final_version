@@ -383,7 +383,12 @@ export class FundingService {
          (id, transaction_id, snapshot_id, status, gross_funding_amount,
           platform_commission_amount, listing_fee_deducted, net_supplier_payout,
           provider_name, idempotency_key)
-       VALUES ($1,$2,$3,'PENDING',$4::numeric,$5::numeric,$6::numeric,$7::numeric,'DUMMY',$1)
+       -- $1 is both columns on purpose (INV-13: the key IS the id), and the
+       -- two casts are required, not decoration: id is uuid and
+       -- idempotency_key is text, so without them Postgres tries to deduce one
+       -- type for one parameter used as two and refuses the statement.
+       VALUES ($1::uuid,$2,$3,'PENDING',$4::numeric,$5::numeric,$6::numeric,$7::numeric,
+               'DUMMY',$1::text)
        RETURNING *`,
       [
         id,

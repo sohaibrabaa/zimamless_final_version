@@ -64,7 +64,7 @@ describe("OTP entry (ZM-FND-009)", () => {
 
 describe("INV-13 / AS-03 — retry is offered only where it can succeed", () => {
   const bank = ["BANK_OPERATIONS"];
-  const ops = ["PLATFORM_OPERATIONS_ADMIN"];
+  const ops = ["PLATFORM_OPS_ADMIN"];
   const supplier = ["SUPPLIER_OWNER"];
 
   it("is never offered while an attempt is in flight", () => {

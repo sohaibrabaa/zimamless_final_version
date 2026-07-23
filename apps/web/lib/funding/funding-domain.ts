@@ -113,7 +113,7 @@ export function canRetryPayout(
   roles: readonly string[],
 ): boolean {
   if (isSettlementInFlight(status) || isSettlementTerminal(status)) return false;
-  const isPlatform = roles.includes("PLATFORM_OPERATIONS_ADMIN") || roles.includes("PLATFORM_SUPER_ADMIN");
+  const isPlatform = roles.includes("PLATFORM_OPS_ADMIN") || roles.includes("PLATFORM_SUPER_ADMIN");
   if (status === "MANUAL_REVIEW") return isPlatform;
   return status === "PAYOUT_FAILED" && (isPlatform || roles.some((r) => r.startsWith("BANK_")));
 }

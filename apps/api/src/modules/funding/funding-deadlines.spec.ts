@@ -40,7 +40,7 @@ class FakeDb {
   /** user id → roles. The sweep resolves recipients by role, so this is the fixture that matters. */
   members: { userId: string; orgId: string; role: string }[] = [
     { userId: 'supplier-owner', orgId: SUPPLIER_ORG, role: 'SUPPLIER_OWNER' },
-    { userId: 'ops-admin', orgId: 'platform', role: 'PLATFORM_OPERATIONS_ADMIN' },
+    { userId: 'ops-admin', orgId: 'platform', role: 'PLATFORM_OPS_ADMIN' },
     { userId: 'super-admin', orgId: 'platform', role: 'PLATFORM_SUPER_ADMIN' },
   ];
   sent: Sent[] = [];
@@ -50,8 +50,8 @@ class FakeDb {
     if (sql.includes('FROM receivable_transactions t')) {
       return { rows: this.pending, rowCount: this.pending.length };
     }
-    if (sql.includes('PLATFORM_OPERATIONS_ADMIN')) {
-      return this.membersWithRole('PLATFORM_OPERATIONS_ADMIN');
+    if (sql.includes('PLATFORM_OPS_ADMIN')) {
+      return this.membersWithRole('PLATFORM_OPS_ADMIN');
     }
     if (sql.includes('SUPPLIER_OWNER')) {
       return this.membersWithRole('SUPPLIER_OWNER', params[0] as string);
@@ -191,7 +191,7 @@ describe('AS-04 — escalation goes to Operations Admin, not Super Admin', () =>
 
   it('says loudly that nothing was escalated when no operations admin exists', async () => {
     const { db, service } = build('2026-07-24T00:30:00.000Z');
-    db.members = db.members.filter((m) => m.role !== 'PLATFORM_OPERATIONS_ADMIN');
+    db.members = db.members.filter((m) => m.role !== 'PLATFORM_OPS_ADMIN');
 
     expect(await service.sweep()).toEqual({ reminded: 0, escalated: 0 });
     expect(db.sent).toHaveLength(0);

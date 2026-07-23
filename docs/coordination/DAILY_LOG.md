@@ -979,3 +979,70 @@ NOTE FOR B: the two P0s from the architecture review are NOT fixed here and
   endpoints promoted to live), which is your ENDPOINT_STATUS board; (2) the
   demo dead-ends at CONTRACTED because Phases 7-9 (funding/OTP/settlement) are
   unbuilt. Both need a direction call, not a code patch.
+
+---
+
+## 2026-07-23 — Phase 7 complete (funding, settlement, ledger)
+
+LIVE (API, verified against the hosted DB by `phase7-funding.integration.spec.ts`, 25/25):
+  - `POST /transactions/{id}/funding/mark-sent` — 200. Idempotent by
+    observation: a repeat returns the same settlement and writes no second
+    journal. 409 only when the transaction was never contracted.
+  - `POST /transactions/{id}/funding/otp` — 201. Plaintext code returned
+    ONCE. 429 past `otp_max_resends`.
+  - `POST /transactions/{id}/funding/confirm` — 200 `{transactionState,
+    fundedAt}`. **401 carries `attemptsRemaining` at the TOP LEVEL**, beside
+    `code`, because the contract declares this response with an inline schema
+    rather than the Error envelope. It is also present under `details` so the
+    envelope stays uniform — read either.
+  - `GET /transactions/{id}/settlement` — 200 Settlement, 404 before mark-sent.
+  - `POST /settlements/{id}/retry` — 200. Retrying a completed settlement is a
+    no-op that returns it unchanged, not an error.
+
+CHANGED (behaviour you may already have assumed otherwise):
+  - **`mark-sent` never reaches FUNDED.** It moves the transaction to
+    `FUNDING_CONFIRMATION_PENDING` and stops. Only the supplier's confirm can
+    reach `FUNDED`, and only with settlement evidence present (INV-10).
+  - **The Error envelope may now carry one promoted top-level field.**
+    `attemptsRemaining` is the only one, and only on the funding 401.
+    `ApiError` keeps the whole body on `.body` so nothing outside the envelope
+    is dropped by the client.
+  - **Commission is now recorded at acceptance.** `POST /offers/{id}/accept`
+    additionally writes a `commission_calculations` row (`CALCULATED`) inside
+    the same transaction. No response shape changed. Full Phase 6 suite
+    re-run: 36/36, no assertion loosened.
+
+CHANGED (DB): none. No migration this phase — every table Phase 7 needs was
+  already in the frozen schema.
+
+FIXED (would have bitten at integration):
+  - The role `PLATFORM_OPERATIONS_ADMIN` does not exist. The frozen enum says
+    **`PLATFORM_OPS_ADMIN`**. If you have that string anywhere in the frontend,
+    it matches nobody.
+  - `ListingDeadlinesService` had no caller since Phase 5 — listing deadlines
+    had never actually passed outside a test. `SchedulerService` now runs it
+    and the funding sweep on a 60s interval.
+
+FRONTEND (built this phase, still on mocks):
+  - `/bank/funding` — mark-sent, OTP issuance, settlement panel with retry.
+  - `/supplier/funding` — OTP entry, settlement breakdown. Behind
+    `FinancingGate` as before (ZM-SON-011).
+  - The mock store reproduces the API's invariants rather than returning
+    plausible JSON, so promotion should be uneventful.
+
+BLOCKED ON: nothing.
+
+OUTSTANDING (not blocked, just not claimed):
+  - **Live promotion of any endpoint.** Still 0 of ~90. The funding endpoints
+    are proved live by the integration suite, but no screen has been driven
+    against the real API by hand, and the promotion rule requires a same-day
+    smoke test on the consuming screen. This is the Phase 9 rehearsal gate.
+  - `db/tools/dedupe-organizations.mjs --apply` still awaits an operator
+    go-ahead (dry-run plan unchanged and clean).
+
+OPEN QUESTION RAISED: **Q-16** — `ZM-FND-012` requires escalation to create an
+  "administrative task with full context", and neither the frozen schema nor
+  the contract (nor the overlay's `/cases`, scoped to FRAUD/DISPUTE/
+  WITHDRAWAL/RECOURSE) declares anywhere to put one. Interim: notification to
+  every active `PLATFORM_OPS_ADMIN` plus an audit entry carrying the full
+  context.

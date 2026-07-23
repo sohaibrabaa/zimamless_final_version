@@ -54,8 +54,13 @@ export class FundingController {
       'additionally requires the supplier to confirm the one-time code (INV-10), so this ' +
       'endpoint cannot complete funding on its own.',
   })
-  @ApiResponse({ status: 200, description: 'Marked sent; awaiting supplier confirmation' })
-  @ApiResponse({ status: 409, description: 'Not contracted, or already marked sent' })
+  @ApiResponse({
+    status: 200,
+    description:
+      'Marked sent; awaiting supplier confirmation. A repeat call returns the same settlement ' +
+      'unchanged — idempotent by observation, so a second click writes no second journal.',
+  })
+  @ApiResponse({ status: 409, description: 'The transaction is not contracted' })
   async markSent(
     @CurrentUser() user: PlatformUser,
     @CurrentContext() membership: MembershipRow,
@@ -141,7 +146,7 @@ export class FundingController {
   @Post('settlements/:id/retry')
   @HttpCode(HttpStatus.OK)
   @Idempotent()
-  @RequireRoles('PLATFORM_OPERATIONS_ADMIN', 'PLATFORM_SUPER_ADMIN', 'BANK_OPERATIONS', 'BANK_ADMIN')
+  @RequireRoles('PLATFORM_OPS_ADMIN', 'PLATFORM_SUPER_ADMIN', 'BANK_OPERATIONS', 'BANK_ADMIN')
   @ApiOperation({
     summary: 'Retry a failed payout — idempotent, never double-pays (INV-13)',
     description:

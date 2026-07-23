@@ -188,7 +188,7 @@ export class FundingDeadlinesService {
       // — not a transient miss that the next sweep will pick up.
       this.logger.error(
         `Transaction ${row.transaction_id} needs escalation but no active ` +
-          `PLATFORM_OPERATIONS_ADMIN exists to escalate to`,
+          `PLATFORM_OPS_ADMIN exists to escalate to`,
       );
       return false;
     }
@@ -276,7 +276,7 @@ export class FundingDeadlinesService {
       `SELECT DISTINCT m.user_id
          FROM organization_memberships m
          JOIN membership_roles r ON r.membership_id = m.id
-        WHERE m.status = 'ACTIVE' AND r.role = 'PLATFORM_OPERATIONS_ADMIN'`,
+        WHERE m.status = 'ACTIVE' AND r.role = 'PLATFORM_OPS_ADMIN'`,
     );
     return rows.map((r) => r.user_id);
   }

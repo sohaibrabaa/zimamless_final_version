@@ -9,6 +9,13 @@ export interface ApiErrorBody {
   message: string;
   details?: Record<string, unknown>;
   correlationId?: string;
+  /**
+   * A few endpoints declare an inline error schema rather than the Error
+   * envelope and put a field beside `code` — the funding confirm 401's
+   * `attemptsRemaining` is the one that exists today. Left open so those
+   * fields survive onto `ApiError.body` instead of being dropped here.
+   */
+  [key: string]: unknown;
 }
 
 export class ApiError extends Error {
@@ -16,6 +23,8 @@ export class ApiError extends Error {
   details?: Record<string, unknown>;
   correlationId?: string;
   status: number;
+  /** The response body verbatim, for endpoints declaring fields outside the envelope. */
+  body: ApiErrorBody;
 
   constructor(status: number, body: ApiErrorBody) {
     super(body.message);
@@ -24,6 +33,7 @@ export class ApiError extends Error {
     this.code = body.code;
     this.details = body.details;
     this.correlationId = body.correlationId;
+    this.body = body;
   }
 }
 

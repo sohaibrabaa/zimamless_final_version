@@ -153,7 +153,11 @@ export function useFundingConfirmation() {
         // A rejected code ends that attempt: the next try is a new request
         // and must not replay this one's stored 401.
         keyRef.current = null;
-        const remaining = err.details?.attemptsRemaining;
+        // The contract declares `attemptsRemaining` at the top level of this
+        // 401 (an inline schema, not the Error envelope); the API also leaves
+        // it in `details` so the envelope stays uniform. Read the declared
+        // position first and fall back, so this works either way.
+        const remaining = err.body.attemptsRemaining ?? err.details?.attemptsRemaining;
         throw new OtpRejected(typeof remaining === "number" ? remaining : null);
       }
       throw err;
