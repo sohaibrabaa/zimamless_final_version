@@ -233,6 +233,9 @@ describeIfDb('Phase 8 — post-funding lifecycle', () => {
         await db.query('DELETE FROM recourse_cases WHERE transaction_id = $1', [
           fixture.transactionId,
         ]);
+        await db.query('DELETE FROM disputes WHERE transaction_id = $1', [
+          fixture.transactionId,
+        ]);
         await db.query('DELETE FROM buyer_payments WHERE transaction_id = $1', [
           fixture.transactionId,
         ]);
@@ -501,6 +504,116 @@ describeIfDb('Phase 8 — post-funding lifecycle', () => {
       );
       expect(rows).toHaveLength(0);
     }, 180_000);
+  });
+
+  // -------------------------------------------------------------------
+  // ZM-REC-012/013/014 — disputes
+  // -------------------------------------------------------------------
+
+  describe('a dispute pauses automation and the platform does not adjudicate', () => {
+    let disputed: Fixture;
+    let disputeId: string;
+
+    beforeAll(async () => {
+      disputed = await buildFunded(-20);
+    }, 120_000);
+
+    it('lets the supplier open one, and pauses immediately', async () => {
+      const res = await api('supplier', 'post', `/transactions/${disputed.transactionId}/disputes`, {
+        disputeType: 'INVOICE_AUTHENTICITY',
+        description: 'The buyer disputes having received the goods on this invoice.',
+        amount: '4000.000',
+      });
+
+      expect(res.status).toBe(201);
+      expect(res.body.status).toBe('OPEN');
+      disputeId = res.body.id;
+      expect(await stateOf(disputed.transactionId)).toBe('DISPUTED');
+    }, 60_000);
+
+    it('makes the maturity sweep skip it, though it is 20 days overdue', async () => {
+      const before = await db.query<{ count: string }>(
+        `SELECT count(*)::text AS count FROM notifications WHERE transaction_id = $1`,
+        [disputed.transactionId],
+      );
+
+      const result = await app.get(MaturityService).sweep();
+      expect(result.skippedPaused).toBeGreaterThanOrEqual(1);
+
+      // Still DISPUTED, and not one extra notification: while the facts are
+      // contested the platform says nothing automatic about this invoice.
+      expect(await stateOf(disputed.transactionId)).toBe('DISPUTED');
+      const after = await db.query<{ count: string }>(
+        `SELECT count(*)::text AS count FROM notifications WHERE transaction_id = $1`,
+        [disputed.transactionId],
+      );
+      expect(after.rows[0].count).toBe(before.rows[0].count);
+    }, 120_000);
+
+    it('refuses a payment while the dispute is open', async () => {
+      const res = await api('bankOps', 'post', `/transactions/${disputed.transactionId}/payments`, {
+        amount: '1000.000',
+        paymentDate: '2026-09-10',
+      });
+      expect(res.status).toBe(409);
+    }, 60_000);
+
+    it('refuses a second dispute on the same transaction', async () => {
+      const res = await api('bankOps', 'post', `/transactions/${disputed.transactionId}/disputes`, {
+        disputeType: 'OTHER',
+        description: 'Duplicate attempt.',
+      });
+      expect(res.status).toBe(409);
+    }, 60_000);
+
+    it('cannot be resolved without someone stating what was agreed', async () => {
+      // The platform does not adjudicate, so there is no way to close a
+      // dispute that does not involve a human writing down the outcome.
+      const res = await api('supplier', 'post', `/disputes/${disputeId}/resolve`, {
+        resolutionNotes: '   ',
+      });
+      expect(res.status).toBe(422);
+    }, 60_000);
+
+    it('records the parties’ resolution and returns the transaction to where it was', async () => {
+      const res = await api('bankOps', 'post', `/disputes/${disputeId}/resolve`, {
+        resolutionNotes: 'Buyer confirmed delivery; supplier withdrew the objection.',
+        outcome: 'RESOLVED',
+      });
+
+      expect(res.status).toBe(200);
+      expect(res.body.status).toBe('RESOLVED');
+      expect(res.body.resolutionNotes).toContain('withdrew the objection');
+      // Back to FUNDED, which is where it was before the dispute — read from
+      // the transaction's own status history, not a remembered field.
+      expect(await stateOf(disputed.transactionId)).toBe('FUNDED');
+    }, 60_000);
+
+    it('records that the platform did NOT adjudicate', async () => {
+      const { rows } = await db.query<{ new_value: Record<string, unknown> }>(
+        `SELECT new_value FROM audit_logs
+          WHERE target_entity_id = $1 AND action_type = 'DISPUTE_RESOLVED'`,
+        [disputeId],
+      );
+      expect(rows[0].new_value).toMatchObject({
+        adjudicatedByPlatform: false,
+        automationPaused: false,
+      });
+    }, 30_000);
+
+    it('resumes automation — the next sweep acts on it again', async () => {
+      const result = await app.get(MaturityService).sweep();
+      expect(result.markedUnconfirmed).toBeGreaterThanOrEqual(1);
+      expect(await stateOf(disputed.transactionId)).toBe('OVERDUE_UNCONFIRMED');
+    }, 120_000);
+
+    it('is idempotent — resolving a resolved dispute returns it unchanged', async () => {
+      const res = await api('bankOps', 'post', `/disputes/${disputeId}/resolve`, {
+        resolutionNotes: 'A different note that must not overwrite the record.',
+      });
+      expect(res.status).toBe(200);
+      expect(res.body.resolutionNotes).toContain('withdrew the objection');
+    }, 60_000);
   });
 
   // -------------------------------------------------------------------

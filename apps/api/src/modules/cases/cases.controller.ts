@@ -10,7 +10,14 @@ import {
 } from '@nestjs/common';
 import { ApiOperation, ApiResponse, ApiTags } from '@nestjs/swagger';
 import { describeRecourse, RecourseService } from './recourse.service';
-import { InitiateRecourseDto, RecourseStatusDto, RepayRecourseDto } from './dto';
+import { describeDispute, DisputesService } from './disputes.service';
+import {
+  InitiateRecourseDto,
+  OpenDisputeDto,
+  RecourseStatusDto,
+  RepayRecourseDto,
+  ResolveDisputeDto,
+} from './dto';
 import { Idempotent } from '../../common/idempotency/idempotency.interceptor';
 import { CurrentContext, CurrentUser, RequireRoles } from '../auth/decorators';
 import { MembershipRow, PlatformUser } from '../auth/auth.service';
@@ -38,7 +45,10 @@ function audienceOf(ctx: ActorContext): 'SUPPLIER' | 'BANK' | 'PLATFORM' {
 @ApiTags('Cases')
 @Controller()
 export class CasesController {
-  constructor(private readonly recourse: RecourseService) {}
+  constructor(
+    private readonly recourse: RecourseService,
+    private readonly disputes: DisputesService,
+  ) {}
 
   @Post('transactions/:id/recourse')
   @HttpCode(HttpStatus.CREATED)
@@ -124,5 +134,63 @@ export class CasesController {
   ): Promise<Record<string, unknown>> {
     const ctx = contextOf(user, membership);
     return describeRecourse(await this.recourse.progress(id, ctx, body), audienceOf(ctx));
+  }
+
+  // -----------------------------------------------------------------
+  // Disputes — ZM-REC-012/013/014
+  // -----------------------------------------------------------------
+
+  @Post('transactions/:id/disputes')
+  @HttpCode(HttpStatus.CREATED)
+  @ApiOperation({
+    summary: 'Open a dispute — automation pauses immediately',
+    description:
+      'Either party may open one, and opening is deliberately cheap and immediate: a party ' +
+      'that believes something is wrong must be able to stop the machinery before it does ' +
+      'something irreversible, without waiting for the platform to agree first. While the ' +
+      'dispute is open the maturity job skips this transaction entirely — no reminders, no ' +
+      'state changes (ZM-REC-013).',
+  })
+  @ApiResponse({ status: 201, description: 'Dispute opened; automation paused' })
+  @ApiResponse({ status: 409, description: 'Already disputed, or not a disputable state' })
+  async openDispute(
+    @CurrentUser() user: PlatformUser,
+    @CurrentContext() membership: MembershipRow,
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() body: OpenDisputeDto,
+  ): Promise<Record<string, unknown>> {
+    return describeDispute(await this.disputes.open(id, contextOf(user, membership), body));
+  }
+
+  @Get('disputes/:id')
+  @ApiOperation({ summary: 'A dispute — the same shared record for both parties' })
+  @ApiResponse({ status: 200, description: 'Dispute' })
+  async findDispute(
+    @CurrentUser() user: PlatformUser,
+    @CurrentContext() membership: MembershipRow,
+    @Param('id', ParseUUIDPipe) id: string,
+  ): Promise<Record<string, unknown>> {
+    return describeDispute(await this.disputes.findById(id, contextOf(user, membership)));
+  }
+
+  @Post('disputes/:id/resolve')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({
+    summary: 'Record the resolution the parties reached — the platform does not adjudicate',
+    description:
+      'ZM-REC-012/014. This stores what the parties agreed; it does not decide anything. ' +
+      'There is no field for the platform’s view of who was right, and resolutionNotes is ' +
+      'mandatory precisely so a dispute cannot be closed without someone stating what was ' +
+      'decided. The transaction returns to the state it was in before the dispute — read ' +
+      'from its own status history — and automation resumes.',
+  })
+  @ApiResponse({ status: 200, description: 'Resolution recorded; automation resumes' })
+  async resolveDispute(
+    @CurrentUser() user: PlatformUser,
+    @CurrentContext() membership: MembershipRow,
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() body: ResolveDisputeDto,
+  ): Promise<Record<string, unknown>> {
+    return describeDispute(await this.disputes.resolve(id, contextOf(user, membership), body));
   }
 }

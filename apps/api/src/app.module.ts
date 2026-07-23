@@ -18,6 +18,7 @@ import { MaturityService } from './modules/payments/maturity.service';
 import { PaymentsService } from './modules/payments/payments.service';
 import { PaymentsController } from './modules/payments/payments.controller';
 import { RecourseService } from './modules/cases/recourse.service';
+import { DisputesService } from './modules/cases/disputes.service';
 import { CasesController } from './modules/cases/cases.controller';
 import { FundingController } from './modules/funding/funding.controller';
 import { SettlementService } from './modules/funding/settlement.service';
@@ -204,6 +205,7 @@ export const APP_CONFIG = 'APP_CONFIG';
     MaturityService,
     PaymentsService,
     RecourseService,
+    DisputesService,
     // Bound to a symbol, never named by domain code, so swapping in a real
     // payout rail is a one-line change here (ZM-FND-013/014).
     DummySettlementProvider,

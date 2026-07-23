@@ -75,3 +75,39 @@ export class RecourseStatusDto {
   @MaxLength(2000)
   notes?: string;
 }
+
+export class OpenDisputeDto {
+  @ApiProperty({
+    example: 'INVOICE_AUTHENTICITY',
+    description: 'Free text: the parties describe what is contested, the platform does not classify it.',
+  })
+  @IsString()
+  @MaxLength(100)
+  disputeType!: string;
+
+  @ApiProperty({ description: 'What is contested, in the raising party’s own words.' })
+  @IsString()
+  @MaxLength(4000)
+  description!: string;
+
+  @ApiPropertyOptional({ example: '4000.000' })
+  @IsOptional()
+  @Matches(MONEY, { message: 'amount must be a 3-dp decimal string, e.g. "4000.000".' })
+  amount?: string;
+}
+
+export class ResolveDisputeDto {
+  @ApiProperty({
+    description:
+      'What the parties agreed. Mandatory: the platform does not adjudicate (ZM-REC-012/014), ' +
+      'so a dispute cannot be closed without someone stating what was decided.',
+  })
+  @IsString()
+  @MaxLength(4000)
+  resolutionNotes!: string;
+
+  @ApiPropertyOptional({ enum: ['RESOLVED', 'REJECTED'], default: 'RESOLVED' })
+  @IsOptional()
+  @IsIn(['RESOLVED', 'REJECTED'])
+  outcome?: 'RESOLVED' | 'REJECTED';
+}
