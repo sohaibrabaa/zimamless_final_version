@@ -967,6 +967,115 @@ describeIfDb('Phase 8 — post-funding lifecycle', () => {
   });
 
   // -------------------------------------------------------------------
+  // The inbox and the case desk
+  // -------------------------------------------------------------------
+
+  describe('the notification inbox', () => {
+    it('shows the supplier its own messages and an unread count', async () => {
+      const res = await api('supplier', 'get', '/notifications');
+      expect(res.status).toBe(200);
+      expect(Array.isArray(res.body.items)).toBe(true);
+      expect(res.body.items.length).toBeGreaterThan(0);
+      expect(typeof res.body.unreadCount).toBe('number');
+      expect(res.body.items[0].read).toBe(false);
+    }, 60_000);
+
+    it('never returns the destination or the gateway reference', async () => {
+      // An inbox is for reading messages, not auditing the transport, and the
+      // destination can carry a personal phone number.
+      const res = await api('supplier', 'get', '/notifications');
+      const serialized = JSON.stringify(res.body);
+      expect(serialized).not.toContain('destination');
+      expect(serialized).not.toContain('providerReference');
+    }, 60_000);
+
+    it('marks one read, and the read sticks', async () => {
+      const list = await api('supplier', 'get', '/notifications');
+      const first = list.body.items[0];
+
+      const read = await api('supplier', 'post', `/notifications/${first.id}/read`);
+      expect(read.status).toBe(200);
+      expect(read.body.read).toBe(true);
+
+      // Idempotent: re-rendering the inbox must not keep moving the timestamp.
+      const again = await api('supplier', 'post', `/notifications/${first.id}/read`);
+      expect(again.status).toBe(200);
+      expect(again.body.read).toBe(true);
+    }, 90_000);
+
+    it('refuses to mark another user’s notification read', async () => {
+      const list = await api('supplier', 'get', '/notifications');
+      const res = await api('bankOps', 'post', `/notifications/${list.body.items[0].id}/read`);
+      // 404, not 403: the existence of a message addressed to another person
+      // is not this caller's business.
+      expect(res.status).toBe(404);
+    }, 60_000);
+
+    it('filters to unread', async () => {
+      const res = await api('supplier', 'get', '/notifications?unread=true');
+      expect(res.status).toBe(200);
+      for (const item of res.body.items) expect(item.read).toBe(false);
+    }, 60_000);
+  });
+
+  describe('GET /cases — role-scoped', () => {
+    it('shows the platform every case type', async () => {
+      const res = await api('platformOps', 'get', '/cases');
+      expect(res.status).toBe(200);
+
+      const types = new Set(res.body.items.map((c: { type: string }) => c.type));
+      // The suite has created all four by this point.
+      expect(types.has('RECOURSE')).toBe(true);
+      expect(types.has('DISPUTE')).toBe(true);
+      expect(types.has('WITHDRAWAL')).toBe(true);
+      expect(types.has('FRAUD')).toBe(true);
+    }, 60_000);
+
+    it('NEVER shows a fraud case to a bank or a supplier', async () => {
+      // Excluded from the query entirely rather than filtered afterwards: a
+      // case that never enters the result set cannot leak through a later bug
+      // in pagination or serialization.
+      for (const persona of ['supplier', 'bankOps'] as const) {
+        const res = await api(persona, 'get', '/cases');
+        expect(res.status).toBe(200);
+        expect(res.body.items.some((c: { type: string }) => c.type === 'FRAUD')).toBe(false);
+      }
+    }, 90_000);
+
+    it('shows a party its own cases, and only those', async () => {
+      const res = await api('supplier', 'get', '/cases');
+      expect(res.body.items.length).toBeGreaterThan(0);
+
+      // Every case returned belongs to a transaction this supplier owns.
+      const ids = res.body.items
+        .map((c: { transactionId: string }) => c.transactionId)
+        .filter(Boolean);
+      const { rows } = await db.query<{ count: string }>(
+        `SELECT count(*)::text AS count FROM receivable_transactions
+          WHERE id = ANY($1::uuid[]) AND supplier_org_id <> $2`,
+        [ids, ORG.alNoor],
+      );
+      expect(rows[0].count).toBe('0');
+    }, 60_000);
+
+    it('carries no counterparty free text in the summary', async () => {
+      const res = await api('supplier', 'get', '/cases');
+      const serialized = JSON.stringify(res.body);
+      // A list view is exactly where such a field gets rendered without
+      // anyone thinking about who is reading it.
+      expect(serialized).not.toContain('reasonNotes');
+      expect(serialized).not.toContain('adminDecisionNotes');
+      expect(serialized).not.toContain('bank internal');
+    }, 60_000);
+
+    it('filters by type', async () => {
+      const res = await api('platformOps', 'get', '/cases?type=RECOURSE');
+      expect(res.status).toBe(200);
+      for (const item of res.body.items) expect(item.type).toBe('RECOURSE');
+    }, 60_000);
+  });
+
+  // -------------------------------------------------------------------
   // INV-7 — closure records, it does not delete
   // -------------------------------------------------------------------
 

@@ -1,18 +1,22 @@
 import {
   Body,
   Controller,
+  DefaultValuePipe,
   Get,
   HttpCode,
   HttpStatus,
   Param,
+  ParseIntPipe,
   ParseUUIDPipe,
   Post,
+  Query,
 } from '@nestjs/common';
-import { ApiOperation, ApiResponse, ApiTags } from '@nestjs/swagger';
+import { ApiOperation, ApiQuery, ApiResponse, ApiTags } from '@nestjs/swagger';
 import { describeRecourse, RecourseService } from './recourse.service';
 import { describeDispute, DisputesService } from './disputes.service';
 import { describeWithdrawal, WithdrawalService } from './withdrawal.service';
 import { describeFraudCase, FraudService } from './fraud.service';
+import { CaseListService, type CaseType } from './case-list.service';
 import {
   DecideFraudDto,
   DecideWithdrawalDto,
@@ -56,6 +60,7 @@ export class CasesController {
     private readonly disputes: DisputesService,
     private readonly withdrawals: WithdrawalService,
     private readonly fraud: FraudService,
+    private readonly caseList: CaseListService,
   ) {}
 
   @Post('transactions/:id/recourse')
@@ -328,5 +333,39 @@ export class CasesController {
     @Body() body: DecideFraudDto,
   ): Promise<Record<string, unknown>> {
     return describeFraudCase(await this.fraud.decide(id, contextOf(user, membership), body));
+  }
+
+  // -----------------------------------------------------------------
+  // The unified case list
+  // -----------------------------------------------------------------
+
+  @Get('cases')
+  @ApiOperation({
+    summary: 'Role-scoped case list across fraud, disputes, withdrawal and recourse',
+    description:
+      'Platform sees all; a bank or supplier sees only cases on its own transactions. Fraud ' +
+      'cases are excluded from a party’s list entirely rather than shown redacted — a ' +
+      'supplier learning that a fraud case naming them exists IS the disclosure, and the ' +
+      'fields are incidental. The summary carries a type, status, amount and date, and never ' +
+      'a counterparty’s free text: a list view is exactly where such a field gets rendered ' +
+      'without anyone thinking about who is reading it.',
+  })
+  @ApiQuery({ name: 'type', required: false, enum: ['FRAUD', 'DISPUTE', 'WITHDRAWAL', 'RECOURSE'] })
+  @ApiQuery({ name: 'status', required: false, type: String })
+  @ApiResponse({ status: 200, description: 'Case summaries with pagination' })
+  async listCases(
+    @CurrentUser() user: PlatformUser,
+    @CurrentContext() membership: MembershipRow,
+    @Query('type') type: CaseType | undefined,
+    @Query('status') status: string | undefined,
+    @Query('page', new DefaultValuePipe(1), ParseIntPipe) page: number,
+    @Query('pageSize', new DefaultValuePipe(20), ParseIntPipe) pageSize: number,
+  ): Promise<Record<string, unknown>> {
+    return this.caseList.list(contextOf(user, membership), {
+      type,
+      status,
+      page: Math.max(1, page),
+      pageSize: Math.min(100, Math.max(1, pageSize)),
+    });
   }
 }

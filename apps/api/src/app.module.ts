@@ -21,6 +21,16 @@ import { RecourseService } from './modules/cases/recourse.service';
 import { DisputesService } from './modules/cases/disputes.service';
 import { WithdrawalService } from './modules/cases/withdrawal.service';
 import { FraudService } from './modules/cases/fraud.service';
+import { CaseListService } from './modules/cases/case-list.service';
+import { NotificationsService } from './modules/notifications/notifications.service';
+import { NotificationsController } from './modules/notifications/notifications.controller';
+import {
+  DummyEmailChannel,
+  DummyWhatsappChannel,
+  InPlatformChannel,
+  ManualCallChannel,
+  NOTIFICATION_CHANNELS,
+} from './modules/notifications/notification.channel';
 import { CasesController } from './modules/cases/cases.controller';
 import { FundingController } from './modules/funding/funding.controller';
 import { SettlementService } from './modules/funding/settlement.service';
@@ -113,6 +123,7 @@ export const APP_CONFIG = 'APP_CONFIG';
     // --- Phase 8 ---
     PaymentsController,
     CasesController,
+    NotificationsController,
   ],
   providers: [
     {
@@ -210,6 +221,26 @@ export const APP_CONFIG = 'APP_CONFIG';
     DisputesService,
     WithdrawalService,
     FraudService,
+    CaseListService,
+
+    // Delivery channels behind a symbol, as with signatures and settlement:
+    // nothing in the domain names a concrete adapter, so swapping a dummy for
+    // a real gateway is a one-line change here.
+    NotificationsService,
+    InPlatformChannel,
+    DummyEmailChannel,
+    DummyWhatsappChannel,
+    ManualCallChannel,
+    {
+      provide: NOTIFICATION_CHANNELS,
+      useFactory: (
+        inPlatform: InPlatformChannel,
+        email: DummyEmailChannel,
+        whatsapp: DummyWhatsappChannel,
+        manual: ManualCallChannel,
+      ) => [inPlatform, email, whatsapp, manual],
+      inject: [InPlatformChannel, DummyEmailChannel, DummyWhatsappChannel, ManualCallChannel],
+    },
     // Bound to a symbol, never named by domain code, so swapping in a real
     // payout rail is a one-line change here (ZM-FND-013/014).
     DummySettlementProvider,
