@@ -15,6 +15,8 @@ import { FundingService } from './modules/funding/funding.service';
 import { FundingDeadlinesService } from './modules/funding/funding-deadlines.service';
 import { SchedulerService } from './jobs/scheduler.service';
 import { MaturityService } from './modules/payments/maturity.service';
+import { PaymentsService } from './modules/payments/payments.service';
+import { PaymentsController } from './modules/payments/payments.controller';
 import { FundingController } from './modules/funding/funding.controller';
 import { SettlementService } from './modules/funding/settlement.service';
 import {
@@ -103,6 +105,8 @@ export const APP_CONFIG = 'APP_CONFIG';
     ContractsController,
     // --- Phase 7 ---
     FundingController,
+    // --- Phase 8 ---
+    PaymentsController,
   ],
   providers: [
     {
@@ -195,6 +199,7 @@ export const APP_CONFIG = 'APP_CONFIG';
 
     // --- Phase 8: post-funding, cases, notifications -------------------
     MaturityService,
+    PaymentsService,
     // Bound to a symbol, never named by domain code, so swapping in a real
     // payout rail is a one-line change here (ZM-FND-013/014).
     DummySettlementProvider,
