@@ -33,6 +33,10 @@ import { StorageService } from './modules/documents/storage.service';
 import { MlClientService } from './modules/documents/ml-client.service';
 import { TransactionsController } from './modules/transactions/transactions.controller';
 import { TransactionsService } from './modules/transactions/transactions.service';
+import { AdminRiskModelsController, RiskController } from './modules/risk/risk.controller';
+import { RiskService } from './modules/risk/risk.service';
+import { RiskModelsService } from './modules/risk/risk-models.service';
+import { RiskModelClientService } from './modules/risk/risk-model-client.service';
 
 export const APP_CONFIG = 'APP_CONFIG';
 
@@ -60,6 +64,8 @@ export const APP_CONFIG = 'APP_CONFIG';
     BuyersController,
     DocumentsController,
     TransactionsController,
+    RiskController,
+    AdminRiskModelsController,
   ],
   providers: [
     {
@@ -122,6 +128,9 @@ export const APP_CONFIG = 'APP_CONFIG';
     MlClientService,
     DocumentsService,
     TransactionsService,
+    RiskModelsService,
+    RiskModelClientService,
+    RiskService,
 
     { provide: APP_GUARD, useClass: AuthGuard },
     { provide: APP_INTERCEPTOR, useClass: AuditInterceptor },

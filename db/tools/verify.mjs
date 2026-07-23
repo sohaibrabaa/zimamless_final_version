@@ -146,10 +146,14 @@ try {
   `);
   check('D-02: minimum_acceptable_amount not selectable by authenticated', floor.length === 0);
 
-  // --- 6. Column revokes added by 0003 ---------------------------------
+  // --- 6. Column revokes added by 0003 and 0006 ------------------------
   for (const [table, column, label] of [
     ['funding_otps', 'otp_hash', 'otp_hash'],
     ['buyer_payments', 'bank_internal_notes', 'bank_internal_notes (ZM-PMT-018)'],
+    // ZM-RSK-013: a bank must not be able to read the scoring weights out
+    // of the database and reconstruct what the API deliberately withholds.
+    ['risk_model_versions', 'weights', 'risk model weights (ZM-RSK-013)'],
+    ['risk_model_versions', 'training_metrics', 'risk model training_metrics (ZM-RSK-013)'],
   ]) {
     const { rows } = await client.query(
       `SELECT 1 FROM information_schema.column_privileges

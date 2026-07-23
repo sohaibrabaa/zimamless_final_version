@@ -40,8 +40,8 @@ endpoint, and has no mock→live promotion to track.
 | POST …/{id}/declarations | 3 | — | mock | wizard step 5 · 201. All eight must be true; a false one is **422** with `details.notAffirmed[]` naming which · **template version provisional, see Q-13** |
 | POST …/{id}/submit | 3 | — | mock | wizard step 6 · **200**, not 201. 409 `DUPLICATE_INVOICE` with `details.reviewReference` → blocked screen (ZM-VER-001, Q-11 resolved by that key) |
 | GET …/{id}/verification | 3 | — | mock | verification panel · all 8 checks always recorded, passes included. `NOT_APPLICABLE` is not `PASS` |
-| GET …/{id}/risk | 4 | — | mock | |
-| GET/POST /admin/risk-models | 4 | — | mock | |
+| GET …/{id}/risk | 4 | — | mock | built. components[] may carry null (render "not scored", not 0); dataAvailabilityPct is a separate NUMBER, style neutrally; mlFallbackReason present only when mlUsed=false |
+| GET/POST /admin/risk-models | 4 | — | mock | built. platform roles only. POST creates, never edits; activating needs activationReason |
 | POST …/{id}/listing | 5 | — | mock | |
 | GET …/{id}/listing-current * | 5 | — | mock | v3.1.0 |
 | GET /listings/{id} | 5 | — | mock | |

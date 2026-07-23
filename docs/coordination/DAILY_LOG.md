@@ -426,3 +426,90 @@ CROSS-HALF RECONCILIATION:
 VERIFICATION: 254 API tests (was 245, +9 new in `transactions-guards.spec.ts`: Q-13 catalogue, Q-12 documents[]), 91 web tests (fixture/checkType rewrites, no net count change), 95 ML tests unchanged, lint/typecheck all workspaces, i18n parity 455 keys (was 453 — 2 new: documents.download, documents.downloadUnavailable), `next build`, frozen-schema drift check, conformance gate — all green. Phase 3 journey integration suite (`npm run test:journey`) run live against the hosted database, hosted Supabase Storage and the real ML service — 28/28 passing, including the new cross-supplier duplicate test. `db:verify` 15/15.
 
 STILL OPEN: deployment (Q-01..Q-04 unaffected, still open). Unchanged, still the project's #1 risk — three phases have now completed without it, and Phase 4 adds a second service (ML/risk inference) to deploy.
+
+## 2026-07-23 — Agent A (session 4, Phase 4)
+Branched `a/phase4` from `main` at `76d10bf`, clean tree per the kickoff's
+Step 0. All of B's `NEEDS FROM A` items were already closed by the
+unification session — nothing outstanding was found.
+
+DONE (`phases/PHASE_4_RISK_ML.md`, Agent A tasks — all 13 items):
+Trust Score end to end. `GET /transactions/{id}/risk` returns a composite
+0–100, an AS-05 band, the five ZM-RSK-004 components, `dataAvailabilityPct`
+on a separate track, positive/risk/reason codes, model version, `mlUsed`, and
+a bilingual disclaimer. `GET`/`POST /admin/risk-models` manage versions.
+**`/services/ml` now has a real, executable training and inference pipeline**
+(ZM-RSK-014): deterministic seeded synthetic data, a logistic regression
+trained by `tools/train_risk_model.py`, recorded metrics, and per-prediction
+explainability. `docs/specs/ML_DESIGN.md` documents all of it, limitations
+first.
+
+CHANGED (shared surfaces — read this section):
+  - **A ZM-RSK-013 hole in my own Phase 1 work, now closed.** Migration 0003
+    left `risk_model_versions` world-readable, so any authenticated bank user
+    could read the scoring weights straight from the Supabase client and
+    reconstruct exactly what the API withholds. Migration `0006` revokes
+    `weights` and `training_metrics`; `db:verify` now checks both (17 checks,
+    was 15). Nothing of yours changes.
+  - **Migration `0006_phase4_risk.sql`** also inserts the baseline active
+    model version. It is a migration rather than a seed because a hosted
+    database with no seed must still be able to score.
+  - Nothing renamed. The eight `checkType` strings are untouched.
+
+SEED: none. The model artifact
+(`services/ml/app/risk/model_artifact.json`) is committed and byte-stable —
+`py -m tools.train_risk_model --check` retrains and asserts it reproduces
+exactly, the same discipline as the e-invoice PDFs.
+
+BLOCKED ON: **the deploy**, unchanged and now four phases old. Phase 4 adds a
+SECOND service to deploy — the ML service must be up for the model to be
+used. `render.yaml` is committed; §2 of the runbook needs a hosting account I
+do not have.
+
+NEEDS FROM A → answered for you already; NOTE FOR B — seven things for the
+risk components:
+  1. **A component score may be `null`.** A component whose every signal was
+     unavailable scores null, never 0 — zero would be a judgement we have no
+     basis for. Render "not scored", not an empty bar at zero. Defensive
+     today (every component has at least one always-known signal), but it is
+     a real shape and I would rather you branch on it than discover it.
+  2. **`dataAvailabilityPct` is a NUMBER, not a string**, and is separate
+     from the score by construction. Style it neutrally — never a warning
+     colour, never a downward arrow. A supplier whose registry was down has
+     done nothing wrong, and this is the field that says so.
+  3. **Reason codes are a catalogue** with four families by prefix:
+     `BLOCK_` (hard blocker), `RISK_` (adverse — lowers a component),
+     `POS_` (positive), and **`INFO_` (never moves the score)**. Please do
+     not render `INFO_` codes in a risk-coloured list; they describe gaps in
+     what WE could see, not facts about the supplier. Source of truth:
+     `apps/api/src/modules/risk/reason-codes.ts`. Copy the codes, the strings
+     are yours in both locales.
+  4. **`mlFallbackReason` appears only when `mlUsed` is false**, and is
+     always non-empty in that case. Surface it. A degraded score a banker
+     cannot tell is degraded is the exact failure ZM-RSK-017 exists to stop —
+     and it is not hypothetical, see VERIFICATION below.
+  5. **`INFO_SYNTHETIC_TRAINING_DATA` is on every score** — your hook for the
+     ZM-RSK-016 synthetic-data limitation notice.
+  6. **The disclaimer arrives already localized** from the user's
+     `preferred_language`; render it verbatim on every score display. You do
+     not need to key it.
+  7. **Banks get no weights, coefficients, or raw probability** — the payload
+     is an allow-list and there is a test asserting the serialized bank body
+     contains none of them. Do not build a screen expecting them.
+
+VERIFICATION: 293 API unit tests (was 254), **96 live integration tests**
+(was 84 — including the Phase 4 checkpoint's two drills), 122 ML tests (was
+95), `db:verify` 17/17, frozen-schema drift check, conformance gate 31/82
+with no drift, model artifact reproducibility, e-invoice byte-stability, lint
+and typecheck across all workspaces — all green.
+
+The ML fallback proved itself during development rather than in a test I
+wrote for it: the journey suite failed with `mlUsed: false` because the ML
+process was still serving a build from before `/risk/score` existed. A real
+score came out, and the degradation was visible enough to stop the suite. A
+silent fallback would have shipped.
+
+FLAGGED AGAIN FOR THE PRODUCT OWNER — **Q-03 (Arabic digit set)**, per the
+Phase 4 kickoff. Still OPEN, still needed before Phase 6 Arabic templates. It
+is slightly more pressing now: Phase 4 ships the **first Arabic prose the API
+itself emits** (the Trust Score disclaimer), so the question is no longer
+confined to `apps/web`.

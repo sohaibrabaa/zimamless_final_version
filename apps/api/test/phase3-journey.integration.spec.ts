@@ -8,6 +8,9 @@ import { AppModule } from '../src/app.module';
 import { AppConfig } from '../src/config/configuration';
 import { SystemTimeProvider } from '../src/common/time/time.provider';
 import { StorageService } from '../src/modules/documents/storage.service';
+import { RiskService } from '../src/modules/risk/risk.service';
+import { unavailable } from '../src/modules/risk/facts';
+import { allComponents, dataAvailabilityPct } from '../src/modules/risk/scoring';
 
 /**
  * Phase 3 supplier journey, end to end, against real infrastructure.
@@ -137,6 +140,7 @@ describeIfDb('Phase 3 — supplier journey against real infrastructure', () => {
         [ids],
       );
       await db.query('DELETE FROM verification_runs WHERE transaction_id = ANY($1::uuid[])', [ids]);
+      await db.query('DELETE FROM risk_assessments WHERE transaction_id = ANY($1::uuid[])', [ids]);
       await db.query(
         `DELETE FROM fraud_indicators WHERE fraud_case_id IN
            (SELECT id FROM fraud_cases WHERE transaction_id = ANY($1::uuid[]))`,
@@ -545,6 +549,131 @@ describeIfDb('Phase 3 — supplier journey against real infrastructure', () => {
 
       const other = await api('petra', 'get', `/transactions/${txId}`);
       expect(other.status).toBe(404);
+    });
+  });
+
+  // -------------------------------------------------------------------
+  // Phase 4 — the Trust Score, on the eligible transaction above
+  // -------------------------------------------------------------------
+
+  describe('Trust Score (Phase 4 integration checkpoint)', () => {
+    it('scores the eligible transaction with components and factors', async () => {
+      const res = await api('supplier', 'get', `/transactions/${txId}/risk`);
+
+      expect(res.status).toBe(200);
+      expect(res.body.compositeScore).toBeGreaterThanOrEqual(0);
+      expect(res.body.compositeScore).toBeLessThanOrEqual(100);
+      expect(['LOW', 'MEDIUM', 'HIGH', 'CRITICAL']).toContain(res.body.band);
+
+      // All five components present (ZM-RSK-004).
+      for (const key of [
+        'supplierVerification', 'dataConfidence', 'buyerProfile',
+        'invoiceScore', 'platformBehavior',
+      ]) {
+        expect(res.body.components).toHaveProperty(key);
+      }
+
+      expect(typeof res.body.dataAvailabilityPct).toBe('number');
+      expect(res.body.modelVersion).toBeTruthy();
+      expect(res.body.disclaimer).toContain('decision support only');
+    }, 60_000);
+
+    it('used the trained model and says so', async () => {
+      // The ML service is a precondition of this suite, so a rules-only
+      // score here means the model genuinely failed rather than being absent.
+      const res = await api('supplier', 'get', `/transactions/${txId}/risk`);
+      // toMatchObject rather than a bare toBe so a failure prints the whole
+      // payload — "expected true, received undefined" says nothing about why.
+      expect(res.body).toMatchObject({ mlUsed: true });
+      expect('mlFallbackReason' in res.body).toBe(false);
+    });
+
+    it('records the synthetic-training-data limitation (ZM-RSK-016)', async () => {
+      const res = await api('supplier', 'get', `/transactions/${txId}/risk`);
+      expect(res.body.reasonCodes).toContain('INFO_SYNTHETIC_TRAINING_DATA');
+    });
+
+    it('is stable across reads — a score is stored, not recomputed per request', async () => {
+      // ZM-RSK-010 in its everyday form: two reads of the same transaction
+      // must not disagree, or nothing downstream can cite a score.
+      const first = await api('supplier', 'get', `/transactions/${txId}/risk`);
+      const second = await api('supplier', 'get', `/transactions/${txId}/risk`);
+      expect(second.body.compositeScore).toBe(first.body.compositeScore);
+      expect(second.body.calculatedAt).toBe(first.body.calculatedAt);
+    });
+
+    it('DRILL 1 — with the model service unreachable, falls back to rules and flags it', async () => {
+      // The phase file's first checkpoint drill. The client is pointed at a
+      // closed port, which exercises the real fetch-failure path rather than
+      // a stubbed rejection: connection refused, the client's catch, the
+      // degraded shape, persistence, and the response field.
+      const config = app.get(AppConfig) as { ml: { url: string } };
+      const original = config.ml.url;
+      config.ml.url = 'http://127.0.0.1:9';
+
+      try {
+        const assessment = await app.get(RiskService).calculate(txId);
+
+        expect(assessment.ml_used).toBe(false);
+        // Visibly flagged, not silently degraded (ZM-RSK-017).
+        expect(assessment.ml_fallback_reason).toBeTruthy();
+        // Still a real score: the rules carry it on their own.
+        expect(assessment.composite_score).toBeGreaterThan(0);
+        expect(assessment.band).toBeTruthy();
+      } finally {
+        config.ml.url = original;
+      }
+    }, 60_000);
+
+    it('DRILL 2 — an unavailable government source lowers availability, not the score', async () => {
+      // The phase file's ZM-RSK-005 drill, run over the REAL facts gathered
+      // from the hosted database for the transaction submitted above.
+      //
+      // The pair is built in memory rather than by deleting the seed's
+      // government rows. That is not squeamishness: a test that mutates
+      // shared registry data and then fails mid-way leaves the database in a
+      // state the next suite silently scores against. The facts are real; the
+      // outage is simulated at the one place it enters the system.
+      const risk = app.get(RiskService);
+      const live = await risk.gatherFacts(txId);
+
+      const blinded: typeof live = {
+        ...live,
+        supplier: {
+          ...live.supplier,
+          registryStatus: unavailable('SOURCE_UNAVAILABLE'),
+          bankAccountVerified: unavailable('SOURCE_UNAVAILABLE'),
+          signatoryMatches: unavailable('SOURCE_UNAVAILABLE'),
+          taxStatusValid: unavailable('SOURCE_UNAVAILABLE'),
+          provenance: [],
+        },
+        buyer: {
+          registryStatus: unavailable('SOURCE_UNAVAILABLE'),
+          companyAgeYears: unavailable('SOURCE_UNAVAILABLE'),
+          priorTransactionsWithSupplier: unavailable('SOURCE_UNAVAILABLE'),
+          onTimePaymentRatio: unavailable('SOURCE_UNAVAILABLE'),
+        },
+      };
+
+      const before = allComponents(live);
+      const after = allComponents(blinded);
+
+      // The invariant, stated exactly: no component may fall. Components
+      // whose every signal went dark score null rather than zero, which is
+      // also not a fall — it is an absence, and availability carries it.
+      for (const component of before) {
+        const blindedComponent = after.find((c) => c.key === component.key)!;
+        if (component.score === null || blindedComponent.score === null) continue;
+        expect(blindedComponent.score).toBeGreaterThanOrEqual(component.score);
+      }
+
+      // And the separate measure does move.
+      expect(dataAvailabilityPct(after)).toBeLessThan(dataAvailabilityPct(before));
+    }, 60_000);
+
+    it('gives another supplier 404 for the score, exactly as for the transaction', async () => {
+      const res = await api('petra', 'get', `/transactions/${txId}/risk`);
+      expect(res.status).toBe(404);
     });
   });
 
