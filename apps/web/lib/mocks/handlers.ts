@@ -26,6 +26,7 @@ import {
   setDeclarations,
   setInvoice,
   setMinimumAmount,
+  setTransactionState,
   submitTransaction,
   verificationFor,
   type MockTransaction,
@@ -51,6 +52,13 @@ import {
   type AcceptedOfferSnapshotRecord,
 } from "./marketplace-store";
 import { createFilter, listFilters, updateFilter } from "./policy-filter-store";
+import {
+  confirmOtp as confirmFundingOtp,
+  findSettlementByTransaction,
+  generateOtp as generateFundingOtp,
+  markSent as fundingMarkSent,
+  retryPayout as retryFundingPayout,
+} from "./funding-store";
 import {
   conditionsForTransaction,
   findContractById,
@@ -1149,6 +1157,118 @@ export const handlers = [
     return result.ok
       ? new HttpResponse(null, { status: 200 })
       : HttpResponse.json(errorBody("NOT_FOUND", "Condition not found"), { status: 404 });
+  }),
+
+  // ---------------------------------------------------------------
+  // Phase 7 — funding, OTP, settlement
+  // ---------------------------------------------------------------
+
+  mockOnly(
+    "POST",
+    "/transactions/{id}/funding/mark-sent",
+    `${API_BASE}/transactions/:id/funding/mark-sent`,
+    async ({ params, request }) => {
+      const transactionId = String(params.id);
+      const snapshot = findSnapshotForTransaction(transactionId);
+      if (!snapshot) {
+        return HttpResponse.json(
+          errorBody("CONFLICT", "This transaction has no accepted offer to fund."),
+          { status: 409 }
+        );
+      }
+
+      const body = (await request.json().catch(() => null)) as { providerReference?: string } | null;
+      // The settlement's money comes from the immutable snapshot, never from
+      // the request — the same rule the API enforces, so a screen cannot be
+      // built that expects to influence the numbers.
+      const result = fundingMarkSent(
+        transactionId,
+        {
+          grossFundingAmount: snapshot.grossFundingAmount,
+          platformCommissionAmount: snapshot.platformCommissionAmount,
+          listingFeeDeducted: snapshot.listingFeeAmount,
+          netSupplierPayout: snapshot.netSupplierPayout,
+        },
+        body?.providerReference ?? null,
+        new Date()
+      );
+
+      if (!result.ok) {
+        return HttpResponse.json(
+          errorBody("CONFLICT", "This transfer has already been marked sent."),
+          { status: 409 }
+        );
+      }
+
+      // FUNDING_CONFIRMATION_PENDING, not FUNDED. The bank cannot fund alone.
+      setTransactionState(transactionId, "FUNDING_CONFIRMATION_PENDING");
+      return HttpResponse.json(result.settlement);
+    }
+  ),
+
+  mockOnly(
+    "POST",
+    "/transactions/{id}/funding/otp",
+    `${API_BASE}/transactions/:id/funding/otp`,
+    ({ params }) => {
+      const result = generateFundingOtp(String(params.id), new Date());
+      if (!result.ok) {
+        return HttpResponse.json(
+          errorBody("RATE_LIMITED", "Maximum regenerations reached for this transaction."),
+          { status: 429 }
+        );
+      }
+      // 201, per the contract — the only place this code is ever returned.
+      return HttpResponse.json(
+        { otp: result.otp, expiresAt: result.expiresAt, resendsRemaining: result.resendsRemaining },
+        { status: 201 }
+      );
+    }
+  ),
+
+  mockOnly(
+    "POST",
+    "/transactions/{id}/funding/confirm",
+    `${API_BASE}/transactions/:id/funding/confirm`,
+    async ({ params, request }) => {
+      const transactionId = String(params.id);
+      const body = (await request.json().catch(() => null)) as { otp?: string } | null;
+      const result = confirmFundingOtp(transactionId, String(body?.otp ?? ""), new Date());
+
+      if (!result.ok) {
+        // One shape for every failure. `attemptsRemaining` is the only detail
+        // disclosed — no message that hints at wrong vs expired vs used.
+        return HttpResponse.json(
+          { ...errorBody("OTP_INVALID", "That code was not accepted."), attemptsRemaining: result.attemptsRemaining },
+          { status: 401 }
+        );
+      }
+
+      if (result.transactionState === "FUNDED") setTransactionState(transactionId, "FUNDED");
+      return HttpResponse.json({
+        transactionState: result.transactionState,
+        fundedAt: result.fundedAt ?? undefined,
+      });
+    }
+  ),
+
+  mockOnly(
+    "GET",
+    "/transactions/{id}/settlement",
+    `${API_BASE}/transactions/:id/settlement`,
+    ({ params }) => {
+      const settlement = findSettlementByTransaction(String(params.id));
+      return settlement
+        ? HttpResponse.json(settlement)
+        : HttpResponse.json(errorBody("NOT_FOUND", "No settlement exists yet."), { status: 404 });
+    }
+  ),
+
+  mockOnly("POST", "/settlements/{id}/retry", `${API_BASE}/settlements/:id/retry`, ({ params }) => {
+    const settlement = retryFundingPayout(String(params.id), new Date());
+    return settlement
+      ? HttpResponse.json(settlement)
+      : HttpResponse.json(errorBody("NOT_FOUND", "Settlement not found"), { status: 404 });
   }),
 ];
 

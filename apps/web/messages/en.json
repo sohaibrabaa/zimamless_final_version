@@ -922,5 +922,73 @@
       "notSignatory": "Only an authorized signatory for your organization can sign this contract.",
       "listEmpty": "No transactions have reached a contract yet."
     }
+  },
+  "funding": {
+    "bank": {
+      "title": "Funding",
+      "subtitle": "Record transfers you have executed and issue the confirmation code the supplier needs.",
+      "empty": "No transactions are awaiting funding.",
+      "queueLabel": "Transactions awaiting funding",
+      "markSentTitle": "Mark the transfer sent",
+      "markSentNotFunded": "This records that you executed the transfer. It does not complete funding — the supplier must also confirm receipt with the one-time code.",
+      "markSentAction": "Mark sent",
+      "providerReference": "Transfer reference",
+      "providerReferenceHint": "Your own reference for the transfer, if you have one.",
+      "otpTitle": "Confirmation code",
+      "otpOutOfBand": "Pass the code to the supplier directly — by phone or in person, not through the platform.",
+      "otpGenerate": "Generate code",
+      "otpRegenerate": "Generate a new code",
+      "awaitingSupplier": "Waiting for the supplier to confirm receipt."
+    },
+    "supplier": {
+      "title": "Funding",
+      "subtitle": "Confirm the funds you have received and see how your payout was calculated.",
+      "empty": "You have no transactions at the funding stage.",
+      "queueLabel": "Transactions at the funding stage",
+      "awaitingBankTitle": "Waiting for the bank",
+      "awaitingBank": "The bank has not yet recorded the transfer. You will be notified when it does.",
+      "confirmTitle": "Confirm you received the funds",
+      "funded": "Funding is complete. Your payout is on its way."
+    },
+    "otp": {
+      "shownOnce": "Shown once. It is not stored and cannot be shown again.",
+      "dismissed": "Code hidden. Generate a new one if it was not passed on.",
+      "dismiss": "Hide the code",
+      "expiresAt": "Expires at {time}",
+      "resendsRemaining": "{count} regenerations left",
+      "notASignature": "This code confirms receipt of funds. It is not a signature and carries no signing authority.",
+      "noResendsLeft": "You have generated the maximum number of codes for this transaction."
+    },
+    "confirm": {
+      "instructions": "Enter the six-digit code the bank gave you.",
+      "codeLabel": "Confirmation code",
+      "codeHint": "Six digits.",
+      "submit": "Confirm receipt",
+      "rejected": "That code was not accepted.",
+      "attemptsRemaining": "{count} attempts remaining."
+    },
+    "settlement": {
+      "title": "Settlement",
+      "manualReview": "This payout needs platform operations to review it before it can be retried.",
+      "failed": "The payout attempt failed. Attempts so far: {attempts}.",
+      "retry": "Retry the payout",
+      "providerReference": "Payout reference: {reference}",
+      "row": {
+        "gross": "Funding amount",
+        "commission": "Platform commission",
+        "listingFee": "Listing fee",
+        "net": "Your payout"
+      },
+      "status": {
+        "PENDING": "Pending",
+        "FUNDING_RECEIVED": "Funds received",
+        "PAYOUT_INITIATED": "Payout in progress",
+        "PAYOUT_COMPLETED": "Paid out",
+        "PAYOUT_FAILED": "Payout failed",
+        "RETRYING": "Retrying",
+        "MANUAL_REVIEW": "Manual review",
+        "REVERSED": "Reversed"
+      }
+    }
   }
 }
