@@ -11,9 +11,15 @@ import {
 import { ApiOperation, ApiResponse, ApiTags } from '@nestjs/swagger';
 import { describeRecourse, RecourseService } from './recourse.service';
 import { describeDispute, DisputesService } from './disputes.service';
+import { describeWithdrawal, WithdrawalService } from './withdrawal.service';
+import { describeFraudCase, FraudService } from './fraud.service';
 import {
+  DecideFraudDto,
+  DecideWithdrawalDto,
   InitiateRecourseDto,
   OpenDisputeDto,
+  OpenFraudReviewDto,
+  OpenWithdrawalDto,
   RecourseStatusDto,
   RepayRecourseDto,
   ResolveDisputeDto,
@@ -48,6 +54,8 @@ export class CasesController {
   constructor(
     private readonly recourse: RecourseService,
     private readonly disputes: DisputesService,
+    private readonly withdrawals: WithdrawalService,
+    private readonly fraud: FraudService,
   ) {}
 
   @Post('transactions/:id/recourse')
@@ -192,5 +200,133 @@ export class CasesController {
     @Body() body: ResolveDisputeDto,
   ): Promise<Record<string, unknown>> {
     return describeDispute(await this.disputes.resolve(id, contextOf(user, membership), body));
+  }
+
+  // -----------------------------------------------------------------
+  // Withdrawal cases — ZM-WDR-*, AS-07, LT-12
+  // -----------------------------------------------------------------
+
+  @Post('offers/:id/withdrawal-case')
+  @HttpCode(HttpStatus.CREATED)
+  @RequireRoles('BANK_OPERATIONS', 'BANK_ADMIN')
+  @ApiOperation({
+    summary: 'Post-acceptance bank withdrawal',
+    description:
+      'A penalty is calculated from the configured policy and RECORDED — never deducted ' +
+      '(LT-12). The platform holds no bank money to deduct from, has not adjudicated whether ' +
+      'the withdrawal was justified, and two of the reasons describe a bank that was right to ' +
+      'withdraw. Where the policy says null, the platform declines to guess and the case goes ' +
+      'to an administrator with no suggested answer. Relisting is manual (D-03).',
+  })
+  @ApiResponse({ status: 201, description: 'Case opened; penalty recorded, not deducted' })
+  @ApiResponse({ status: 409, description: 'An open case already exists for this offer' })
+  async openWithdrawal(
+    @CurrentUser() user: PlatformUser,
+    @CurrentContext() membership: MembershipRow,
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() body: OpenWithdrawalDto,
+  ): Promise<Record<string, unknown>> {
+    const ctx = contextOf(user, membership);
+    return describeWithdrawal(await this.withdrawals.open(id, ctx, body), audienceOf(ctx));
+  }
+
+  @Get('withdrawal-cases/:id')
+  @ApiOperation({ summary: 'A withdrawal case' })
+  @ApiResponse({ status: 200, description: 'Withdrawal case' })
+  async findWithdrawal(
+    @CurrentUser() user: PlatformUser,
+    @CurrentContext() membership: MembershipRow,
+    @Param('id', ParseUUIDPipe) id: string,
+  ): Promise<Record<string, unknown>> {
+    const ctx = contextOf(user, membership);
+    return describeWithdrawal(await this.withdrawals.findById(id, ctx), audienceOf(ctx));
+  }
+
+  @Post('withdrawal-cases/:id/decide')
+  @HttpCode(HttpStatus.OK)
+  @RequireRoles('PLATFORM_OPS_ADMIN', 'PLATFORM_SUPER_ADMIN')
+  @ApiOperation({
+    summary: 'Admin decision — penalty applicability and amount, plus relisting eligibility',
+    description:
+      'Takes penaltyApplicable verbatim: the policy’s suggestion is a default to consider, ' +
+      'never an answer that overrides a human who can see the commercial context. The penalty ' +
+      'is still not deducted. An eligible relisting raises a REQUESTED relisting request, not ' +
+      'an approved one — ZM-REC-018 requires seven verification outcomes before a receivable ' +
+      'returns to the marketplace, and this decision does not certify any of them.',
+  })
+  @ApiResponse({ status: 200, description: 'Decided' })
+  async decideWithdrawal(
+    @CurrentUser() user: PlatformUser,
+    @CurrentContext() membership: MembershipRow,
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() body: DecideWithdrawalDto,
+  ): Promise<Record<string, unknown>> {
+    const ctx = contextOf(user, membership);
+    return describeWithdrawal(await this.withdrawals.decide(id, ctx, body), audienceOf(ctx));
+  }
+
+  // -----------------------------------------------------------------
+  // Fraud review — ZM-FRD-001..006
+  // -----------------------------------------------------------------
+
+  @Post('transactions/:id/fraud-review')
+  @HttpCode(HttpStatus.CREATED)
+  @ApiOperation({
+    summary: 'Open a fraud review — freezes the transaction, concludes nothing',
+    description:
+      'Freezing is immediate and reversible; labelling an organization is neither, so the ' +
+      'cheap reversible action happens on suspicion and the expensive irreversible one waits ' +
+      'for a compliance decision (ZM-FRD-004). Opening records suspicion, stops the money, and ' +
+      'notifies compliance. It sets no verdict and restricts nobody.',
+  })
+  @ApiResponse({ status: 201, description: 'Frozen; compliance notified' })
+  @ApiResponse({ status: 409, description: 'Already under review' })
+  async openFraudReview(
+    @CurrentUser() user: PlatformUser,
+    @CurrentContext() membership: MembershipRow,
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() body: OpenFraudReviewDto,
+  ): Promise<Record<string, unknown>> {
+    return describeFraudCase(await this.fraud.open(id, contextOf(user, membership), body));
+  }
+
+  @Get('fraud-cases/:id')
+  @RequireRoles('PLATFORM_COMPLIANCE', 'PLATFORM_OPS_ADMIN', 'PLATFORM_SUPER_ADMIN')
+  @ApiOperation({
+    summary: 'A fraud case — platform only',
+    description:
+      'Telling a supplier that a fraud review naming them exists, before compliance has ' +
+      'concluded anything, turns an unproven suspicion into an accusation they must answer.',
+  })
+  @ApiResponse({ status: 200, description: 'Fraud case' })
+  async findFraudCase(
+    @CurrentUser() user: PlatformUser,
+    @CurrentContext() membership: MembershipRow,
+    @Param('id', ParseUUIDPipe) id: string,
+  ): Promise<Record<string, unknown>> {
+    return describeFraudCase(await this.fraud.findById(id, contextOf(user, membership)));
+  }
+
+  @Post('fraud-cases/:id/decide')
+  @HttpCode(HttpStatus.OK)
+  @RequireRoles('PLATFORM_COMPLIANCE', 'PLATFORM_SUPER_ADMIN')
+  @ApiOperation({
+    summary: 'Compliance decision — the only thing that records a confirmed status',
+    description:
+      'ZM-FRD-004. Restricted to compliance: a bank that reported a suspicion must not also ' +
+      'conclude its counterparty is fraudulent, and an operations admin should not be ' +
+      'blacklisting businesses as a routine queue action. CLEARED returns the transaction to ' +
+      'where it was and funding resumes; any other finding closes it, without deleting ' +
+      'anything (INV-7).',
+  })
+  @ApiResponse({ status: 200, description: 'Decided; transaction unfrozen or closed' })
+  @ApiResponse({ status: 403, description: 'Compliance only' })
+  async decideFraudCase(
+    @CurrentUser() user: PlatformUser,
+    @CurrentContext() membership: MembershipRow,
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() body: DecideFraudDto,
+  ): Promise<Record<string, unknown>> {
+    return describeFraudCase(await this.fraud.decide(id, contextOf(user, membership), body));
   }
 }

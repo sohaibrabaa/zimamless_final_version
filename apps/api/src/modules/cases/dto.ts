@@ -1,5 +1,14 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { IsArray, IsIn, IsOptional, IsString, IsUUID, Matches, MaxLength } from 'class-validator';
+import {
+  IsArray,
+  IsBoolean,
+  IsIn,
+  IsOptional,
+  IsString,
+  IsUUID,
+  Matches,
+  MaxLength,
+} from 'class-validator';
 
 const MONEY = /^\d{1,15}\.\d{3}$/;
 
@@ -110,4 +119,88 @@ export class ResolveDisputeDto {
   @IsOptional()
   @IsIn(['RESOLVED', 'REJECTED'])
   outcome?: 'RESOLVED' | 'REJECTED';
+}
+
+export const WITHDRAWAL_REASONS = [
+  'BANK_COMMERCIAL_DECISION',
+  'SUPPLIER_MISREPRESENTATION',
+  'FRAUD_DISCOVERED',
+  'INVOICE_CHANGED',
+  'CONDITION_NOT_MET',
+  'TECHNICAL_FAILURE',
+  'OTHER',
+] as const;
+
+export class OpenWithdrawalDto {
+  @ApiProperty({ enum: WITHDRAWAL_REASONS })
+  @IsIn(WITHDRAWAL_REASONS as unknown as string[])
+  reason!: (typeof WITHDRAWAL_REASONS)[number];
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  @MaxLength(4000)
+  notes?: string;
+}
+
+export class DecideWithdrawalDto {
+  @ApiProperty({
+    description:
+      'The administrator’s decision, taken verbatim. The policy’s suggestion is a default to ' +
+      'consider, never an answer that overrides a human who can see the commercial context.',
+  })
+  @IsBoolean()
+  penaltyApplicable!: boolean;
+
+  @ApiPropertyOptional({ example: '500.000' })
+  @IsOptional()
+  @Matches(MONEY, { message: 'penaltyAmount must be a 3-dp decimal string, e.g. "500.000".' })
+  penaltyAmount?: string;
+
+  @ApiProperty({
+    description:
+      'Whether the supplier may relist. A separate deliberate answer: the receivable returning ' +
+      'to the marketplace is a decision, not a consequence (D-03).',
+  })
+  @IsBoolean()
+  relistingEligible!: boolean;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  @MaxLength(4000)
+  notes?: string;
+}
+
+export class OpenFraudReviewDto {
+  @ApiProperty({ description: 'What prompted the review. Records suspicion, concludes nothing.' })
+  @IsString()
+  @MaxLength(4000)
+  summary!: string;
+
+  @ApiPropertyOptional({ type: [String] })
+  @IsOptional()
+  @IsArray()
+  @IsString({ each: true })
+  indicators?: string[];
+}
+
+export const FRAUD_DECISIONS = ['CLEARED', 'RESTRICTED', 'SUSPENDED', 'BLACKLISTED', 'REPORTED'] as const;
+
+export class DecideFraudDto {
+  @ApiProperty({
+    enum: FRAUD_DECISIONS,
+    description:
+      'ZM-FRD-004: this is the only thing in the system that records a confirmed status. ' +
+      'An indicator is someone noticing something; a finding is a qualified human concluding ' +
+      'something.',
+  })
+  @IsIn(FRAUD_DECISIONS as unknown as string[])
+  decision!: (typeof FRAUD_DECISIONS)[number];
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  @MaxLength(4000)
+  notes?: string;
 }

@@ -48,6 +48,7 @@ const ORG = {
   alNoor: '0e000000-0000-4000-8000-000000000002',
   bankA: '0e000000-0000-4000-8000-000000000004',
   bankB: '0e000000-0000-4000-8000-000000000005',
+  platform: '0e000000-0000-4000-8000-000000000001',
 };
 const AL_NOOR_OWNER = '0e100000-0000-4000-8000-000000000001';
 const BUYER_ESTABLISHMENT = '30000201';
@@ -233,6 +234,11 @@ describeIfDb('Phase 8 — post-funding lifecycle', () => {
         await db.query('DELETE FROM recourse_cases WHERE transaction_id = $1', [
           fixture.transactionId,
         ]);
+        await db.query(`DELETE FROM fraud_indicators WHERE fraud_case_id IN
+             (SELECT id FROM fraud_cases WHERE transaction_id = $1)`, [fixture.transactionId]);
+        await db.query('DELETE FROM fraud_cases WHERE transaction_id = $1', [fixture.transactionId]);
+        await db.query('DELETE FROM withdrawal_cases WHERE transaction_id = $1', [fixture.transactionId]);
+        await db.query('DELETE FROM relisting_requests WHERE transaction_id = $1', [fixture.transactionId]);
         await db.query('DELETE FROM disputes WHERE transaction_id = $1', [
           fixture.transactionId,
         ]);
@@ -291,6 +297,8 @@ describeIfDb('Phase 8 — post-funding lifecycle', () => {
       ['supplier', 'owner@alnoor.zimmamless.test', ORG.alNoor],
       ['bankOps', 'ops@jnb.zimmamless.test', ORG.bankA],
       ['otherBank', 'maker@lcb.zimmamless.test', ORG.bankB],
+      ['platformOps', 'admin@platform.zimmamless.test', ORG.platform],
+      ['compliance', 'compliance@platform.zimmamless.test', ORG.platform],
     ] as const) {
       tokens[persona] = await login(email);
       const me = await request(app.getHttpServer())
@@ -788,6 +796,173 @@ describeIfDb('Phase 8 — post-funding lifecycle', () => {
         [caseId],
       );
       expect(Number(rows[0].count)).toBe(2);
+    }, 30_000);
+  });
+
+  // -------------------------------------------------------------------
+  // AS-07 / LT-12 — withdrawal, and ZM-FRD-004 — fraud
+  // -------------------------------------------------------------------
+
+  describe('a withdrawal penalty is recorded, never deducted', () => {
+    let withdrawn: Fixture;
+    let withdrawalId: string;
+
+    beforeAll(async () => {
+      withdrawn = await buildFunded(30);
+    }, 120_000);
+
+    it('opens a case with the policy’s suggestion for a commercial withdrawal', async () => {
+      const res = await api('bankOps', 'post', `/offers/${withdrawn.offerId}/withdrawal-case`, {
+        reason: 'BANK_COMMERCIAL_DECISION',
+        notes: 'Credit committee reversed the approval.',
+      });
+
+      expect(res.status).toBe(201);
+      expect(res.body.status).toBe('WITHDRAWAL_REQUESTED');
+      // The seeded policy charges 500.000 for a bank that simply changed its mind.
+      expect(res.body.penaltyApplicable).toBe(true);
+      expect(res.body.penaltyAmount).toBe('500.000');
+      withdrawalId = res.body.id;
+    }, 60_000);
+
+    it('moved no money — the penalty is a number on a case, not a transfer', async () => {
+      // No ledger entry, no settlement, no balance change. The rule stated as
+      // an assertion about the database rather than a comment in a service.
+      const { rows: ledger } = await db.query(
+        `SELECT 1 FROM ledger_entries WHERE transaction_id = $1`,
+        [withdrawn.transactionId],
+      );
+      expect(ledger).toHaveLength(0);
+
+      const { rows: audit } = await db.query<{ new_value: Record<string, unknown> }>(
+        `SELECT new_value FROM audit_logs
+          WHERE target_entity_id = $1 AND action_type = 'WITHDRAWAL_CASE_OPENED'`,
+        [withdrawn.transactionId],
+      );
+      expect(audit[0].new_value).toMatchObject({
+        penaltyDeducted: false,
+        relistingAutomatic: false,
+      });
+    }, 30_000);
+
+    it('refuses a bank withdrawing another bank’s offer', async () => {
+      const res = await api('otherBank', 'post', `/offers/${withdrawn.offerId}/withdrawal-case`, {
+        reason: 'OTHER',
+      });
+      // 403 from the role guard (this persona is an offer maker, not
+      // operations) or 404 from the service (not this bank's offer). Both are
+      // correct refusals and which fires first is a routing detail, not a
+      // behaviour worth pinning.
+      expect([403, 404]).toContain(res.status);
+    }, 60_000);
+
+    it('lets an admin waive the penalty the policy proposed', async () => {
+      const res = await api('platformOps', 'post', `/withdrawal-cases/${withdrawalId}/decide`, {
+        penaltyApplicable: false,
+        relistingEligible: true,
+        notes: 'Bank notified within an hour and the supplier was not yet relying on the funds.',
+      });
+
+      expect(res.status).toBe(200);
+      expect(res.body.status).toBe('NO_PENALTY');
+      // The human overrode the policy, which is the whole point of the policy
+      // being a suggestion.
+      expect(res.body.penaltyApplicable).toBe(false);
+      expect(res.body.penaltyAmount).toBe('0.000');
+    }, 60_000);
+
+    it('raises a REQUESTED relisting, not an approved one (ZM-REC-018)', async () => {
+      const { rows } = await db.query<{ status: string; notes: string }>(
+        `SELECT status, notes FROM relisting_requests WHERE transaction_id = $1`,
+        [withdrawn.transactionId],
+      );
+      expect(rows).toHaveLength(1);
+      // Eligibility to relist is not the same as certifying the receivable is
+      // still financeable weeks after the deal collapsed.
+      expect(rows[0].status).toBe('REQUESTED');
+      expect(rows[0].notes).toContain('ZM-REC-018');
+    }, 30_000);
+
+    it('refuses a bank deciding its own withdrawal case', async () => {
+      const res = await api('bankOps', 'post', `/withdrawal-cases/${withdrawalId}/decide`, {
+        penaltyApplicable: false,
+        relistingEligible: true,
+      });
+      expect(res.status).toBe(403);
+    }, 60_000);
+  });
+
+  describe('ZM-FRD-004 — only compliance records a confirmed finding', () => {
+    let suspect: Fixture;
+    let fraudCaseId: string;
+
+    beforeAll(async () => {
+      suspect = await buildFunded(45);
+    }, 120_000);
+
+    it('freezes the transaction the moment a review is opened', async () => {
+      const res = await api('bankOps', 'post', `/transactions/${suspect.transactionId}/fraud-review`, {
+        summary: 'The same invoice number appears financed at another institution.',
+        indicators: ['DOUBLE_FINANCING_SUSPECTED'],
+      });
+
+      expect(res.status).toBe(201);
+      expect(res.body.status).toBe('OPEN');
+      fraudCaseId = res.body.id;
+      expect(await stateOf(suspect.transactionId)).toBe('FRAUD_REVIEW');
+    }, 60_000);
+
+    it('records NO confirmed finding on opening', async () => {
+      const { rows } = await db.query<{ new_value: Record<string, unknown> }>(
+        `SELECT new_value FROM audit_logs
+          WHERE target_entity_id = $1 AND action_type = 'FRAUD_REVIEW_OPENED'`,
+        [suspect.transactionId],
+      );
+      // An indicator is someone noticing something; a finding is a qualified
+      // human concluding something.
+      expect(rows[0].new_value).toMatchObject({ fundingFrozen: true, confirmedFinding: false });
+    }, 30_000);
+
+    it('stops the maturity job as well', async () => {
+      const result = await app.get(MaturityService).sweep();
+      expect(result.skippedPaused).toBeGreaterThanOrEqual(1);
+      expect(await stateOf(suspect.transactionId)).toBe('FRAUD_REVIEW');
+    }, 120_000);
+
+    it('hides the case from the parties while it is unproven', async () => {
+      // Telling a supplier a fraud review naming them exists, before anything
+      // is concluded, turns a suspicion into an accusation they must answer.
+      for (const persona of ['supplier', 'bankOps'] as const) {
+        const res = await api(persona, 'get', `/fraud-cases/${fraudCaseId}`);
+        expect([403, 404]).toContain(res.status);
+      }
+    }, 90_000);
+
+    it('refuses a bank deciding the case it reported', async () => {
+      const res = await api('bankOps', 'post', `/fraud-cases/${fraudCaseId}/decide`, {
+        decision: 'BLACKLISTED',
+      });
+      expect(res.status).toBe(403);
+    }, 60_000);
+
+    it('clears on a compliance decision and resumes funding', async () => {
+      const res = await api('compliance', 'post', `/fraud-cases/${fraudCaseId}/decide`, {
+        decision: 'CLEARED',
+        notes: 'The other institution’s reference was for a different invoice.',
+      });
+
+      expect(res.status).toBe(200);
+      expect(res.body.status).toBe('CLEARED');
+      expect(await stateOf(suspect.transactionId)).toBe('FUNDED');
+    }, 60_000);
+
+    it('records that THIS is the confirmed status', async () => {
+      const { rows } = await db.query<{ new_value: Record<string, unknown> }>(
+        `SELECT new_value FROM audit_logs
+          WHERE target_entity_id = $1 AND action_type = 'FRAUD_CASE_DECIDED'`,
+        [fraudCaseId],
+      );
+      expect(rows[0].new_value).toMatchObject({ status: 'CLEARED', confirmedFinding: false });
     }, 30_000);
   });
 
