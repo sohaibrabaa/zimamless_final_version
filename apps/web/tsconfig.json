@@ -35,5 +35,5 @@
   // mutually unassignable, so typechecking the test-runner config here fails
   // for reasons that have nothing to do with application code. vitest
   // typechecks it itself when it loads it.
-  "exclude": ["node_modules", "vitest.config.mts"]
+  "exclude": ["node_modules", "vitest.config.mts", "vitest.live.config.mts"]
 }

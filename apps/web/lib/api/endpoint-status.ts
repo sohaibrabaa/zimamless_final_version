@@ -99,7 +99,7 @@ export const endpointStatus: EndpointStatusEntry[] = [
   { method: "GET", path: "/transactions/{id}/settlement", phase: 7, status: "mock" },
   { method: "POST", path: "/settlements/{id}/retry", phase: 7, status: "mock" },
 
-  { method: "GET", path: "/transactions/{id}/payments", phase: 8, status: "mock", notes: "derived balance (D-13); supplier payload has NO bankInternalNotes/evidence/reportedBy" },
+  { method: "GET", path: "/transactions/{id}/payments", phase: 8, status: "live", notes: "Promoted 2026-07-23 on test/live/payments.live.spec.tsx — a real OVERDUE_UNCONFIRMED transaction rendered through PaymentTimeline in EN and AR. Derived balance (D-13); supplier payload has NO bankInternalNotes/evidence/reportedBy, asserted live" },
   { method: "POST", path: "/transactions/{id}/payments", phase: 8, status: "mock", notes: "derived balance (D-13); supplier payload has NO bankInternalNotes/evidence/reportedBy" },
   { method: "POST", path: "/transactions/{id}/confirm-status", phase: 8, status: "mock", notes: "the ONLY route to OVERDUE. 422 if PAID while a balance remains" },
   { method: "POST", path: "/transactions/{id}/close", phase: 8, status: "mock", notes: "idempotent; a second close keeps the original reason" },
@@ -116,8 +116,8 @@ export const endpointStatus: EndpointStatusEntry[] = [
   { method: "GET", path: "/admin/relisting-requests", phase: 8, status: "mock", notes: "v3.1.0 · platform only. No screen consumes it yet — the ZM-REC-018 review desk is Phase 9, alongside POST approve. The seven checks report null when unrecorded, never omitted" },
   { method: "POST", path: "/transactions/{id}/relist-request", phase: 8, status: "mock", notes: "v3.1.0" },
   { method: "POST", path: "/transactions/{id}/cancel", phase: 8, status: "mock", notes: "v3.1.0" },
-  { method: "GET", path: "/notifications", phase: 8, status: "mock", notes: "v3.1.0 · scoped to recipient_user_id alone; no destination or gateway reference returned" },
-  { method: "POST", path: "/notifications/{id}/read", phase: 8, status: "mock", notes: "v3.1.0 · sets DELIVERED — the only delivery the platform can honestly observe" },
+  { method: "GET", path: "/notifications", phase: 8, status: "live", notes: "v3.1.0 · scoped to recipient_user_id alone; no destination or gateway reference returned. Promoted 2026-07-23 on test/live/inbox.live.spec.tsx" },
+  { method: "POST", path: "/notifications/{id}/read", phase: 8, status: "live", notes: "v3.1.0 · sets DELIVERED — the only delivery the platform can honestly observe. Promoted 2026-07-23; 404 (not 403) for another user's notification asserted live" },
 
   { method: "GET", path: "/admin/settings", phase: 9, status: "mock" },
   { method: "PATCH", path: "/admin/settings", phase: 9, status: "mock" },

@@ -10,7 +10,8 @@
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "check:i18n": "node scripts/check-i18n-parity.mjs",
-    "generate:contract": "node scripts/merge-openapi.mjs && openapi-typescript lib/api/generated/openapi.merged.yaml -o lib/api/generated/schema.d.ts"
+    "generate:contract": "node scripts/merge-openapi.mjs && openapi-typescript lib/api/generated/openapi.merged.yaml -o lib/api/generated/schema.d.ts",
+    "test:live": "vitest run --config vitest.live.config.mts"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.110.8",
