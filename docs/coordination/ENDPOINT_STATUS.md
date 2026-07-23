@@ -26,20 +26,20 @@ endpoint, and has no mock→live promotion to track.
 | POST …/{id}/decide | 2 | — | mock | reviewer decision form · **reason-code catalogue provisional, see Q-06** |
 | POST /government/lookup | 2 | — | mock | handler exists; no screen triggers a manual lookup yet |
 | GET /government/requests/{id} | 2 | — | mock | handler exists; source panel reads the list on the application instead (Q-08) |
-| GET /buyers/search | 3 | — | mock | |
-| POST /buyers/resolve | 3 | — | mock | |
-| GET /buyers/{id} | 3 | — | mock | |
-| POST /documents/upload-url | 3 | — | mock | |
-| GET /documents/{id}/download-url | 3 | — | mock | |
-| GET /documents/{id}/extraction | 3 | — | mock | |
-| GET/POST /transactions | 3 | — | mock | |
-| GET /transactions/{id} | 3 | — | mock | |
-| PUT …/{id}/invoice | 3 | — | mock | |
-| PUT …/{id}/buyer | 3 | — | mock | |
-| PUT …/{id}/minimum-amount | 3 | — | mock | |
-| POST …/{id}/declarations | 3 | — | mock | |
-| POST …/{id}/submit | 3 | — | mock | |
-| GET …/{id}/verification | 3 | — | mock | |
+| GET /buyers/search | 3 | — | mock | wizard step 1 · candidate list, **never pre-selected** (ZM-BUY-009) |
+| POST /buyers/resolve | 3 | — | mock | wizard step 1 · 409 `BUYER_BLOCKED` renders the blocked-buyer reason |
+| GET /buyers/{id} | 3 | — | mock | handler exists; screens read the buyer off the transaction instead |
+| POST /documents/upload-url | 3 | — | mock | wizard steps 2 and 3 · the byte upload is deliberately skipped under MSW |
+| GET /documents/{id}/download-url | 3 | — | mock | no screen consumes it yet — needs the document list, **see Q-12** |
+| GET /documents/{id}/extraction | 3 | — | mock | wizard step 2 · OCR/QR pre-fill and the mismatch table |
+| GET/POST /transactions | 3 | — | mock | supplier transaction list; POST creates the wizard draft |
+| GET /transactions/{id} | 3 | — | mock | transaction detail · floor stripped for bank callers |
+| PUT …/{id}/invoice | 3 | — | mock | wizard step 2 |
+| PUT …/{id}/buyer | 3 | — | mock | wizard step 1 |
+| PUT …/{id}/minimum-amount | 3 | — | mock | wizard step 4 |
+| POST …/{id}/declarations | 3 | — | mock | wizard step 5 · **template version provisional, see Q-13** |
+| POST …/{id}/submit | 3 | — | mock | wizard step 6 · 409 duplicate → blocked screen, **reference shape provisional, see Q-11** |
+| GET …/{id}/verification | 3 | — | mock | verification panel on the transaction detail |
 | GET …/{id}/risk | 4 | — | mock | |
 | GET/POST /admin/risk-models | 4 | — | mock | |
 | POST …/{id}/listing | 5 | — | mock | |

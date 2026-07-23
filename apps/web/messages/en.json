@@ -16,7 +16,9 @@
     "requiredField": "This field is required.",
     "comingSoon": "Coming soon",
     "mockDataBadge": "Mock data",
-    "unknownError": "An unexpected error occurred. Please try again."
+    "unknownError": "An unexpected error occurred. Please try again.",
+    "correlationId": "Reference ID",
+    "pageOf": "Page {page} of {total}"
   },
   "language": {
     "switcherLabel": "Language",
@@ -383,6 +385,245 @@
         "label": "Licence cancelled (automated)",
         "supplier": "The licensing authority shows this profession licence as cancelled. With a valid licence, you're welcome to apply."
       }
+    }
+  },
+  "invoices": {
+    "wizard": {
+      "step": {
+        "buyer": "Buyer",
+        "invoice": "Invoice",
+        "documents": "Documents",
+        "minimumAmount": "Minimum amount",
+        "declarations": "Declarations",
+        "review": "Review and submit"
+      },
+      "submit": "Submit for verification",
+      "validationFailed": "Some details could not be accepted. Check the highlighted fields and try again.",
+      "invalidState": "This invoice is no longer a draft, so it cannot be changed here."
+    },
+    "new": {
+      "title": "New invoice submission",
+      "intro": "You will identify the buyer, upload the electronic invoice, set the minimum net amount you will accept, and confirm the supplier declarations. Nothing is visible to any bank until you activate a listing.",
+      "start": "Start a new submission"
+    },
+    "list": {
+      "newInvoice": "New invoice",
+      "filterByState": "Filter by status",
+      "allStates": "All statuses",
+      "empty": "You have not submitted any invoices yet.",
+      "column": {
+        "reference": "Reference",
+        "invoiceNumber": "Invoice number",
+        "buyer": "Buyer",
+        "faceValue": "Face value",
+        "dueDate": "Due date",
+        "state": "Status"
+      }
+    },
+    "detail": {
+      "backToList": "Back to invoices",
+      "notFound": "This invoice could not be found.",
+      "invoiceSection": "Invoice details",
+      "buyerSection": "Buyer",
+      "documentsSection": "Documents"
+    },
+    "buyer": {
+      "intro": "Search for the buyer named on the invoice. The platform never chooses a buyer for you — you must select one explicitly, even when only one result comes back.",
+      "searchLabel": "Company name or establishment number",
+      "searchHint": "At least two characters.",
+      "manualReviewNotice": "More than one record matched. Check the establishment number carefully before selecting — the platform cannot tell these apart for you.",
+      "noCandidates": "No matching registry record",
+      "noCandidatesHint": "Check the spelling, or search by the national establishment number instead.",
+      "confirmSelection": "Confirm this buyer",
+      "changeBuyer": "Choose a different buyer",
+      "contactTitle": "Buyer contact",
+      "contactNotice": "These details are the ones you use at the buyer. They are recorded as supplier-provided and are not the buyer’s official registry contact.",
+      "contactName": "Contact name",
+      "contactRole": "Role or position",
+      "contactPhone": "Phone number",
+      "contactEmail": "Email address (optional)",
+      "contactRequired": "Enter the contact name, role and phone number to continue.",
+      "blockedGeneric": "This buyer cannot be financed while its registry record is in its current state.",
+      "status": {
+        "ACTIVE": "Active",
+        "SUSPENDED": "Suspended",
+        "STRUCK_OFF": "Struck off",
+        "UNDER_LIQUIDATION": "Under liquidation",
+        "UNKNOWN": "Status not available"
+      },
+      "blocked": {
+        "SUSPENDED": "This company’s registry record is currently suspended, so invoices naming it cannot be financed. This is a fact about the buyer’s registration and says nothing about your business.",
+        "STRUCK_OFF": "This company has been struck off the commercial register, so invoices naming it cannot be financed. This is a fact about the buyer’s registration and says nothing about your business."
+      },
+      "review": {
+        "UNDER_LIQUIDATION": "This company is under liquidation. You can still select it, and a member of the platform team will review the submission before it becomes eligible.",
+        "UNKNOWN": "The registry did not report a status for this company. You can still select it, and a member of the platform team will review the submission before it becomes eligible."
+      }
+    },
+    "invoice": {
+      "intro": "Upload the electronic invoice first. We read it and offer the values back to you — you confirm or correct every one of them."
+    },
+    "field": {
+      "invoiceNumber": "Invoice number",
+      "einvoiceIdentifier": "E-invoice identifier",
+      "einvoiceIdentifierHint": "The identifier printed on the Jordanian electronic invoice.",
+      "issueDate": "Issue date",
+      "dueDate": "Due date",
+      "dueDateHint": "Must be at least 7 days away.",
+      "subtotalAmount": "Subtotal",
+      "taxAmount": "Tax",
+      "faceValue": "Face value",
+      "faceValueHint": "The total amount of the invoice, including tax.",
+      "outstandingAmount": "Outstanding amount"
+    },
+    "extraction": {
+      "title": "What we read from the document",
+      "qrLabel": "QR code",
+      "bothKeptNotice": "Your corrections are recorded alongside what the machine read — they never replace or erase it. Both versions stay on file and are available to reviewers.",
+      "noValues": "Nothing has been extracted from this document yet.",
+      "refresh": "Check for results",
+      "prefill": "Fill the form with these values",
+      "differs": "Differs",
+      "mismatchGuidance": "One or more values you entered differ from what we read. That is not necessarily a problem — enter what the invoice actually says, and both readings will be kept.",
+      "confidence": "Reading confidence: {value}%",
+      "column": {
+        "field": "Field",
+        "ocr": "Read from image",
+        "qr": "From QR code",
+        "entered": "You entered"
+      }
+    },
+    "qr": {
+      "status": {
+        "VALID": "Valid",
+        "INVALID": "Did not match",
+        "UNAVAILABLE": "No QR code found",
+        "UNPARSED": "Not readable",
+        "PENDING": "Not checked yet"
+      },
+      "explain": {
+        "INVALID": "The QR code was read but its contents did not match the invoice. A member of the platform team will check this.",
+        "UNAVAILABLE": "No QR code was found on this document. Nothing further is needed from you.",
+        "UNPARSED": "The QR code was found but its format is not one we recognise, so nothing was taken from it. A member of the platform team will review it manually. This does not count against your submission."
+      }
+    },
+    "documents": {
+      "optionalIntro": "Supporting documents are optional here. Some banks ask for them before making an offer, so attaching them can help.",
+      "choose": "Choose file",
+      "replace": "Replace file",
+      "remove": "Remove",
+      "type": {
+        "EINVOICE": "Electronic invoice",
+        "PURCHASE_ORDER": "Purchase order",
+        "DELIVERY_NOTE": "Delivery note",
+        "STATEMENT_OF_ACCOUNT": "Statement of account",
+        "CREDIT_NOTE": "Credit note",
+        "OTHER": "Other document"
+      },
+      "desc": {
+        "EINVOICE": "Required. The Jordanian electronic invoice, as a PDF or image.",
+        "PURCHASE_ORDER": "The buyer’s order for the goods or services.",
+        "DELIVERY_NOTE": "Evidence that the goods or services were delivered.",
+        "STATEMENT_OF_ACCOUNT": "A recent statement showing the balance with this buyer.",
+        "CREDIT_NOTE": "Any credit note, return or adjustment affecting this invoice."
+      },
+      "error": {
+        "mimeType": "Upload a PDF, PNG or JPEG file.",
+        "tooLarge": "This file is larger than 15 MB. Upload a smaller file."
+      }
+    },
+    "minimum": {
+      "intro": "Set the least you are willing to receive for this invoice.",
+      "label": "Minimum NET amount you will receive",
+      "hint": "Net means after every deduction — the bank’s charges, the platform commission and the listing fee. This is the money that actually reaches your account.",
+      "reviewLabel": "Your minimum net amount",
+      "privacyNote": "Banks never see this figure. It is used only to filter out offers that would pay you less than this, and it is never shown to any bank at any point.",
+      "exceedsFaceValue": "This is more than the invoice is worth. Enter an amount up to the face value."
+    },
+    "declarations": {
+      "intro": "All eight statements must be true. You are confirming them as the supplier of record.",
+      "templateVersion": "Declaration template version {version}",
+      "allRequired": "Every statement must be confirmed before you can submit.",
+      "isAuthentic": "This invoice is authentic and represents a real commercial transaction.",
+      "goodsDelivered": "The goods or services were delivered in line with the commercial relationship.",
+      "unpaidAndNotCancelled": "This invoice is unpaid and has not been cancelled.",
+      "noKnownDispute": "There is no known dispute, return, or undisclosed discount affecting this invoice.",
+      "notPreviouslyFinanced": "This invoice has not previously been sold, assigned, pledged, or financed.",
+      "buyerIsNamedEntity": "The buyer I selected is the entity named on the invoice.",
+      "contactIsBuyerRep": "The contact details I gave belong to a representative of the buyer that I actually deal with.",
+      "acceptsRecourse": "I accept recourse and indemnification for false declarations, as set out in the contract."
+    },
+    "review": {
+      "intro": "Check everything below before submitting. After submission the platform runs its automated checks.",
+      "buyer": "Buyer",
+      "documents": "Documents attached",
+      "submitNotice": "Submitting starts verification. It does not publish anything to banks — that is a separate step you take later, and you will see the listing fee before it applies."
+    },
+    "duplicate": {
+      "title": "This invoice is already on the platform",
+      "body": "An invoice with the same buyer, number, date, value and tax has already been submitted. Only one active submission can exist for any invoice, so this one has been blocked and a review record has been opened.",
+      "nextSteps": "Nothing you entered has been lost — this submission is still a draft. If you believe this is a mistake, contact the platform team and quote the reference below.",
+      "reviewReference": "Review reference",
+      "noReference": "Not provided",
+      "backToDraft": "Back to the invoice details"
+    },
+    "verification": {
+      "title": "Verification results",
+      "notRunYet": "Verification has not run yet. It starts when you submit the invoice.",
+      "noChecks": "No individual checks were recorded for this run.",
+      "reviewExplanation": "One or more checks need a person to look at them. This is a normal part of the process and does not mean anything has been decided.",
+      "overall": {
+        "PASS": "All checks passed",
+        "FAIL": "Checks failed",
+        "REVIEW": "Awaiting review",
+        "UNKNOWN": "Result not available"
+      },
+      "result": {
+        "PASS": "Passed",
+        "FAIL": "Failed",
+        "REVIEW": "Needs review",
+        "MISSING": "Not provided",
+        "UNPARSED": "Not readable",
+        "NOT_APPLICABLE": "Not applicable",
+        "UNKNOWN": "Not available"
+      },
+      "check": {
+        "COMPLETENESS": "Required fields and documents",
+        "IDENTITY_MATCH": "Supplier and buyer match the invoice",
+        "DUPLICATE_DETECTION": "Not already submitted",
+        "TRANSACTION_LOGIC": "Dates and amounts are consistent",
+        "PARTY_ELIGIBILITY": "Supplier and buyer are eligible",
+        "FILE_INTEGRITY": "Document integrity",
+        "OCR_CONSISTENCY": "Read values match what you entered",
+        "QR_CONSISTENCY": "QR code matches the invoice",
+        "OTHER": "Additional check"
+      }
+    },
+    "state": {
+      "DRAFT": "Draft",
+      "SUBMITTED": "Submitted",
+      "AUTOMATED_CHECKS": "Running checks",
+      "UNDER_REVIEW": "Under review",
+      "INFORMATION_REQUIRED": "Information needed",
+      "ELIGIBLE": "Eligible",
+      "OPEN_FOR_OFFERS": "Open for offers",
+      "OFFER_ACCEPTED": "Offer accepted",
+      "CONDITIONS_PENDING": "Conditions pending",
+      "CONTRACTED": "Contracted",
+      "READY_FOR_DISBURSEMENT": "Ready for disbursement",
+      "FUNDING_CONFIRMATION_PENDING": "Confirming funding",
+      "FUNDED": "Funded",
+      "PARTIALLY_PAID": "Partially paid",
+      "PAID": "Paid",
+      "OVERDUE_UNCONFIRMED": "Awaiting bank confirmation",
+      "OVERDUE": "Overdue",
+      "RECOURSE_ACTIVE": "Recourse active",
+      "DISPUTED": "Disputed",
+      "FRAUD_REVIEW": "Under review",
+      "CLOSED": "Closed",
+      "REJECTED": "Not accepted",
+      "CANCELLED": "Cancelled",
+      "UNKNOWN": "Status not available"
     }
   }
 }

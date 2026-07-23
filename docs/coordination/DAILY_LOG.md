@@ -233,3 +233,77 @@ SEEDS: S1's consents re-seeded in the canonical vocabulary; S3 Jordan Valley Foo
 VERIFICATION: 154 API tests (was 129; new suites: onboarding-guards, government-access), 41 web tests (was 38), lint/typecheck all workspaces, i18n parity 274 keys both locales, `next build`, frozen-schema drift check, conformance gate — all green. `db:verify` and the RLS suite re-run against the hosted project after the seed re-apply.
 
 STILL OPEN: deployment. Unchanged, still the project's #1 risk, still not resolvable from a session. Q-01..Q-04 remain as they were.
+
+## 2026-07-23 — Agent B (session 3, Phase 3)
+Branched from `origin/main` at `bb832f3` per the kickoff's Step 0, so this
+session started on the post-fix baseline rather than repeating Phase 2's
+sequencing mistake.
+
+DONE (all mock — `phases/PHASE_3_BUYERS_DOCUMENTS_INVOICES.md`, Agent B tasks).
+All four in-scope screens:
+- **Six-step invoice wizard**: buyer search/select/contact → e-invoice upload
+  with OCR pre-fill and the extracted-vs-entered comparison → supporting
+  documents → minimum net amount → the eight declarations → review and submit.
+  Each step writes through to its own endpoint as the supplier advances, so
+  closing the tab at step 4 does not lose steps 1–3.
+- **Supplier transaction list and detail**, with the verification panel showing
+  all eight §8.5 checks, and the **duplicate-blocked screen**.
+- The three rules this phase turns on: the buyer is **never** pre-selected —
+  `initialBuyerSelection` always returns null and a test asserts it for the
+  single 100%-name-match case ZM-BUY-009 names; corrections are **recorded
+  alongside** the machine reading with copy that says so and a test that holds
+  the extraction immutable across a correction; a fingerprint collision
+  **blocks and keeps the draft** rather than rejecting it.
+- All three invoice routes sit behind the Phase 2 `FinancingGate` — that gate
+  was wired against a placeholder for exactly this screen, so ZM-SON-011 was
+  never retrofitted.
+- Mock store reproduces the checkpoint sequence including the duplicate pair
+  across two suppliers, so submit → blocked-by-fingerprint is drivable rather
+  than only inspectable.
+
+VERIFIED: 91/91 vitest (50 new — 30 domain, 20 store; the 41 existing all still
+green); typecheck, lint and `next build` clean in `web` and root-wide across
+all three workspaces; i18n parity **453 keys** in both locales (was 274).
+
+SWAPPED TO LIVE: none. All 15 Phase 3 endpoints stay `mock` — the API is still
+not on a public URL, which is now the third consecutive phase closing on that
+carry-over.
+
+CONTRACT GAPS FOUND: **Q-11, Q-12, Q-13**. Q-11 the duplicate 409's review
+reference has no declared key (`Error.details` is free-form) though the phase
+file requires the blocked screen to show one · Q-12 nothing lists a
+transaction's documents, so the detail screen and your Phase 5 underwriting
+view have nothing to enumerate · Q-13 no declaration template version, though
+ZM-INV-004 requires the accepted version to be recorded. None is a missing
+endpoint; each is under-specification, each isolated to one file, each
+degrading visibly. Reasoning in §5 of `docs/completion/PHASE_3_AGENT_B.md`.
+
+NEEDS FROM A:
+1. **Q-13 first — it is Q-09 repeating, and Q-09 really did bite.** I ship
+   `DECLARATION_TEMPLATE_VERSION = "1.0"` in
+   `apps/web/lib/invoices/declarations.ts`. If your half accepts anything
+   else, `POST /transactions/{id}/declarations` 422s on the first integration
+   day and wizard step 5 cannot complete. Tell me your value and I will follow
+   — do not accommodate my guess if the requirements point elsewhere.
+2. **Q-11: please send the review-record id as `details.reviewReference`** on
+   the duplicate 409. I currently accept four spellings and fall back to
+   showing the correlation id, which is weaker than what ZM-VER-001 implies.
+3. **Q-12: `documents[]` on the `Transaction` response.** Not blocking me this
+   phase; it becomes blocking for your Phase 5 underwriting view, which lists
+   supplier documents by design.
+4. **Invoice fixture identities are the one thing I had to invent, and they are
+   marked as such.** GOV_DUMMY_DATA §8 still owes "which of the 12 invoices
+   sits in which of the 11 scenarios" to the Phase 9 seed spec, so there was
+   nothing to copy — unlike the buyers, which I copied. Everything invented is
+   prefixed `MOCK-`: `MOCK-INV-2026-0041` / `MOCK-JO-EINV-88213004`, with a
+   deliberate OCR-vs-QR tax discrepancy (`2000.000` vs `2100.000`) standing in
+   for your seeded mismatch PDF. When you seed the e-invoices, send me the real
+   numbers and which one carries the mismatch.
+5. **Please confirm your fingerprint excludes the supplier.** Mine is buyer
+   establishment number + invoice number + issue date + face value + tax, per
+   D-01 and ZM-VER-001's "platform-wide". There is a test asserting two
+   suppliers' identical invoices produce the *same* fingerprint — if that ever
+   became false the duplicate rule would silently never fire on exactly the
+   case the checkpoint is about.
+6. Thank you for S4/S5 and §6a — the sole-proprietorship identity and the
+   normalized field table both landed before I needed them this phase.
