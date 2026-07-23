@@ -1404,3 +1404,33 @@ ARABIC, PROVEN NOT ASSUMED:
 
 Scoreboard: 19 endpoints live (was 8 this morning), live suite 12 files /
 38 tests, integration 9 suites green, unit 540, web 232.
+
+## 2026-07-24 (close) — Phase 9 wrapped: 36 live, admin screens, wizard walked end to end
+
+THE WIZARD, LIVE (wizard.live.spec.tsx): BuyerStep renders the real registry
+search (candidates only, nothing pre-selected — ZM-BUY-009), then a full
+walk with PDF-true values (INV-2026-0001, the QR identifier, 10650/1704/12354)
+lands ELIGIBLE against the real checks. OCR/QR consistency is real: invent a
+number the PDF doesn't carry and the run ends UNDER_REVIEW — the earlier
+"failures" were the platform working. Teardown cancels the draft, which
+releases the invoice fingerprint (D-01 partial-active index).
+
+ADMIN SCREENS BUILT (9.4b): platform/audit rewritten from ComingSoon into a
+paginated audit table with entity-id filter; platform/settings grew a
+whitelist-gated editor (each PATCH audited) plus the commission tiers table,
+beside the existing TimeMachineControl. EN + AR dictionaries in parity
+(admin.* namespace, common.previous).
+
+CANCEL'S LAST DEFECT: closing an open listing UPDATEd an updated_at column
+neither listings nor bank_offers has — 500 on the first genuinely open
+listing anything ever cancelled. Fixed with closed_at/withdrawn_at; named
+test added (phase9-admin 19/19: cancel closes the listing AND withdraws its
+live offers).
+
+FINAL BOARD: 36 endpoints live (every demo-path screen), live suite 15
+files / 45 tests, unit 540, web 232. Completion report at
+docs/completion/PHASE_9.md — build table, seed doctrine + the four defects
+it caught, D-21, named proofs, demo-day runbook, deliberate exclusions
+(~50 non-demo-path endpoints stay mock; manual RTL walkthrough; PA-09).
+Full regression (unit + all integration suites, tree frozen) is the gate
+before the phase is declared done.
