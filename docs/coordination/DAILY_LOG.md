@@ -944,3 +944,38 @@ NEEDS FROM A:
 4. AS-01's acceptance role gate is enforced against SUPPLIER_OWNER
    specifically (the only seeded role matching "Owner/Admin") — reconcile
    if your real role set differs.
+
+## 2026-07-23 — Agent A (session, post-review remediation)
+LIVE: none newly deployed. Backend hardening only, all against the hosted DB.
+CHANGED (shared surface — read this):
+  - `POST /offers/{id}/accept` now ENFORCES the `Idempotency-Key` header the
+    frozen contract already marked `required: true`. A flagged request with no
+    header is refused **400 `IDEMPOTENCY_KEY_REQUIRED`**. This is the one built
+    endpoint the contract flags; funding/settlement/payment/recourse get the
+    same treatment as they are built (Phases 7-9). Your mock already models
+    replay (your NEEDS #1) — the live behaviour now matches it: same key →
+    original response replayed, no re-execution; same key + different request →
+    **409 `CONFLICT`**; a failed attempt releases the key so a corrected retry
+    can reuse it. **Action for B:** send an `Idempotency-Key` (a fresh uuid per
+    logical accept) when you promote `offers/{id}/accept` to live, or it 400s.
+  - Document uploads are now content-sniffed at finalize: a file whose bytes
+    contradict its declared `mimeType` (e.g. an HTML/script payload labelled
+    `application/pdf`) is refused **422 VALIDATION_FAILED** the first time the
+    server reads it (extraction, or transaction submit). No contract-shape
+    change; a valid PDF/PNG/JPEG/TIFF is unaffected.
+SEED: no identity changes. Duplicate bank/platform organizations that had
+  accumulated in the hosted DB from the old seed bug are being merged into
+  their canonical (oldest) row via `db/tools/dedupe-organizations.mjs` — refs
+  repointed, dupes deleted, canonical ids unchanged. Your fixtures already use
+  the canonical ids, so nothing to change your side.
+CHANGED (DB): migration `0009_idempotency_keys.sql` — one new table, RLS on,
+  no existing shape touched. `db:verify` = 20/20.
+BLOCKED ON: nothing. The dedupe `--apply` awaits an operator go-ahead (it
+  mutates hosted data and the sandbox blocks it); the dry-run plan is clean
+  (4 groups: JNB, LCB, CIB, platform — referenced only by eligibility and
+  memberships, no money rows).
+NOTE FOR B: the two P0s from the architecture review are NOT fixed here and
+  are not mine to fix alone — (1) the whole frontend is on mocks (zero of ~90
+  endpoints promoted to live), which is your ENDPOINT_STATUS board; (2) the
+  demo dead-ends at CONTRACTED because Phases 7-9 (funding/OTP/settlement) are
+  unbuilt. Both need a direction call, not a code patch.

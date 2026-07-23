@@ -15,6 +15,7 @@ import { ConditionsService } from './conditions.service';
 import { DatabaseService } from '../../database/database.service';
 import { FulfilConditionDto, SignContractDto } from './dto';
 import { Audit } from '../../common/audit/audit.interceptor';
+import { Idempotent } from '../../common/idempotency/idempotency.interceptor';
 import { CurrentContext, CurrentUser, RequireRoles } from '../auth/decorators';
 import { MembershipRow, PlatformUser } from '../auth/auth.service';
 import { ActorContext } from '../onboarding/onboarding.service';
@@ -40,6 +41,11 @@ export class AcceptanceController {
 
   @Post('offers/:id/accept')
   @HttpCode(HttpStatus.OK)
+  // Contract global rule 4: acceptance moves financial state, so it carries a
+  // required Idempotency-Key. The interceptor replays the first response for a
+  // repeated key; the service is independently atomic (INV-1), so the two
+  // together make a double-accept impossible AND observably identical.
+  @Idempotent()
   // AS-01's default. The service re-checks against the configured setting, so
   // widening the policy to SUPPLIER_UPLOADER is a settings change — but the
   // route guard must still list every role the setting could name, or a

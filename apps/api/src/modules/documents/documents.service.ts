@@ -8,6 +8,7 @@ import {
   MAX_DOCUMENT_BYTES,
   StorageService,
 } from './storage.service';
+import { contentMatchesDeclared, sniffContentType } from './content-sniff';
 import { MlClientService, MlExtraction } from './ml-client.service';
 
 /**
@@ -218,6 +219,25 @@ export class DocumentsService {
       // empty extraction) reports it in terms the supplier can act on.
       this.logger.warn(`Document ${document.id} has no stored object yet.`);
       return document;
+    }
+
+    // This is the one moment the server holds the actual bytes. The declared
+    // mimeType was a claim the client made when it reserved the upload; a
+    // signed PUT URL will accept anything, so a caller could store an HTML
+    // page or a script under an `application/pdf` label. Refuse a document
+    // whose leading bytes contradict its declared type before it is hashed,
+    // OCR'd, or attached to a transaction — an invalid document must not
+    // become a "real" one. The mismatch is logged (never the bytes) and left
+    // unfinalized; the supplier's remedy is to re-upload the correct file.
+    if (!contentMatchesDeclared(document.mime_type, bytes)) {
+      this.logger.warn(
+        `Document ${document.id} declared ${document.mime_type} but its bytes look like ` +
+          `${sniffContentType(bytes) ?? 'an unrecognized format'}. Refusing to finalize.`,
+      );
+      throw AppException.validation(
+        'The uploaded file does not match its declared type. Re-upload the correct file.',
+        { field: 'file', declaredType: document.mime_type },
+      );
     }
 
     const hash = createHash('sha256').update(bytes).digest('hex');

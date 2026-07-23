@@ -181,7 +181,47 @@ export class ContractsService {
     // contract nobody can read.
     const documentId = await this.storeDocument(context, bytes, hash, contractNumber, ctx);
 
-    const contract = await this.db.transaction(async (client) => {
+    const contract = await this.runContractInsert(
+      transactionId,
+      context,
+      template,
+      contractNumber,
+      terms,
+      hash,
+      documentId,
+      now,
+      ctx,
+    );
+
+    return contract;
+  }
+
+  /**
+   * The write half of generation, isolated so a failure can undo the document
+   * row the pre-transaction storage step left behind.
+   *
+   * The object itself is stored before this transaction — Postgres cannot roll
+   * back a bucket write, and an invisible orphaned object is a better failure
+   * than a contract row pointing at a document that was never stored. But the
+   * `documents` ROW is ours to clean up: if the contract insert fails, that row
+   * would otherwise dangle, owned by the supplier and attached to the
+   * transaction, describing a contract that does not exist. So a failure here
+   * deletes it (best-effort) before re-raising. The bytes in the bucket are
+   * left as the documented, acceptable orphan.
+   */
+  private async runContractInsert(
+    transactionId: string,
+    context: GenerationContext,
+    template: { id: string; version: string },
+    contractNumber: string,
+    terms: Record<string, unknown> & { termsHash: string },
+    hash: string,
+    documentId: string,
+    now: Date,
+    ctx: ActorContext,
+  ): Promise<ContractRow> {
+    try {
+      return await this.db.transaction(async (client) => {
       const { rows } = await client.query<ContractRow>(
         `INSERT INTO contracts
            (transaction_id, snapshot_id, contract_number, template_id, template_version,
@@ -225,10 +265,17 @@ export class ContractsService {
         },
       });
 
-      return created;
-    });
-
-    return contract;
+        return created;
+      });
+    } catch (err) {
+      // The contract row was never created, so the document row and its
+      // storage object are orphans. Delete the row (best-effort); leave the
+      // object as the acceptable, invisible orphan the storage step documents.
+      await this.db
+        .query(`DELETE FROM documents WHERE id = $1`, [documentId])
+        .catch(() => undefined);
+      throw err;
+    }
   }
 
   /**

@@ -8,6 +8,7 @@ import { CorrelationIdMiddleware } from './common/middleware/correlation-id.midd
 import { AllExceptionsFilter } from './common/errors/all-exceptions.filter';
 import { AuditService } from './common/audit/audit.service';
 import { AuditInterceptor } from './common/audit/audit.interceptor';
+import { IdempotencyInterceptor } from './common/idempotency/idempotency.interceptor';
 import { TIME_PROVIDER, SystemTimeProvider } from './common/time/time.provider';
 import { AuthGuard } from './modules/auth/auth.guard';
 import { AuthService } from './modules/auth/auth.service';
@@ -170,6 +171,9 @@ export const APP_CONFIG = 'APP_CONFIG';
     { provide: SIGNATURE_PROVIDER, useExisting: DummySignatureProvider },
 
     { provide: APP_GUARD, useClass: AuthGuard },
+    // Idempotency is registered BEFORE audit so it is the outer interceptor:
+    // a replayed key short-circuits here and no second audit row is written.
+    { provide: APP_INTERCEPTOR, useClass: IdempotencyInterceptor },
     { provide: APP_INTERCEPTOR, useClass: AuditInterceptor },
     { provide: APP_FILTER, useClass: AllExceptionsFilter },
   ],

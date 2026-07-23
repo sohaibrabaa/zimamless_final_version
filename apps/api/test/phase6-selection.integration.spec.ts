@@ -98,10 +98,17 @@ describeIfDb('Phase 6 — selection and contracts', () => {
     method: 'get' | 'post' | 'patch',
     path: string,
     body?: unknown,
+    idempotencyKey?: string,
   ): request.Test => {
     const req = request(app.getHttpServer())[method](`${prefix}${path}`)
       .set('Authorization', `Bearer ${tokens[persona]}`)
       .set('X-Organization-Id', orgs[persona]);
+    // Money/state-changing POSTs now require an Idempotency-Key (contract
+    // global rule 4). A fresh uuid per call keeps every existing test a
+    // distinct logical request — the concurrency harness fires genuinely
+    // independent accepts, not accidental replays — while a caller that wants
+    // to exercise replay passes an explicit key.
+    if (method === 'post') req.set('Idempotency-Key', idempotencyKey ?? randomUUID());
     return body === undefined ? req : req.send(body as object);
   };
 
@@ -492,6 +499,64 @@ describeIfDb('Phase 6 — selection and contracts', () => {
       expect(res.status).toBe(409);
       expect(res.body.code).toBe('TRANSACTION_ALREADY_LOCKED');
     }, 30_000);
+  });
+
+  // -------------------------------------------------------------------
+  // Idempotency-Key (contract global rule 4) — the header is honoured, not
+  // merely allowed through CORS.
+  // -------------------------------------------------------------------
+
+  describe('Idempotency-Key on a money-moving POST', () => {
+    it('refuses a flagged request that omits the header', async () => {
+      const fixture = await buildFixture();
+      const res = await request(app.getHttpServer())
+        .post(`${prefix}/offers/${fixture.offerA}/accept`)
+        .set('Authorization', `Bearer ${tokens.supplier}`)
+        .set('X-Organization-Id', orgs.supplier);
+      expect(res.status).toBe(400);
+      expect(res.body.code).toBe('IDEMPOTENCY_KEY_REQUIRED');
+
+      // And it did not execute: no snapshot was written.
+      const { rows } = await db.query<{ n: string }>(
+        `SELECT count(*)::text AS n FROM accepted_offer_snapshots WHERE transaction_id = $1`,
+        [fixture.transactionId],
+      );
+      expect(rows[0].n).toBe('0');
+    }, 60_000);
+
+    it('replays the first response for a repeated key without re-executing', async () => {
+      const fixture = await buildFixture();
+      const key = randomUUID();
+
+      const first = await api('supplier', 'post', `/offers/${fixture.offerA}/accept`, undefined, key);
+      expect(first.status).toBe(200);
+
+      const replay = await api('supplier', 'post', `/offers/${fixture.offerA}/accept`, undefined, key);
+      expect(replay.status).toBe(200);
+      // Byte-identical to the first response, served from the stored record.
+      expect(replay.body).toEqual(first.body);
+
+      // Exactly one snapshot and one selection — the handler ran once.
+      const snap = await db.query<{ n: string }>(
+        `SELECT count(*)::text AS n FROM accepted_offer_snapshots WHERE transaction_id = $1`,
+        [fixture.transactionId],
+      );
+      expect(snap.rows[0].n).toBe('1');
+    }, 60_000);
+
+    it('rejects a key reused for a different request', async () => {
+      const fixture = await buildFixture();
+      const key = randomUUID();
+
+      const first = await api('supplier', 'post', `/offers/${fixture.offerA}/accept`, undefined, key);
+      expect(first.status).toBe(200);
+
+      // Same key, different path (the other offer) — a client error, not a
+      // replay. The stored request fingerprint does not match.
+      const reused = await api('supplier', 'post', `/offers/${fixture.offerB}/accept`, undefined, key);
+      expect(reused.status).toBe(409);
+      expect(reused.body.code).toBe('CONFLICT');
+    }, 60_000);
   });
 
   // -------------------------------------------------------------------
