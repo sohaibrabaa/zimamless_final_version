@@ -128,3 +128,39 @@ Note: GOV_DUMMY_DATA.md says adding is fine and only renaming/renumbering breaks
 Interim behaviour: `apps/web/lib/mocks/onboarding-store.ts` uses `90000006` for this case, named `SOLE_PROPRIETORSHIP_KEY_PENDING_RULING` and commented as a local extension rather than a shared convention. If A picks a different key or seeds S4 instead, one constant changes.
 Needed by: Phase 2 integration checkpoint (the ineligibility screen cannot otherwise be demonstrated against live data)
 Status: **RESOLVED** (Phase 2, Agent A + unification session). The answer is identity **S4 20000104 — Hani Auto Parts Establishment** (GOV_DUMMY_DATA.md §2), not a 9000000x injection key. The mock store now uses S4; the 90000006 placeholder is deleted.
+
+## Q-11 — The duplicate-fingerprint 409 carries no declared review reference
+Raised by: Agent B, 2026-07-23, blocking: not blocking (adapter reads `details`, degrades visibly)
+Question: `ZM-VER-001` says a fingerprint collision **blocks submission and opens a review record**, and `PHASE_3_BUYERS_DOCUMENTS_INVOICES.md` (B tasks) requires the duplicate-blocked screen to render "a clear blocked screen **with review reference**". `POST /transactions/{id}/submit` declares `409 Duplicate invoice fingerprint detected` carrying the standard `Error` envelope — so the status and the code are reliable, but `Error.details` is `additionalProperties: true` and no key is named. The client therefore has no defined place to read the review record's identifier from, and two independent implementations will pick different key names.
+Options considered:
+1. Overlay amendment declaring `details: { reviewReference: string }` on that one response. Additive (any object satisfying it already satisfies the frozen schema) and it is the only option that makes the reference deterministic.
+2. Agree a key in the daily log. Works, drifts — this is exactly the Q-05/Q-06 shape, and both of those ended up needing a written resolution anyway.
+3. Do not show a reference; tell the supplier to quote the correlation id instead. Weaker: the correlation id identifies *the request that was refused*, not the review record a human has to find, and support would have to reverse-map it.
+Recommendation: **Option 1**, with `reviewReference` as the key name.
+Interim behaviour: `apps/web/lib/invoices/duplicate.ts` accepts `reviewReference`, `reviewRecordId`, `reviewId` or `caseReference`, and when none is present renders "Not provided" beside the correlation id rather than an empty field or a fabricated value. One file changes when this is ruled.
+Needed by: Phase 3 integration checkpoint (the duplicate drill is in the checkpoint definition)
+Status: OPEN
+
+## Q-12 — No way to list the documents attached to a transaction
+Raised by: Agent B, 2026-07-23, blocking: not blocking (wizard tracks its own uploads)
+Question: `POST /documents/upload-url` returns a `documentId`, and `GET /documents/{id}/download-url` and `/documents/{id}/extraction` both take one — but nothing returns the **set** of documents belonging to a transaction. `Transaction` carries `invoice` and `buyer` and no document array, and there is no `GET /transactions/{id}/documents`. So the wizard can track the ids it just created in its own state, but the transaction **detail** screen — reloaded later, or opened by a reviewer or a bank underwriter in Phase 5 — has no way to know which documents exist, and the ZM-DOC-004 signed-URL download path therefore has nothing to link to.
+Options considered:
+1. Additive `documents: Document[]` on the `Transaction` response (id, documentType, fileName, mimeType, sizeBytes, uploadedAt) — one round trip, and it keeps the detail screen a single GET. `ZM-DOC-003` already requires every one of those fields to be stored.
+2. Additive `GET /transactions/{id}/documents`.
+3. Leave it. Rejected: the bank underwriting view in Phase 5 lists supplier documents by design, so this becomes blocking then rather than now.
+Recommendation: **Option 1**, mirroring how Q-08 was resolved for `governmentRequests`.
+Interim behaviour: `TransactionView` in `apps/web/lib/invoices/useTransactions.ts` widens the generated type with an optional `documents[]` and every screen omits the section when it is absent — never showing an empty list as if the transaction had no documents.
+Needed by: Phase 5 (bank underwriting view); useful at the Phase 3 checkpoint
+Status: OPEN
+
+## Q-13 — No declaration template version, though the requirement says the version is recorded
+Raised by: Agent B, 2026-07-23, blocking: not blocking (provisional version shipped)
+Question: `ZM-INV-004` requires the eight supplier declarations to be affirmed "**with the declaration text version recorded**", and `LT-04`'s technical assumption is explicit that "declaration text is a versioned template; the accepted version is stored per submission". `DeclarationInput.declarationTemplateVersion` is accordingly `required` — but nothing in the frozen pack says what the current version string is, or where the eight texts live. The client has to send *some* version, and if it does not match what Agent A's half accepts, `POST /transactions/{id}/declarations` fails validation on the first integration day. This is the same failure mode as the consent catalogue (Q-09), which did materialise as a real cross-half divergence and needed a resolution.
+Options considered:
+1. Fix the version and the eight texts in `DECISIONS.md`, as Q-09's consent catalogue was fixed. The set is static and versioned by document revision, not by runtime state.
+2. Additive `GET /transactions/declaration-template`. More faithful if the text is ever edited without a deploy, but no consumer needs that in V3.
+3. Let the client send anything and have the server store it verbatim. Rejected: then the recorded version means nothing, which defeats the point of recording it.
+Recommendation: **Option 1**, ratifying `"1.0"` and the transcription below unless the wording should differ.
+Interim behaviour: `apps/web/lib/invoices/declarations.ts` holds `DECLARATION_TEMPLATE_VERSION = "1.0"` and the eight texts transcribed from ZM-INV-004's bullets, EN + AR. **Agent A's accepted version must match this or the declarations call 422s at integration.**
+Needed by: Phase 3 integration checkpoint
+Status: OPEN

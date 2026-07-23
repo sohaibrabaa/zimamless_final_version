@@ -26,20 +26,20 @@ endpoint, and has no mock→live promotion to track.
 | POST …/{id}/decide | 2 | — | mock | reviewer decision form · **reason-code catalogue provisional, see Q-06** |
 | POST /government/lookup | 2 | — | mock | handler exists; no screen triggers a manual lookup yet |
 | GET /government/requests/{id} | 2 | — | mock | handler exists; source panel reads the list on the application instead (Q-08) |
-| GET /buyers/search | 3 | — | mock | returns `{candidates[], requiresManualReview}`; **never a selection** (ZM-BUY-009). `candidates[].matchSource` is `OWN_RELATIONSHIP`/`PLATFORM`/`REGISTRY` |
-| POST /buyers/resolve | 3 | — | mock | **200**, not 201. `confirmedByUser:true` required. 409 `BUYER_BLOCKED` for SUSPENDED/STRUCK_OFF; UNDER_LIQUIDATION returns 200 with `requiresManualReview:true` (LT-02) |
-| GET /buyers/{id} | 3 | — | mock | 404 (not 403) unless the caller has a relationship with the buyer. Carries **no contact data** — that lives on the relationship (ZM-BUY-008) |
-| POST /documents/upload-url | 3 | — | mock | **200**, not 201. PUT the file to `uploadUrl` yourself; there is no finalize call — hashing and OCR run lazily on first extraction read or at submit |
-| GET /documents/{id}/download-url | 3 | — | mock | authorization checked **before** any URL is issued (ZM-DOC-004); refusal is 404, not 403. URL lives 2 minutes |
-| GET /documents/{id}/extraction | 3 | — | mock | first call triggers hashing + OCR (slow, ~2-5s). `qr.validationStatus`: `VALID`/`INVALID`/`UNPARSED`/`UNAVAILABLE` — **UNAVAILABLE means no QR on the page**, UNPARSED means one we could not read |
-| GET/POST /transactions | 3 | — | mock | POST is 201 and takes no body. `referenceNumber` is `ZM-<n>` |
-| GET /transactions/{id} | 3 | — | mock | body varies by audience: supplier/platform get `minimumAcceptableAmount`, a bank never does (INV-8) |
-| PUT …/{id}/invoice | 3 | — | mock | `outstandingAmount` recomputed server-side, never accepted. Money must be 3-dp strings. Editable in DRAFT / INFORMATION_REQUIRED only (409 otherwise) |
-| PUT …/{id}/buyer | 3 | — | mock | the buyer must have been resolved by this supplier first, else 422 |
-| PUT …/{id}/minimum-amount | 3 | — | mock | 422 when above `outstandingAmount`; the error deliberately does **not** echo the floor back |
-| POST …/{id}/declarations | 3 | — | mock | 201. All eight must be true; a false one is **422** with `details.notAffirmed[]` naming which |
-| POST …/{id}/submit | 3 | — | mock | **200**, not 201. 409 `DUPLICATE_INVOICE` with `details.reviewReference` on a fingerprint collision (ZM-VER-001) |
-| GET …/{id}/verification | 3 | — | mock | all 8 checks always recorded, passes included. `NOT_APPLICABLE` is not `PASS` |
+| GET /buyers/search | 3 | — | mock | wizard step 1 · returns `{candidates[], requiresManualReview}`; **never a selection** (ZM-BUY-009). `candidates[].matchSource` is `OWN_RELATIONSHIP`/`PLATFORM`/`REGISTRY` |
+| POST /buyers/resolve | 3 | — | mock | wizard step 1 · **200**, not 201. `confirmedByUser:true` required. 409 `BUYER_BLOCKED` for SUSPENDED/STRUCK_OFF; UNDER_LIQUIDATION returns 200 with `requiresManualReview:true` (LT-02) |
+| GET /buyers/{id} | 3 | — | mock | handler exists; screens read the buyer off the transaction. 404 (not 403) without a relationship; carries **no contact data** (ZM-BUY-008) |
+| POST /documents/upload-url | 3 | — | mock | wizard steps 2–3 · **200**, not 201. PUT the file to `uploadUrl` yourself; no finalize call — hashing and OCR run lazily on first extraction read or at submit. Byte upload deliberately skipped under MSW |
+| GET /documents/{id}/download-url | 3 | — | mock | no screen consumes it yet (needs the document list, **see Q-12**). Authorization checked **before** any URL is issued (ZM-DOC-004); refusal is 404; URL lives 2 minutes |
+| GET /documents/{id}/extraction | 3 | — | mock | wizard step 2 (pre-fill + mismatch table) · first call triggers hashing + OCR (~2–5s). `qr.validationStatus`: `VALID`/`INVALID`/`UNPARSED`/`UNAVAILABLE` — **UNAVAILABLE means no QR on the page**, UNPARSED means one we could not read |
+| GET/POST /transactions | 3 | — | mock | supplier transaction list; POST creates the wizard draft — 201, no body. `referenceNumber` is `ZM-<n>` |
+| GET /transactions/{id} | 3 | — | mock | transaction detail · body varies by audience: supplier/platform get `minimumAcceptableAmount`, a bank never does (INV-8) |
+| PUT …/{id}/invoice | 3 | — | mock | wizard step 2 · `outstandingAmount` recomputed server-side, never accepted. Money is 3-dp strings. Editable in DRAFT / INFORMATION_REQUIRED only (409 otherwise) |
+| PUT …/{id}/buyer | 3 | — | mock | wizard step 1 · the buyer must have been resolved by this supplier first, else 422 |
+| PUT …/{id}/minimum-amount | 3 | — | mock | wizard step 4 · 422 when above `outstandingAmount`; the error deliberately does **not** echo the floor back |
+| POST …/{id}/declarations | 3 | — | mock | wizard step 5 · 201. All eight must be true; a false one is **422** with `details.notAffirmed[]` naming which · **template version provisional, see Q-13** |
+| POST …/{id}/submit | 3 | — | mock | wizard step 6 · **200**, not 201. 409 `DUPLICATE_INVOICE` with `details.reviewReference` → blocked screen (ZM-VER-001, Q-11 resolved by that key) |
+| GET …/{id}/verification | 3 | — | mock | verification panel · all 8 checks always recorded, passes included. `NOT_APPLICABLE` is not `PASS` |
 | GET …/{id}/risk | 4 | — | mock | |
 | GET/POST /admin/risk-models | 4 | — | mock | |
 | POST …/{id}/listing | 5 | — | mock | |
