@@ -44,7 +44,7 @@ Phase 1 checkpoint (auth/context live) · D-04/D-05 rulings (v3.1.0 approved).
 
 ## Integration checkpoint
 
-Live end to end on the deployed stack: register → wizard → submit (SLA starts) → reviewer requests information (clock pauses; supplier sees paused + reason) → supplier responds (clock resumes) → reviewer approves → org ACTIVE. Government fields render with CCD badge from a real dummy-adapter snapshot. Failure drill: inject GAM unavailability → application enters `GOVERNMENT_SERVICE_UNAVAILABLE`, clock paused, nothing rendered adverse.
+Live end to end on the deployed stack: register → wizard → submit (SLA starts) → reviewer requests information (clock pauses; supplier sees paused + reason) → supplier responds (clock resumes) → reviewer approves → org ACTIVE. Government fields render with CCD badge from a real dummy-adapter snapshot. Failure drill: inject **ISTD** unavailability (S3 Jordan Valley Foods — `GOV_DUMMY_DATA.md` §2 assigns the outage scenario to S3's ISTD; that identity file is authoritative, and this line originally said GAM in error) → application enters `GOVERNMENT_SERVICE_UNAVAILABLE`, clock paused, nothing rendered adverse.
 
 ## Definition of done
 

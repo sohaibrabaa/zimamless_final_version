@@ -208,3 +208,28 @@ NEEDS FROM A:
 3. **Q-10**: please add a sole-proprietorship case to `GOV_DUMMY_DATA.md` — §5 key `90000006` is my recommendation and what I currently use. Adding is explicitly allowed by that file; I did not edit it, since it is yours.
 4. **S3 Jordan Valley Foods needs an organization id.** GOV_DUMMY §2 marks it "no (Phase 1 seed)", so its name and establishment number are frozen but it is not in `0100_seed_dev.sql` yet. I am using the placeholder `0e000000-0000-4000-8000-000000000007`, marked as such in `onboarding-store.ts`. Tell me the real id when you seed it — it is the single value in that file that has to be reconciled.
 5. Thank you for the multi-org persona, K2, B4–B6 and the passthrough fix — the last of those is the mechanism the whole mock-first strategy rests on, and it is now exercised by 14 more endpoints.
+
+## 2026-07-23 — Phase 2 unification session (both halves, single session)
+Scope: the Phase 2 audit's fix list (docs/plan/12_PHASE_2_FIX_PROMPT.md), all 24 items. Ownership boundaries suspended for this session only.
+
+CROSS-HALF RECONCILIATION — the five places the two halves had quietly diverged, now agreed and validated:
+- **governmentData (Q-05 closed):** the client reads the server's real shape `{value, sourceKind, source, retrievedAt}`; the `verificationStatus` field it used to expect never existed. Mock store emits the same shape.
+- **Reason codes (Q-06 closed):** one catalogue, two families — 13 reviewer-selectable codes + 7 automated hard-rejection codes. Server validates reviewer input against the reviewer set (422 otherwise); automated codes are not reviewer-suppliable. The ineligibility screen now triggers on `SOLE_PROPRIETORSHIP_NOT_ELIGIBLE` — the code live data actually carries.
+- **Consents (Q-09 closed):** the wizard's four are canonical (`GOVERNMENT_LOOKUP_AUTHORIZATION`, `BANK_DISCLOSURE_AUTHORIZATION`, `TERMS_OF_SERVICE`, `PRIVACY_POLICY` @ "1.0"). Server whitelist on …/consents; …/submit now refuses with `CONSENTS_REQUIRED` until all four are granted; seed vocabulary updated.
+- **slaPausedReason (Q-07 closed):** client maps the server's `INFORMATION_REQUESTED` / `GOVERNMENT_SERVICE_UNAVAILABLE`.
+- **governmentRequests (Q-08 closed):** application detail now carries the per-source request list (latest per source, `sourceAvailable` included), so the failure drill can say WHICH source went quiet. Q-10 closed via S4 `20000104`; the mock's `90000006` placeholder is gone. The phase file's failure drill now says ISTD, matching GOV_DUMMY_DATA §2.
+
+BACKEND (A's half):
+- **The outage-recovery path is reachable** — a successful `POST /government/lookup` for an application paused on `GOVERNMENT_SERVICE_UNAVAILABLE` re-runs automated verification and resumes (or legally re-pauses). No new endpoint; ZM-GOV-006's no-scheduled-sweeps rule holds.
+- **Government endpoints are access-gated** (the audit's security finding): platform roles see everything; anyone else may look up and read only their own establishment number; everything else is the same 404 as not-existing. Any-authenticated-user could previously read any company's registry snapshot by request id.
+- `respond` refuses non-empty `documentIds` loudly (422) until Phase 3 documents exist — previously silently discarded. `EINVOICE` refused by name (no adapter). Register 409s when the same account sends a *different* establishment number instead of silently echoing the first org. Consents/bank-account writes are state-gated (409 outside DRAFT / INFORMATION_REQUIRED). Production refuses to boot with the published dev `ENCRYPTION_KEY`, not just with none. `FINAL_REVIEW` documented as reserved-not-reachable in the machine and the DTO.
+
+FRONTEND (B's half):
+- Mock handlers' API_BASE fallback fixed to 3000 (was 3001 — with the env var unset every mock silently missed while the client called 3000).
+- Mock `decide` enforces the live transition whitelist and returns the same 409 `INVALID_STATE_TRANSITION`; mock submit lands on `UNDER_REVIEW` (live's observable post-submit state, not the transient `AUTOMATED_VERIFICATION`). NOT_FOUND now modelled on all three sources for a `90000002` identity. Wizard has real copy for `VALIDATION_FAILED`/`INVALID_STATE_TRANSITION` in both locales. Two stale Q-09 comments corrected to Q-05.
+
+SEEDS: S1's consents re-seeded in the canonical vocabulary; S3 Jordan Valley Foods inserted with the fixture org id `0e000000-…-0007` on fresh databases (the hosted row keeps its random id — re-pointing a PK across every FK is not worth it; noted in the seed).
+
+VERIFICATION: 154 API tests (was 129; new suites: onboarding-guards, government-access), 41 web tests (was 38), lint/typecheck all workspaces, i18n parity 274 keys both locales, `next build`, frozen-schema drift check, conformance gate — all green. `db:verify` and the RLS suite re-run against the hosted project after the seed re-apply.
+
+STILL OPEN: deployment. Unchanged, still the project's #1 risk, still not resolvable from a session. Q-01..Q-04 remain as they were.

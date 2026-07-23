@@ -28,7 +28,7 @@
 | Consents; information requests + `respond` (SLA pause/resume); reviewer `decide` with reason codes | ✅ done | Full cycle driven live: request → PAUSE → respond → RESUME → approve → org ACTIVE. |
 | `GET /onboarding/applications-list` (D-05): supplier sees own, reviewer sees queue + filter + pagination | ✅ done | Live: reviewer sees all 5, supplier sees 1; `?status=` filter verified. |
 | `GOVERNMENT_SERVICE_UNAVAILABLE` wiring: pause clock, never adverse | ✅ done | Live: S3's ISTD outage → paused, `slaDeadlineAt: null`, no adverse content. The state has no transition to REJECTED at all. |
-| Seed: applications in assorted states incl. one paused on information-required | ✅ done | `db/seed/0200_seed_phase2.sql`, applied. Five applications spanning every interesting state, plus 12 holidays. |
+| Seed: applications in assorted states incl. one paused on information-required | ✅ done | `db/seed/0200_seed_phase2.sql`, applied. ~~Five applications spanning every interesting state~~ **Corrected by the Phase 2 audit:** the seed file inserts **2** applications with fixed ids; the other 3 in the queue are residue of live verification runs with random ids (per the seed's own §4 comment) — real rows, but not seeded fixtures. Plus 12 holidays. |
 | **Deploy the API (carried from Phase 1)** | ⛔ **not done** | No hosting account. Everything else in the runbook executed and corrected — §4.4, §8. |
 
 ## 2. Endpoints — live smoke results
@@ -184,7 +184,8 @@ return, so the gate's body-comparison gap did not widen.
 ## 7. Handoff notes for the other agent
 
 Everything material is in the daily-log entry for 2026-07-23, which Agent B
-should read in full. The five that most affect the UI:
+should read in full. The six that most affect the UI (*audit correction: this
+list said "five" while introducing six items*):
 
 1. A paused SLA has **no** `slaDeadlineAt` — render the paused state and
    remaining time, never a date.

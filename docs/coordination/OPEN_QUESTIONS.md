@@ -68,7 +68,7 @@ Options considered:
 Recommendation: **Option 2.** It is additive (any object satisfying it already satisfies the frozen schema), it is a literal transcription of ZM-GOV-002, and it is the only option that makes the source badge deterministic.
 Interim behaviour (does not pre-empt the ruling): B parses `governmentData` through a single adapter, `apps/web/lib/onboarding/government.ts`, which accepts the Option-2 shape and degrades to a value-only, badge-less render for anything else. If the ruling differs, exactly one file changes.
 Needed by: Phase 2 integration checkpoint
-Status: OPEN
+Status: **RESOLVED** (Phase 2 unification session, 2026-07-23). The server shape is the answer: one entry per field, `{value, sourceKind, source, retrievedAt}`, `sourceKind ∈ GOVERNMENT | SELF_DECLARED | DERIVED`. The client adapter (`apps/web/lib/onboarding/government.ts`) now reads exactly this; the mock store emits it.
 
 ## Q-06 — No structured catalogue for `decisionReasonCode`
 Raised by: Agent B, 2026-07-23, blocking: not blocking (reviewer form ships with a documented provisional list)
@@ -80,7 +80,7 @@ Options considered:
 Recommendation: **Option 2** — a decisions-log catalogue, no contract change needed since the field is already `string`.
 Interim behaviour: B ships the provisional list in `apps/web/lib/onboarding/reason-codes.ts`, derived verbatim from ZM-SON-012/013, with EN+AR supplier-facing copy. A's accepted values must match or the decide call will 422 at integration.
 Needed by: Phase 2 integration checkpoint
-Status: OPEN
+Status: **RESOLVED** (Phase 2 unification session, 2026-07-23). Unified catalogue in `apps/api/src/modules/onboarding/decision-catalogue.ts`, mirrored by `apps/web/lib/onboarding/reason-codes.ts`: 13 reviewer-selectable codes plus 7 automated codes the hard-rejection rules emit. The server now validates reviewer-supplied codes against the reviewer set (422 otherwise); automated codes are not reviewer-suppliable.
 
 ## Q-07 — `slaPaused` carries no pause reason, so the required "paused with reason" UI has no source
 Raised by: Agent B, 2026-07-23, blocking: not blocking (reason is inferred from `status`)
@@ -91,7 +91,7 @@ Options considered:
 Recommendation: **Option 2**, with Option 1 as the fallback render when the field is absent.
 Interim behaviour: B implements Option 1 keyed off `status` and reads `slaPausedReason` when present, so no change is needed if the field lands.
 Needed by: Phase 2 integration checkpoint
-Status: OPEN
+Status: **RESOLVED** (Phase 2 unification session, 2026-07-23). The server sends `slaPausedReason ∈ INFORMATION_REQUESTED | GOVERNMENT_SERVICE_UNAVAILABLE`; the client maps both (and falls back to status inference for older payloads).
 
 ## Q-08 — No way to list the government lookups belonging to an application
 Raised by: Agent B, 2026-07-23, blocking: not blocking (per-source panel driven from `governmentData`)
@@ -103,7 +103,7 @@ Options considered:
 Recommendation: **Option 1** — one round trip, and it keeps the reviewer detail screen a single GET.
 Interim behaviour: B's `GovernmentSourcePanel` reads `application.governmentRequests` when present and otherwise reconstructs one row per source seen in `governmentData`, rendering unseen sources as a neutral "not yet retrieved" — never as adverse. Option 3's weakness is therefore visible in the UI, not hidden.
 Needed by: Phase 2 integration checkpoint (the GAM-unavailable failure drill cannot be demonstrated without it)
-Status: OPEN
+Status: **RESOLVED** (Phase 2 unification session, 2026-07-23). The application detail body now carries `governmentRequests[]` (id, source, status, sourceAvailable, retrievedAt, validUntil) — latest request per source — additively inside the object the overlay already extends. The per-source panel and the ISTD failure drill read it. Related: the outage-recovery path is now reachable — a successful POST /government/lookup for a paused application re-runs verification and resumes the clock.
 
 ## Q-09 — Consent types and versions are supplied by the client with no catalogue
 Raised by: Agent B, 2026-07-23, blocking: not blocking (provisional catalogue in the wizard)
@@ -114,7 +114,7 @@ Options considered:
 Recommendation: **Option 1** for the competition build — the set is static and versioned by document revision, not by runtime state.
 Interim behaviour: `apps/web/lib/onboarding/consents.ts` holds the provisional four codes at version `1.0`, all flagged essential per ZM-SON-012, with EN+AR copy. A's accepted set must match.
 Needed by: Phase 2 integration checkpoint
-Status: OPEN
+Status: **RESOLVED** (Phase 2 unification session, 2026-07-23). The client four are canonical: GOVERNMENT_LOOKUP_AUTHORIZATION, BANK_DISCLOSURE_AUTHORIZATION, TERMS_OF_SERVICE, PRIVACY_POLICY, version "1.0". Server-side whitelist on …/consents; …/submit refuses with CONSENTS_REQUIRED until all four are granted; seeds updated to the same vocabulary.
 
 ## Q-10 — No frozen identity or injection key for a sole proprietorship, which ZM-SON-013 requires
 Raised by: Agent B, 2026-07-23, blocking: not blocking (local placeholder key, see below)
@@ -127,4 +127,4 @@ Recommendation: **Option 2**, on the grounds that §5 already exists precisely f
 Note: GOV_DUMMY_DATA.md says adding is fine and only renaming/renumbering breaks the other agent — so this is an addition request, not an amendment.
 Interim behaviour: `apps/web/lib/mocks/onboarding-store.ts` uses `90000006` for this case, named `SOLE_PROPRIETORSHIP_KEY_PENDING_RULING` and commented as a local extension rather than a shared convention. If A picks a different key or seeds S4 instead, one constant changes.
 Needed by: Phase 2 integration checkpoint (the ineligibility screen cannot otherwise be demonstrated against live data)
-Status: OPEN
+Status: **RESOLVED** (Phase 2, Agent A + unification session). The answer is identity **S4 20000104 — Hani Auto Parts Establishment** (GOV_DUMMY_DATA.md §2), not a 9000000x injection key. The mock store now uses S4; the 90000006 placeholder is deleted.
