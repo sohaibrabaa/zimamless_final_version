@@ -1,18 +1,19 @@
 /**
  * Adapter for the free-form `SupplierApplication.governmentData` object.
  *
- * The frozen contract types it `additionalProperties: true`, which is not
- * enough to render the source badge + retrieval date the brief (§5) and
- * ZM-GOV-002 require. Escalated as **Q-05** in
- * docs/coordination/OPEN_QUESTIONS.md; the recommended shape is one entry per
- * field carrying `value`/`source`/`retrievedAt`/`verificationStatus`/
- * `evidenceRef`/`sourceReference`.
+ * The frozen contract types it `additionalProperties: true`; the shape the
+ * server actually sends — settled by the Phase 2 unification session, closing
+ * **Q-05** — is one entry per field:
  *
- * Until that is ruled on, this module is the ONLY place that knows the
- * payload shape. It accepts the recommended shape, degrades to a value-only
- * (badge-less) render for anything else, and never throws on unexpected
- * input. If the ruling lands with a different shape, this file changes and
- * nothing else does.
+ *   { value, sourceKind, source, retrievedAt }
+ *
+ * with `sourceKind ∈ GOVERNMENT | SELF_DECLARED | DERIVED` (DB enum
+ * `data_source_kind`) and `source ∈ CCD | ISTD | GAM | EINVOICE` for
+ * GOVERNMENT rows, null for SELF_DECLARED.
+ *
+ * This module remains the ONLY place that knows the payload shape. It accepts
+ * that shape, degrades to a value-only (badge-less) render for anything else,
+ * and never throws on unexpected input.
  */
 
 export const GOVERNMENT_SOURCES = ["CCD", "ISTD", "GAM", "EINVOICE"] as const;
@@ -23,7 +24,7 @@ export function isGovernmentSource(value: unknown): value is GovernmentSource {
 }
 
 /** ZM-SON-004: government values and self-declared values coexist; neither overwrites the other. */
-export type VerificationStatus = "GOVERNMENT_VERIFIED" | "SELF_DECLARED" | "UNVERIFIED";
+export type SourceKind = "GOVERNMENT" | "SELF_DECLARED" | "DERIVED";
 
 export interface GovernmentField {
   /** Field key as returned by the API, e.g. "legalCompanyName". */
@@ -35,9 +36,7 @@ export interface GovernmentField {
   value: string | null;
   source: GovernmentSource | null;
   retrievedAt: string | null;
-  verificationStatus: VerificationStatus | null;
-  sourceReference: string | null;
-  evidenceRef: string | null;
+  sourceKind: SourceKind | null;
 }
 
 function asString(value: unknown): string | null {
@@ -51,19 +50,17 @@ function asString(value: unknown): string | null {
   return null;
 }
 
-function asVerificationStatus(value: unknown): VerificationStatus | null {
-  return value === "GOVERNMENT_VERIFIED" || value === "SELF_DECLARED" || value === "UNVERIFIED"
-    ? value
-    : null;
+function asSourceKind(value: unknown): SourceKind | null {
+  return value === "GOVERNMENT" || value === "SELF_DECLARED" || value === "DERIVED" ? value : null;
 }
 
-/** True for `{ value, source, retrievedAt, ... }`-shaped entries (Q-05 option 2). */
+/** True for `{ value, sourceKind, source, retrievedAt }`-shaped entries (the Q-05 answer). */
 function isProvenanceEntry(entry: unknown): entry is Record<string, unknown> {
   return (
     typeof entry === "object" &&
     entry !== null &&
     !Array.isArray(entry) &&
-    ("value" in entry || "source" in entry)
+    ("value" in entry || "source" in entry || "sourceKind" in entry)
   );
 }
 
@@ -75,9 +72,7 @@ export function normalizeGovernmentField(name: string, entry: unknown): Governme
       value: asString(entry),
       source: null,
       retrievedAt: null,
-      verificationStatus: null,
-      sourceReference: null,
-      evidenceRef: null,
+      sourceKind: null,
     };
   }
   return {
@@ -85,9 +80,7 @@ export function normalizeGovernmentField(name: string, entry: unknown): Governme
     value: asString(entry.value),
     source: isGovernmentSource(entry.source) ? entry.source : null,
     retrievedAt: asString(entry.retrievedAt),
-    verificationStatus: asVerificationStatus(entry.verificationStatus),
-    sourceReference: asString(entry.sourceReference),
-    evidenceRef: asString(entry.evidenceRef),
+    sourceKind: asSourceKind(entry.sourceKind),
   };
 }
 

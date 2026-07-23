@@ -100,7 +100,9 @@
       "licenceIntro": "Licence details retrieved from the licensing authority.",
       "submit": "Submit for review",
       "submitNotice": "Submitting starts the 24 business-hour review target.",
-      "submitted": "Application submitted for review."
+      "submitted": "Application submitted for review.",
+      "validationFailed": "Something in this step wasn't accepted. Check the highlighted fields and try again.",
+      "invalidState": "This application can't be changed in its current state. Refresh to see its latest status."
     },
     "consents": {
       "intro": "All of the following are required before your application can be reviewed.",
@@ -352,6 +354,34 @@
       "OPERATIONAL_ITEM_OUTSTANDING": {
         "label": "Operational item outstanding",
         "supplier": "One non-material item is still outstanding. Financing actions become available once it's cleared."
+      },
+      "ENTITY_NOT_FOUND_IN_REGISTRY": {
+        "label": "Not found in the registry (automated)",
+        "supplier": "We couldn't find a registry record for the establishment number provided. Please check the number and apply again."
+      },
+      "SOLE_PROPRIETORSHIP_NOT_ELIGIBLE": {
+        "label": "Sole proprietorship (automated)",
+        "supplier": "Sole proprietorships can't be verified through the company registry in this version of the platform, so we can't complete onboarding for this establishment type yet."
+      },
+      "REGISTRY_STATUS_SUSPENDED": {
+        "label": "Registry status: suspended (automated)",
+        "supplier": "The registry currently shows this company as suspended. Once the registry record is active again, you're welcome to apply."
+      },
+      "REGISTRY_STATUS_STRUCK_OFF": {
+        "label": "Registry status: struck off (automated)",
+        "supplier": "The registry currently shows this company as struck off. If the registry record is reinstated, you're welcome to apply."
+      },
+      "REGISTRY_STATUS_UNDER_LIQUIDATION": {
+        "label": "Registry status: under liquidation (automated)",
+        "supplier": "The registry shows this company as being in liquidation proceedings, which we can't onboard."
+      },
+      "LICENCE_SUSPENDED": {
+        "label": "Licence suspended (automated)",
+        "supplier": "The licensing authority shows this profession licence as suspended. Once it's active again, you're welcome to apply."
+      },
+      "LICENCE_CANCELLED": {
+        "label": "Licence cancelled (automated)",
+        "supplier": "The licensing authority shows this profession licence as cancelled. With a valid licence, you're welcome to apply."
       }
     }
   }

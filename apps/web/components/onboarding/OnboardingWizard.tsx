@@ -115,7 +115,11 @@ export function OnboardingWizard({
       setError(
         code === "CONSENTS_REQUIRED"
           ? t("onboarding.consents.allRequired")
-          : t("common.unknownError")
+          : code === "VALIDATION_FAILED"
+            ? t("onboarding.wizard.validationFailed")
+            : code === "INVALID_STATE_TRANSITION"
+              ? t("onboarding.wizard.invalidState")
+              : t("common.unknownError")
       );
     } finally {
       setBusy(false);

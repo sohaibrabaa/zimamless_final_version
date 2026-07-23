@@ -47,7 +47,10 @@ describe("onboarding state machine (§5.5)", () => {
     const application = readySupplierApplication();
     submitApplication(application.id!);
 
-    expect(application.status).toBe("AUTOMATED_VERIFICATION");
+    // Live presents UNDER_REVIEW after submit — SUBMITTED and
+    // AUTOMATED_VERIFICATION are transient inside the request and never
+    // observable in a response, so the mock lands where live answers.
+    expect(application.status).toBe("UNDER_REVIEW");
     expect(application.slaPaused).toBe(false);
     expect(application.slaRemainingBusinessSeconds).toBe(24 * 60 * 60);
   });
@@ -64,7 +67,9 @@ describe("onboarding state machine (§5.5)", () => {
 
     expect(application.status).toBe("INFORMATION_REQUIRED");
     expect(application.slaPaused).toBe(true);
-    expect(application.slaPausedReason).toBe("INFORMATION_REQUIRED");
+    // The live reason vocabulary: INFORMATION_REQUESTED is the *reason*,
+    // distinct from the INFORMATION_REQUIRED *status* (Q-07 resolution).
+    expect(application.slaPausedReason).toBe("INFORMATION_REQUESTED");
     expect(application.informationRequests).toHaveLength(1);
     expect(application.informationRequests?.[0].status).toBe("OPEN");
   });
@@ -89,6 +94,38 @@ describe("onboarding state machine (§5.5)", () => {
     expect(application.status).toBe("APPROVED");
     expect(application.slaPaused).toBe(false);
     expect(application.slaRemainingBusinessSeconds).toBe(0);
+  });
+
+  it("refuses decisions the live transition whitelist refuses", () => {
+    // The mock must 409 exactly where live 409s, or a screen built against
+    // the mock will attempt transitions the real API rejects.
+    const draft = readySupplierApplication();
+    expect(decideApplication(draft.id!, "APPROVED")).toMatchObject({
+      ok: false,
+      error: "INVALID_STATE_TRANSITION",
+    });
+
+    submitApplication(draft.id!);
+    decideApplication(draft.id!, "APPROVED");
+    // Terminal states accept nothing further.
+    expect(decideApplication(draft.id!, "REJECTED")).toMatchObject({
+      ok: false,
+      error: "INVALID_STATE_TRANSITION",
+    });
+  });
+
+  it("permits only outright rejection while information is outstanding", () => {
+    const application = readySupplierApplication();
+    submitApplication(application.id!);
+    decideApplication(application.id!, "INFORMATION_REQUIRED", "ESSENTIAL_FIELD_MISSING");
+
+    expect(decideApplication(application.id!, "APPROVED")).toMatchObject({
+      ok: false,
+      error: "INVALID_STATE_TRANSITION",
+    });
+    expect(decideApplication(application.id!, "REJECTED", "COMPANY_NOT_ACTIVE")).toMatchObject({
+      ok: true,
+    });
   });
 });
 

@@ -81,18 +81,27 @@ describe("ZM-SON-011 financing gate", () => {
 });
 
 describe("government provenance normalization (the Q-05 adapter)", () => {
-  it("reads source and retrieval date from a provenance-shaped entry", () => {
+  it("reads the server's exact shape: value, sourceKind, source, retrievedAt", () => {
     const [field] = normalizeGovernmentData({
       legalCompanyName: {
         value: "Al-Noor Trading Company",
+        sourceKind: "GOVERNMENT",
         source: "CCD",
         retrievedAt: "2026-07-20T09:14:00.000Z",
-        verificationStatus: "GOVERNMENT_VERIFIED",
       },
     });
     expect(field.value).toBe("Al-Noor Trading Company");
     expect(field.source).toBe("CCD");
     expect(field.retrievedAt).toBe("2026-07-20T09:14:00.000Z");
+    expect(field.sourceKind).toBe("GOVERNMENT");
+  });
+
+  it("distinguishes self-declared entries by sourceKind, with no source badge", () => {
+    const [field] = normalizeGovernmentData({
+      registeredContacts: { value: "info@alnoor.jo", sourceKind: "SELF_DECLARED", source: null },
+    });
+    expect(field.sourceKind).toBe("SELF_DECLARED");
+    expect(field.source).toBeNull();
   });
 
   it("degrades a bare value to a badge-less field rather than guessing a source", () => {

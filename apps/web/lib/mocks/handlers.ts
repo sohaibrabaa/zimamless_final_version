@@ -13,7 +13,11 @@ import {
   submitApplication,
 } from "./onboarding-store";
 
-const API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:3001/v1";
+// Fallback must match lib/api/client.ts exactly: the API owns port 3000
+// (the contract's servers block names it; the web dev server is the one on
+// 3001). A split here makes MSW intercept URLs the client never requests,
+// and every mock silently misses.
+const API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:3000/v1";
 
 /**
  * /health is served at the server root, outside the /v1 prefix, and is
@@ -297,10 +301,14 @@ export const handlers = [
         { status: 403 }
       );
     }
-    const updated = decideApplication(String(params.id), body.decision, body.reasonCode, body.notes);
-    return updated
-      ? new HttpResponse(null, { status: 200 })
-      : HttpResponse.json(errorBody("NOT_FOUND", "Application not found"), { status: 404 });
+    const result = decideApplication(String(params.id), body.decision, body.reasonCode, body.notes);
+    if (result.ok) return new HttpResponse(null, { status: 200 });
+    return result.error === "NOT_FOUND"
+      ? HttpResponse.json(errorBody("NOT_FOUND", "Application not found"), { status: 404 })
+      : HttpResponse.json(
+          errorBody("INVALID_STATE_TRANSITION", "The application cannot be decided in its current state."),
+          { status: 409 }
+        );
   }),
 
   // -------------------------------------------------------------------

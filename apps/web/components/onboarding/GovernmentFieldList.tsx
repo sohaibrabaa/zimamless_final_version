@@ -53,17 +53,12 @@ export function GovernmentFieldList({ fields }: { fields: GovernmentField[] }) {
                 {field.source && (
                   <Badge tone="info">{t(`onboarding.government.source.${field.source}`)}</Badge>
                 )}
-                {field.verificationStatus === "SELF_DECLARED" && (
+                {field.sourceKind === "SELF_DECLARED" && (
                   <Badge tone="neutral">{t("onboarding.government.selfDeclared")}</Badge>
                 )}
                 {retrieved && (
                   <span className="text-xs text-(--color-muted)">
                     {t("onboarding.government.retrievedOn", { date: retrieved })}
-                  </span>
-                )}
-                {field.sourceReference && (
-                  <span className="zm-ltr-embed text-xs text-(--color-muted)">
-                    {field.sourceReference}
                   </span>
                 )}
               </div>

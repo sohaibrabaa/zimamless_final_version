@@ -15,8 +15,9 @@
  * whole point of the shared identity list: after an endpoint goes live the
  * screen should show the same names and numbers it showed a minute earlier.
  *
- * Government payloads follow the shape recommended in **Q-09**; if the ruling
- * differs, this file and lib/onboarding/government.ts change together.
+ * Government payloads use the server's real shape — `{value, sourceKind,
+ * source, retrievedAt}` — the **Q-05** resolution. If that ever changes, this
+ * file and lib/onboarding/government.ts change together.
  */
 
 import type { components } from "@/lib/api/generated/schema";
@@ -27,13 +28,12 @@ type SupplierApplication = components["schemas"]["SupplierApplication"];
 type InformationRequest = components["schemas"]["InformationRequest"];
 type GovernmentRequest = components["schemas"]["GovernmentRequest"];
 
-/** Q-09 recommended per-field provenance entry. */
+/** Per-field provenance entry, exactly as the live API sends it (Q-05). */
 interface GovField {
   value: string | string[] | null;
-  source: GovernmentSource;
+  sourceKind: "GOVERNMENT" | "SELF_DECLARED" | "DERIVED";
+  source: GovernmentSource | null;
   retrievedAt: string;
-  verificationStatus: "GOVERNMENT_VERIFIED" | "SELF_DECLARED" | "UNVERIFIED";
-  sourceReference?: string;
 }
 
 export interface MockApplication extends SupplierApplication {
@@ -64,24 +64,19 @@ const ORG_JORDAN_VALLEY_PENDING_SEED = "0e000000-0000-4000-8000-000000000007";
 const RETRIEVED_AT = "2026-07-20T09:14:00.000Z";
 const VALID_UNTIL = "2026-10-18T09:14:00.000Z";
 
-function gov(
-  value: string | string[] | null,
-  source: GovernmentSource,
-  sourceReference?: string
-): GovField {
+function gov(value: string | string[] | null, source: GovernmentSource): GovField {
   return {
     value,
+    sourceKind: "GOVERNMENT",
     source,
     retrievedAt: RETRIEVED_AT,
-    verificationStatus: "GOVERNMENT_VERIFIED",
-    sourceReference,
   };
 }
 
 function ccdBlock(name: string, establishmentNo: string, type: string, status: string) {
   return {
-    legalCompanyName: gov(name, "CCD", `CCD/${establishmentNo}`),
-    companyNumber: gov(`CR-${establishmentNo}`, "CCD", `CCD/${establishmentNo}`),
+    legalCompanyName: gov(name, "CCD"),
+    companyNumber: gov(`CR-${establishmentNo}`, "CCD"),
     companyType: gov(type, "CCD"),
     registryStatus: gov(status, "CCD"),
     registrationDate: gov("2016-03-14", "CCD"),
@@ -103,7 +98,7 @@ function istdBlock(establishmentNo: string) {
 
 function gamBlock(licence: string, status: string, expiry: string) {
   return {
-    licenceNumber: gov(licence, "GAM", `GAM/${licence}`),
+    licenceNumber: gov(licence, "GAM"),
     licenceStatus: gov(status, "GAM"),
     licenceActivity: gov("General trading", "GAM"),
     licenceExpiryDate: gov(expiry, "GAM"),
@@ -173,13 +168,13 @@ function seedApplications(): MockApplication[] {
       slaDeadlineAt: "2026-07-27T10:00:00.000Z",
       slaRemainingBusinessSeconds: 30_600,
       slaPaused: true,
-      slaPausedReason: "INFORMATION_REQUIRED",
+      slaPausedReason: "INFORMATION_REQUESTED",
       governmentData: {
         ...ccdBlock("Petra Industrial Supplies", "20000102", "LIMITED_LIABILITY", "ACTIVE"),
         ...istdBlock("20000102"),
         // GAM partial: the licence exists, the detail fields do not. Blank is
         // normal and not adverse (ZM-GOV-003).
-        licenceNumber: gov("ZRQ-2019-8812", "GAM", "GAM/ZRQ-2019-8812"),
+        licenceNumber: gov("ZRQ-2019-8812", "GAM"),
         licenceStatus: gov("ACTIVE", "GAM"),
         licenceActivity: gov(null, "GAM"),
         licenceExpiryDate: gov(null, "GAM"),
@@ -269,11 +264,13 @@ export function findApplicationByOrganization(organizationId: string): MockAppli
  * identical-looking absences, one of which must never count against the
  * supplier. Both are reachable from the bootstrap form.
  *
- * ZM-SON-013 (sole proprietorship) has **no frozen identity or injection key**
- * — raised as Q-10. Until one exists, `90000006` stands in and is marked here
- * as a local extension, not a shared convention.
+ * ZM-SON-013 (sole proprietorship): the frozen answer to Q-10 is identity
+ * **S4 `20000104` — Hani Auto Parts Establishment** (GOV_DUMMY_DATA.md §2),
+ * an identity rather than a 9000000x injection key, added by Agent A in
+ * Phase 2. The dummy CCD returns SOLE_PROPRIETORSHIP for it, which is what
+ * triggers the hard rejection on both halves.
  */
-const SOLE_PROPRIETORSHIP_KEY_PENDING_RULING = "90000006";
+const SOLE_PROPRIETORSHIP_ESTABLISHMENT = "20000104";
 
 export function bootstrapApplication(
   nationalEstablishmentNumber: string,
@@ -288,11 +285,9 @@ export function bootstrapApplication(
   const sourceDown = key === "90000001";
   const notFound = key === "90000002";
   const partial = key === "90000003";
-  const soleProprietorship = key === SOLE_PROPRIETORSHIP_KEY_PENDING_RULING;
+  const soleProprietorship = key === SOLE_PROPRIETORSHIP_ESTABLISHMENT;
 
-  const name = soleProprietorship
-    ? `Establishment ${key}`
-    : `Company ${key}`;
+  const name = soleProprietorship ? "Hani Auto Parts Establishment" : `Company ${key}`;
 
   const application: MockApplication = {
     id: nextId("a"),
@@ -317,14 +312,17 @@ export function bootstrapApplication(
           ...(partial ? {} : gamBlock(professionLicenceNumber, "ACTIVE", "2027-06-30")),
         },
     governmentRequests: [
+      // A NOT_FOUND identity is unknown to every registry, not just CCD —
+      // "answered, found nothing" (sourceAvailable stays true) must read
+      // consistently on every panel row, or INV-9's pair renders wrong.
       govRequest(nextId("b"), "CCD", notFound ? "NOT_FOUND" : "SUCCESS", true),
       govRequest(
         nextId("b"),
         "ISTD",
-        sourceDown ? "UNAVAILABLE" : "SUCCESS",
+        sourceDown ? "UNAVAILABLE" : notFound ? "NOT_FOUND" : "SUCCESS",
         !sourceDown
       ),
-      govRequest(nextId("b"), "GAM", partial ? "PARTIAL" : "SUCCESS", true),
+      govRequest(nextId("b"), "GAM", notFound ? "NOT_FOUND" : partial ? "PARTIAL" : "SUCCESS", true),
     ],
     informationRequests: [],
     consents: [],
@@ -368,7 +366,10 @@ export function submitApplication(id: string): MockApplication | undefined {
     application.slaPaused = true;
     application.slaPausedReason = "GOVERNMENT_SERVICE_UNAVAILABLE";
   } else {
-    application.status = "AUTOMATED_VERIFICATION";
+    // Live runs SUBMITTED → AUTOMATED_VERIFICATION → UNDER_REVIEW inside the
+    // submit request; the transient states are never observable in a
+    // response, so the mock lands where the live API actually answers.
+    application.status = "UNDER_REVIEW";
     application.slaPaused = false;
     application.slaPausedReason = undefined;
   }
@@ -395,20 +396,41 @@ export function respondToInformationRequest(
   return application;
 }
 
+/**
+ * Which decisions are legal from which status — mirrors the server's
+ * transition whitelist (apps/api application-state.ts) so the mock refuses
+ * exactly where live returns 409 INVALID_STATE_TRANSITION. A DRAFT or
+ * already-decided application cannot be decided, and INFORMATION_REQUIRED
+ * only permits an outright rejection while waiting.
+ */
+const DECIDABLE: Record<string, readonly string[]> = {
+  UNDER_REVIEW: ["APPROVED", "APPROVED_CONDITIONAL", "INFORMATION_REQUIRED", "REJECTED"],
+  INFORMATION_RESUBMITTED: ["APPROVED", "APPROVED_CONDITIONAL", "INFORMATION_REQUIRED", "REJECTED"],
+  FINAL_REVIEW: ["APPROVED", "APPROVED_CONDITIONAL", "INFORMATION_REQUIRED", "REJECTED"],
+  INFORMATION_REQUIRED: ["REJECTED"],
+};
+
+export type DecideResult =
+  | { ok: true; application: MockApplication }
+  | { ok: false; error: "NOT_FOUND" | "INVALID_STATE_TRANSITION" };
+
 export function decideApplication(
   id: string,
   decision: string,
   reasonCode?: string,
   notes?: string
-): MockApplication | undefined {
+): DecideResult {
   const application = findApplication(id);
-  if (!application) return undefined;
+  if (!application) return { ok: false, error: "NOT_FOUND" };
+
+  const allowed = DECIDABLE[application.status ?? ""] ?? [];
+  if (!allowed.includes(decision)) return { ok: false, error: "INVALID_STATE_TRANSITION" };
 
   if (decision === "INFORMATION_REQUIRED") {
     // §5.5: pauses the clock; the reviewer's note becomes the request itself.
     application.status = "INFORMATION_REQUIRED";
     application.slaPaused = true;
-    application.slaPausedReason = "INFORMATION_REQUIRED";
+    application.slaPausedReason = "INFORMATION_REQUESTED";
     application.informationRequests = [
       ...(application.informationRequests ?? []),
       {
@@ -419,7 +441,7 @@ export function decideApplication(
         requestedAt: new Date().toISOString(),
       },
     ];
-    return application;
+    return { ok: true, application };
   }
 
   application.status = decision;
@@ -429,7 +451,7 @@ export function decideApplication(
   application.slaPaused = false;
   application.slaPausedReason = undefined;
   application.slaRemainingBusinessSeconds = 0;
-  return application;
+  return { ok: true, application };
 }
 
 export function findGovernmentRequest(requestId: string): GovernmentRequest | undefined {

@@ -58,7 +58,13 @@ export function pauseReasonFor(
   status: string | undefined,
   serverReason: string | undefined
 ): SlaPauseReason {
-  if (serverReason === "INFORMATION_REQUIRED" || serverReason === "GOVERNMENT_SERVICE_UNAVAILABLE") {
+  // The live API's reason vocabulary (Q-07 resolution): INFORMATION_REQUESTED
+  // — the *reason*, distinct from the INFORMATION_REQUIRED *status* — and
+  // GOVERNMENT_SERVICE_UNAVAILABLE, which doubles as both.
+  if (serverReason === "INFORMATION_REQUESTED" || serverReason === "INFORMATION_REQUIRED") {
+    return "INFORMATION_REQUIRED";
+  }
+  if (serverReason === "GOVERNMENT_SERVICE_UNAVAILABLE") {
     return serverReason;
   }
   if (status === "INFORMATION_REQUIRED" || status === "GOVERNMENT_SERVICE_UNAVAILABLE") {
