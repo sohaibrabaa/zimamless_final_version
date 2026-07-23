@@ -776,6 +776,128 @@ export class TransactionsService {
   }
 
   /**
+   * Supplier-initiated cancellation (overlay, requirements §16.8).
+   *
+   * The stage policy is enforced here, not by the state machine: a supplier
+   * may cancel a receivable that has not yet had an offer accepted, and once an
+   * offer is accepted the money and the counterparty relationship are real, so
+   * unwinding it is a case-workflow matter (withdrawal, dispute) and this
+   * returns 409. `CANCELLED` is a recorded terminal state, never a delete
+   * (INV-7): the transaction, its invoice and its history all remain.
+   */
+  private static readonly SUPPLIER_CANCELLABLE = new Set<TransactionState>([
+    'DRAFT',
+    'SUBMITTED',
+    'AUTOMATED_CHECKS',
+    'UNDER_REVIEW',
+    'INFORMATION_REQUIRED',
+    'ELIGIBLE',
+    'OPEN_FOR_OFFERS',
+  ]);
+
+  async cancel(id: string, ctx: ActorContext, reason?: string): Promise<Record<string, unknown>> {
+    const { row } = await this.requireVisible(id, ctx);
+    this.requireSupplierOwner(row, ctx);
+
+    if (row.state === 'CANCELLED') {
+      // Idempotent: cancelling a cancelled transaction returns it unchanged.
+      return this.describe(row, 'SUPPLIER', { includeDetail: true });
+    }
+    if (!TransactionsService.SUPPLIER_CANCELLABLE.has(row.state)) {
+      throw new AppException(
+        ErrorCode.INVALID_STATE_TRANSITION,
+        'This transaction can no longer be cancelled unilaterally; an accepted offer must be ' +
+          'unwound through the case workflows.',
+        HttpStatus.CONFLICT,
+        { state: row.state },
+      );
+    }
+
+    await this.db.transaction(async (client) => {
+      // OPEN_FOR_OFFERS: the listing and any live offers are closed with the
+      // transaction, so a bank is not left holding an offer on a receivable
+      // that no longer exists.
+      if (row.state === 'OPEN_FOR_OFFERS') {
+        await client.query(
+          `UPDATE listings SET status = 'CANCELLED', updated_at = now()
+            WHERE transaction_id = $1 AND status = 'OPEN_FOR_OFFERS'`,
+          [id],
+        );
+        await client.query(
+          `UPDATE bank_offers SET status = 'WITHDRAWN', updated_at = now()
+            WHERE listing_id IN (SELECT id FROM listings WHERE transaction_id = $1)
+              AND status IN ('ACTIVE','PENDING_INTERNAL_APPROVAL')`,
+          [id],
+        );
+      }
+      await this.transition(client, row, 'CANCELLED', ctx.userId, reason ?? 'Cancelled by supplier');
+    });
+
+    const refreshed = await this.findById(id);
+    if (!refreshed) throw AppException.notFound('Transaction');
+    return this.describe(refreshed, 'SUPPLIER', { includeDetail: true });
+  }
+
+  /**
+   * Supplier requests a manual relisting (ZM-MKT-016; overlay).
+   *
+   * Never automatic and never an approval: this writes a `REQUESTED` row that
+   * the platform reviews (`GET /admin/relisting-requests`) and approves
+   * (`POST /admin/relisting-requests/{id}/approve`). Exactly one open request
+   * per transaction — a second attempt while one is open is a 409, backed by
+   * the `uq_open_relisting_request` index.
+   */
+  async relistRequest(
+    id: string,
+    ctx: ActorContext,
+    notes?: string,
+  ): Promise<Record<string, unknown>> {
+    const { row } = await this.requireVisible(id, ctx);
+    this.requireSupplierOwner(row, ctx);
+
+    const existing = await this.db.queryOne(
+      `SELECT 1 FROM relisting_requests
+        WHERE transaction_id = $1 AND status IN ('REQUESTED','UNDER_REVIEW') LIMIT 1`,
+      [id],
+    );
+    if (existing) {
+      throw new AppException(
+        ErrorCode.CONFLICT,
+        'An open relisting request already exists for this transaction.',
+        HttpStatus.CONFLICT,
+      );
+    }
+
+    const { rows } = await this.db.query<{
+      id: string;
+      transaction_id: string;
+      status: string;
+      verification: Record<string, boolean | null>;
+      notes: string | null;
+      requested_at: Date;
+      decided_at: Date | null;
+      decision_notes: string | null;
+    }>(
+      `INSERT INTO relisting_requests (transaction_id, requested_by, status, notes)
+       VALUES ($1, $2::uuid, 'REQUESTED', $3)
+       RETURNING id, transaction_id, status, verification, notes, requested_at,
+                 decided_at, decision_notes`,
+      [id, ctx.userId, notes ?? null],
+    );
+    const r = rows[0];
+    return {
+      id: r.id,
+      transactionId: r.transaction_id,
+      status: r.status,
+      verification: r.verification,
+      notes: r.notes,
+      requestedAt: r.requested_at.toISOString(),
+      decidedAt: r.decided_at ? r.decided_at.toISOString() : null,
+      decisionNotes: r.decision_notes,
+    };
+  }
+
+  /**
    * Duplicate detection (ZM-VER-001).
    *
    * Checked in the service so the caller gets the contract's 409 with a

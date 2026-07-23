@@ -131,6 +131,14 @@ export class DeclarationInputDto {
   @ApiProperty({ enum: [true] }) @IsBoolean() acceptsRecourse!: boolean;
 }
 
+export class CancelTransactionDto {
+  @ApiPropertyOptional() @IsOptional() @IsString() reason?: string;
+}
+
+export class RelistRequestDto {
+  @ApiPropertyOptional() @IsOptional() @IsString() notes?: string;
+}
+
 export class TransactionListQueryDto {
   @ApiPropertyOptional() @IsOptional() @IsString() state?: string;
 

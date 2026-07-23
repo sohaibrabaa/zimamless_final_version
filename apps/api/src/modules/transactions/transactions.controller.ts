@@ -13,10 +13,12 @@ import {
 import { ApiOperation, ApiResponse, ApiTags } from '@nestjs/swagger';
 import { TransactionsService } from './transactions.service';
 import {
+  CancelTransactionDto,
   DeclarationInputDto,
   InvoiceInputDto,
   LinkBuyerDto,
   MinimumAmountDto,
+  RelistRequestDto,
   TransactionListQueryDto,
 } from './dto';
 import { Audit } from '../../common/audit/audit.interceptor';
@@ -185,5 +187,47 @@ export class TransactionsController {
     @Param('id', ParseUUIDPipe) id: string,
   ): Promise<Record<string, unknown>> {
     return this.transactions.latestVerification(id, this.contextOf(user, membership));
+  }
+
+  @Post('transactions/:id/cancel')
+  @HttpCode(HttpStatus.OK)
+  @Audit('TRANSACTION_CANCELLED', 'RECEIVABLE_TRANSACTION')
+  @ApiOperation({
+    summary: 'Supplier cancels/withdraws a transaction per stage policy (§16.8)',
+    description:
+      'Cancellable up to and including OPEN_FOR_OFFERS — DRAFT is a soft delete, the review ' +
+      'stages are a withdrawal, and an open listing has its live offers closed with it. Once an ' +
+      'offer is accepted the counterparty relationship is real, so unwinding it is a case ' +
+      'workflow and this returns 409. CANCELLED is a recorded terminal state, never a delete.',
+  })
+  @ApiResponse({ status: 200, description: 'Cancelled/withdrawn per stage rules' })
+  @ApiResponse({ status: 409, description: 'Stage does not permit unilateral cancellation' })
+  async cancel(
+    @CurrentUser() user: PlatformUser,
+    @CurrentContext() membership: MembershipRow,
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() body: CancelTransactionDto,
+  ): Promise<Record<string, unknown>> {
+    return this.transactions.cancel(id, this.contextOf(user, membership), body.reason);
+  }
+
+  @Post('transactions/:id/relist-request')
+  @HttpCode(HttpStatus.CREATED)
+  @Audit('RELISTING_REQUESTED', 'RELISTING_REQUEST')
+  @ApiOperation({
+    summary: 'Supplier requests a manual relisting (never automatic — ZM-MKT-016)',
+    description:
+      'Writes a REQUESTED row for the platform to review and approve; it is never an approval ' +
+      'in itself. Exactly one open request per transaction — a second while one is open is 409.',
+  })
+  @ApiResponse({ status: 201, description: 'Relisting request created' })
+  @ApiResponse({ status: 409, description: 'An open relisting request already exists' })
+  async relistRequest(
+    @CurrentUser() user: PlatformUser,
+    @CurrentContext() membership: MembershipRow,
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() body: RelistRequestDto,
+  ): Promise<Record<string, unknown>> {
+    return this.transactions.relistRequest(id, this.contextOf(user, membership), body.notes);
   }
 }

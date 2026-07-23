@@ -118,22 +118,22 @@ export const endpointStatus: EndpointStatusEntry[] = [
   { method: "POST", path: "/fraud-cases/{id}/decide", phase: 8, status: "mock", notes: "compliance only (ZM-FRD-004) — the only confirmed status in the system" },
   { method: "GET", path: "/cases", phase: 8, status: "live", notes: "v3.1.0 · fraud cases EXCLUDED for a bank or supplier, not redacted — asserted live against real bank and supplier tokens. Promoted 2026-07-23 on test/live/cases.live.spec.tsx" },
   { method: "GET", path: "/admin/relisting-requests", phase: 8, status: "live", notes: "v3.1.0 · platform only. No screen consumes it yet — the ZM-REC-018 review desk is Phase 9, alongside POST approve. The seven checks report null when unrecorded, never omitted" },
-  { method: "POST", path: "/transactions/{id}/relist-request", phase: 8, status: "mock", notes: "v3.1.0" },
-  { method: "POST", path: "/transactions/{id}/cancel", phase: 8, status: "mock", notes: "v3.1.0" },
+  { method: "POST", path: "/transactions/{id}/relist-request", phase: 9, status: "mock", notes: "Served: writes a REQUESTED row, one open per transaction (409 on a second). phase9-admin" },
+  { method: "POST", path: "/transactions/{id}/cancel", phase: 9, status: "mock", notes: "Served: cancellable up to OPEN_FOR_OFFERS (offers closed with it), 409 once an offer is accepted, CANCELLED never a delete. phase9-admin" },
   { method: "GET", path: "/notifications", phase: 8, status: "live", notes: "v3.1.0 · scoped to recipient_user_id alone; no destination or gateway reference returned. Promoted 2026-07-23 on test/live/inbox.live.spec.tsx" },
   { method: "POST", path: "/notifications/{id}/manual-call", phase: 8, status: "mock", notes: "D-16 (Q-17) · additive. Platform staff incl. compliance. No screen consumes it yet — the operator call-log UI is Phase 9. Blank notes refused; previous notes kept in the audit entry" },
   { method: "POST", path: "/notifications/{id}/read", phase: 8, status: "live", notes: "v3.1.0 · sets DELIVERED — the only delivery the platform can honestly observe. Promoted 2026-07-23; 404 (not 403) for another user's notification asserted live" },
 
-  { method: "GET", path: "/admin/settings", phase: 9, status: "mock" },
-  { method: "PATCH", path: "/admin/settings", phase: 9, status: "mock" },
-  { method: "GET", path: "/admin/commission-tiers", phase: 9, status: "mock" },
-  { method: "POST", path: "/admin/commission-tiers", phase: 9, status: "mock" },
-  { method: "GET", path: "/admin/audit-logs", phase: 9, status: "mock" },
+  { method: "GET", path: "/admin/settings", phase: 9, status: "mock", notes: "Served + integration-proven (phase9-admin). No screen yet beyond the time-machine control" },
+  { method: "PATCH", path: "/admin/settings", phase: 9, status: "mock", notes: "Served: known-key only, audited, 403 to support role. phase9-admin" },
+  { method: "GET", path: "/admin/commission-tiers", phase: 9, status: "mock", notes: "Served. phase9-admin" },
+  { method: "POST", path: "/admin/commission-tiers", phase: 9, status: "mock", notes: "Served: super-admin only, create-only, money bounds validated. phase9-admin" },
+  { method: "GET", path: "/admin/audit-logs", phase: 9, status: "mock", notes: "Served: paginated, targetEntityId filter, platform-only. phase9-admin" },
   // GET /admin/relisting-requests was listed here as Phase 9 and is now served
   // and promoted under Phase 8 above. The duplicate is removed rather than
   // left: `isLive` takes the first match, so two rows for one endpoint means
   // editing the wrong one changes nothing and looks like it should.
-  { method: "POST", path: "/admin/relisting-requests/{id}/approve", phase: 9, status: "mock", notes: "not served — the ZM-REC-018 review desk decides these, Phase 9" },
+  { method: "POST", path: "/admin/relisting-requests/{id}/approve", phase: 9, status: "mock", notes: "Served: REQUESTED/UNDER_REVIEW only, idempotent, audited. Q-18 notes the 7-check gap. phase9-admin" },
   { method: "POST", path: "/demo/time-travel", phase: 9, status: "mock", demoCritical: true, notes: "Served + integration-proven (phase9-demo): double-guarded 404, 403 to supplier, forward jump drives the maturity sweep to OVERDUE_UNCONFIRMED. UI control on platform/settings. Stays mock until smoke-tested through that screen live" },
 ];
 

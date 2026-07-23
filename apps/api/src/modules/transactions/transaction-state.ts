@@ -42,17 +42,29 @@ export type TransactionState =
 /** Allowed transitions for the states Phase 3 implements. */
 const TRANSITIONS: ReadonlyMap<TransactionState, ReadonlySet<TransactionState>> = new Map([
   ['DRAFT', new Set<TransactionState>(['SUBMITTED', 'CANCELLED'])],
-  ['SUBMITTED', new Set<TransactionState>(['AUTOMATED_CHECKS'])],
+  // CANCELLED added to the pre-acceptance review states in Phase 9: the
+  // supplier-initiated cancel (POST /transactions/{id}/cancel) is a withdrawal
+  // from these stages (overlay, requirements §16.8). The *endpoint* enforces
+  // the stage policy — OFFER_ACCEPTED and later is a 409 that must go through
+  // the case workflows — so these edges only widen what the machine permits,
+  // never what a supplier can unilaterally do.
+  ['SUBMITTED', new Set<TransactionState>(['AUTOMATED_CHECKS', 'CANCELLED'])],
   [
     'AUTOMATED_CHECKS',
     // Every outcome of the automated pipeline. FRAUD_REVIEW is reachable
     // only from here in Phase 3 — a failed check routes to review rather
     // than being treated as proven fraud (ZM-VER-002).
-    new Set<TransactionState>(['ELIGIBLE', 'UNDER_REVIEW', 'FRAUD_REVIEW', 'REJECTED']),
+    new Set<TransactionState>(['ELIGIBLE', 'UNDER_REVIEW', 'FRAUD_REVIEW', 'REJECTED', 'CANCELLED']),
   ],
   [
     'UNDER_REVIEW',
-    new Set<TransactionState>(['ELIGIBLE', 'INFORMATION_REQUIRED', 'REJECTED', 'FRAUD_REVIEW']),
+    new Set<TransactionState>([
+      'ELIGIBLE',
+      'INFORMATION_REQUIRED',
+      'REJECTED',
+      'FRAUD_REVIEW',
+      'CANCELLED',
+    ]),
   ],
   ['INFORMATION_REQUIRED', new Set<TransactionState>(['AUTOMATED_CHECKS', 'UNDER_REVIEW', 'CANCELLED'])],
   // Phase 5 added OPEN_FOR_OFFERS, as the Phase 3 note here anticipated.

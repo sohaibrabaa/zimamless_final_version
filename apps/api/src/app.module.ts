@@ -26,6 +26,8 @@ import { NotificationsService } from './modules/notifications/notifications.serv
 import { NotificationsController } from './modules/notifications/notifications.controller';
 import { DemoController } from './modules/demo/demo.controller';
 import { DemoService } from './modules/demo/demo.service';
+import { AdminController } from './modules/admin/admin.controller';
+import { AdminService } from './modules/admin/admin.service';
 import {
   DummyEmailChannel,
   DummyWhatsappChannel,
@@ -128,6 +130,7 @@ export const APP_CONFIG = 'APP_CONFIG';
     NotificationsController,
     // --- Phase 9 ---
     DemoController,
+    AdminController,
   ],
   providers: [
     {
@@ -238,6 +241,7 @@ export const APP_CONFIG = 'APP_CONFIG';
 
     // --- Phase 9 ---
     DemoService,
+    AdminService,
     {
       provide: NOTIFICATION_CHANNELS,
       useFactory: (
