@@ -1046,3 +1046,66 @@ OPEN QUESTION RAISED: **Q-16** — `ZM-FND-012` requires escalation to create an
   WITHDRAWAL/RECOURSE) declares anywhere to put one. Interim: notification to
   every active `PLATFORM_OPS_ADMIN` plus an audit entry carrying the full
   context.
+
+---
+
+## 2026-07-23 — Phase 8 complete (post-funding, cases, notifications)
+
+LIVE (API, 63/63 against the hosted DB in `phase8-postfunding.integration.spec.ts`):
+  - `GET/POST /transactions/{id}/payments` — the balance is DERIVED on every
+    read from `buyer_payments` (D-13). `invoices.paid_amount` and
+    `outstanding_amount` are never written after listing; an integration test
+    asserts both still hold their listing-time values after a payment lands.
+    **A supplier's payload has no `bankInternalNotes`, `evidenceDocumentId` or
+    `reportedBy` at all** — built as a separate object, not filtered.
+  - `POST /transactions/{id}/confirm-status` — the ONLY route to `OVERDUE` in
+    the system. Refuses `PAID` while the recorded payments do not settle the
+    invoice (422 with `details.outstandingAmount`).
+  - `POST /transactions/{id}/close` — idempotent; a second close returns the
+    original reason rather than rewriting it.
+  - `POST /transactions/{id}/recourse`, `GET /recourse/{id}`,
+    `POST /recourse/{id}/repay`, `POST /recourse/{id}/status`
+  - `POST /transactions/{id}/disputes`, `GET /disputes/{id}`,
+    `POST /disputes/{id}/resolve`
+  - `POST /offers/{id}/withdrawal-case`, `GET /withdrawal-cases/{id}`,
+    `POST /withdrawal-cases/{id}/decide`
+  - `POST /transactions/{id}/fraud-review`, `GET /fraud-cases/{id}`,
+    `POST /fraud-cases/{id}/decide`
+  - `GET /cases`, `GET /notifications`, `POST /notifications/{id}/read`
+
+BEHAVIOUR YOU MAY HAVE ASSUMED OTHERWISE:
+  - **A due date passing produces `OVERDUE_UNCONFIRMED`, never `OVERDUE`.**
+    Render it as "awaiting bank confirmation" and NEVER as defaulted, late or
+    overdue. The `FUNDED → OVERDUE` transition does not exist in the state
+    machine at all.
+  - **`OVERDUE_UNCONFIRMED` is neutral-toned, not amber.** Brief §5 forbids a
+    warning colour on a non-adverse state.
+  - **Recourse requires a CONFIRMED overdue.** Initiating from
+    `OVERDUE_UNCONFIRMED` is a 409. A platform admin gets **403** on
+    initiation even though they outrank the bank (ZM-REC-002).
+  - **Fraud cases never appear in a bank's or supplier's `GET /cases`,** and
+    `GET /fraud-cases/{id}` 404s for them. Excluded from the query, not
+    filtered from the results.
+  - **A dispute pauses the maturity job entirely** — no reminders, no state
+    changes — and resolving it returns the transaction to where it was.
+  - The error envelope may carry `attemptsRemaining` at the top level (from
+    Phase 7); no new envelope changes this phase.
+
+CHANGED (DB): none. No migration — every table Phase 8 needed was already in
+  the frozen schema, including `relisting_requests` from 0002.
+
+FRONTEND (built, still on mocks): supplier + bank `payments`, platform `cases`,
+  and a `notifications` inbox on all three portals (new nav entry
+  `nav.notifications`). The EN/AR wording for `OVERDUE_UNCONFIRMED` is
+  asserted by a test that reads the actual message bundles.
+
+BLOCKED ON: nothing.
+
+OUTSTANDING (unchanged from Phase 7, still not claimed):
+  - **Live promotion of any endpoint** — still 0 of ~90. Needs a session with
+    both servers up so screens can be smoke-tested by hand. Phase 9 gate.
+  - `db/tools/dedupe-organizations.mjs --apply` awaits an operator go-ahead.
+
+NEEDS PO SIGN-OFF: the `BUYER_PAYMENT_CONFIRMATION` wording (LT-14). It is
+  catalogued in `docs/specs/NOTIFICATIONS.md` with its constraint — operational
+  only, never a demand for payment — and deliberately not sent until ratified.

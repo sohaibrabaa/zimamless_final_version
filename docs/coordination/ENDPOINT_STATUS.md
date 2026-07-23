@@ -66,17 +66,17 @@ endpoint, and has no mock→live promotion to track.
 | POST …/{id}/funding/confirm | 7 | **2026-07-23** | mock | 200 `{transactionState, fundedAt}`. **401 carries `attemptsRemaining` at the top level** (inline schema, not the Error envelope) and also under `details`. Wrong/expired/used are one identical failure (ZM-FND-009) |
 | GET …/{id}/settlement | 7 | **2026-07-23** | mock | 404 before mark-sent — the normal pre-funding state, not an error |
 | POST /settlements/{id}/retry | 7 | **2026-07-23** | mock | Retrying a completed settlement is a no-op returning it unchanged, not an error (INV-13). `MANUAL_REVIEW` is platform-staff only (AS-03) |
-| GET/POST …/{id}/payments | 8 | — | mock | |
-| POST …/{id}/confirm-status | 8 | — | mock | |
-| POST …/{id}/close | 8 | — | mock | |
-| POST …/{id}/recourse · GET/status/repay /recourse/{id} | 8 | — | mock | partly v3.1.0 |
-| POST …/{id}/disputes · resolve * | 8 | — | mock | |
-| POST /offers/{id}/withdrawal-case · decide * | 8 | — | mock | |
-| POST …/{id}/fraud-review · decide * | 8 | — | mock | |
-| GET /cases * | 8 | — | mock | v3.1.0 |
+| GET/POST …/{id}/payments | 8 | **2026-07-23** | mock | Balance is **derived** from buyer_payments on every read (D-13); invoices.paid_amount never moves. A supplier payload has NO `bankInternalNotes`, `evidenceDocumentId` or `reportedBy` — built as a separate object, not filtered |
+| POST …/{id}/confirm-status | 8 | **2026-07-23** | mock | The **only** route to OVERDUE anywhere. 422 with `details.outstandingAmount` if PAID is claimed while a balance remains |
+| POST …/{id}/close | 8 | **2026-07-23** | mock | Idempotent — a second close returns the ORIGINAL reason rather than rewriting it. Deletes nothing (INV-7) |
+| POST …/{id}/recourse · GET/status/repay /recourse/{id} | 8 | **2026-07-23** | mock | partly v3.1.0 · **BANK ONLY — a platform admin gets 403.** Requires a CONFIRMED overdue (409 from OVERDUE_UNCONFIRMED); claim capped at the gross advance (422). A supplier may only move it to DISPUTED. Settling closes the transaction RECOURSE_SETTLED. **No commission refund** (ZM-FEE-016) |
+| POST …/{id}/disputes · resolve * | 8 | **2026-07-23** | mock | Opening pauses the maturity job **entirely** — no reminders, no state changes. `resolutionNotes` is mandatory: the platform does not adjudicate (ZM-REC-012/014). Resolving returns the transaction to its pre-dispute state |
+| POST /offers/{id}/withdrawal-case · decide * | 8 | **2026-07-23** | mock | Penalty **recorded, never deducted** (LT-12) — zero ledger entries. `applicable:null` in the policy means a human decides. decide is platform-only and takes `penaltyApplicable` verbatim; an eligible relisting raises a **REQUESTED** relisting request, not an approved one (ZM-REC-018) |
+| POST …/{id}/fraud-review · decide * | 8 | **2026-07-23** | mock | Opening freezes and concludes **nothing**; compliance is notified. `GET /fraud-cases/{id}` **404s for a bank or supplier**. decide is compliance-only and is the only confirmed status in the system (ZM-FRD-004) |
+| GET /cases * | 8 | **2026-07-23** | mock | v3.1.0 · Fraud cases are **excluded from the query** for a bank or supplier, not redacted. Summary carries type/status/amount/date and never a counterparty free-text field |
 | POST …/{id}/relist-request * | 8 | — | mock | v3.1.0 |
 | POST …/{id}/cancel * | 8 | — | mock | v3.1.0 |
-| GET /notifications · POST read * | 8 | — | mock | v3.1.0 |
+| GET /notifications · POST read * | 8 | **2026-07-23** | mock | v3.1.0 · Scoped to `recipient_user_id` alone — a notification is addressed to a person, not an org. No `destination` or gateway reference returned. read sets DELIVERED, the only delivery the platform can honestly observe |
 | GET/PATCH /admin/settings | 9 | — | mock | |
 | GET/POST /admin/commission-tiers | 9 | — | mock | |
 | GET /admin/audit-logs | 9 | — | mock | |
