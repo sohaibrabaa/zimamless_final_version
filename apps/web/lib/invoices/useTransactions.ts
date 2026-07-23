@@ -13,15 +13,17 @@ export type VerificationRun = components["schemas"]["VerificationRun"];
 
 /**
  * Optional fields read when present but never required, because the frozen
- * contract does not define them (Q-12). Declared as a widening of the
- * generated type rather than an edit to it — same pattern as
- * `ApplicationView` in Phase 2, so the generated schema stays the single
- * source of truth for everything the contract does say.
+ * contract does not define them. Declared as a widening of the generated type
+ * rather than an edit to it — same pattern as `ApplicationView` in Phase 2,
+ * so the generated schema stays the single source of truth for everything the
+ * contract does say.
  *
- * `documents` in particular: the wizard uploads them and the detail screen
- * should list them, but `Transaction` carries no document array and there is
- * no `GET /transactions/{id}/documents`. Every screen degrades to "documents
- * are not listed here" if it never lands.
+ * `documents` is the Q-12 resolution: the API now sends the array on the
+ * transaction detail, shaped like the `documents[]` the contract already
+ * declares on the marketplace listing (`{id, documentType}`, plus `fileName`
+ * and `uploadedAt` for display). It is still typed optional here, because a
+ * response that predates the field must degrade to "documents are not listed"
+ * rather than crash.
  */
 export interface TransactionDocument {
   id?: string;
@@ -95,6 +97,29 @@ export function useVerificationRun(
     [id],
     !!id && enabled
   );
+}
+
+/**
+ * A short-lived signed URL for one document (ZM-DOC-004).
+ *
+ * Deliberately not a hook and not fetched with the transaction: the server
+ * authorizes the caller and *then* mints a URL that lives about two minutes,
+ * so requesting one before the supplier asks would hand out a credential
+ * nobody used and let it expire in a rendered page. Called on click, opened
+ * immediately.
+ *
+ * A refusal is a 404 by design — a document that is not yours must look
+ * exactly like one that does not exist — so callers cannot distinguish the
+ * two, and should say "this document is not available" for both.
+ */
+export async function requestDownloadUrl(documentId: string): Promise<string> {
+  const { data, error } = await apiClient.GET("/documents/{id}/download-url", {
+    params: { path: { id: documentId } },
+  });
+  if (error) throw error;
+  const url = (data as { url?: string } | undefined)?.url;
+  if (!url) throw new Error("No download URL was issued.");
+  return url;
 }
 
 /**

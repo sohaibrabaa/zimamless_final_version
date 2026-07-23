@@ -13,14 +13,12 @@
  * (ids, establishment numbers, names, registry statuses) via `data.ts`, and
  * `data.spec.ts` fails if any of them drifts.
  *
- * **Invoice identities are local placeholders, and deliberately named so.**
- * `GOV_DUMMY_DATA.md` §8 lists "which of the 12 invoices sits in which of the
- * 11 scenarios" as an open item owned by the Phase 9 Seed-Data Specification,
- * so there is no frozen invoice number to copy yet — unlike buyers, suppliers
- * and banks, which there was. Rather than invent values that look authoritative
- * (the exact defect the Phase 1 and Phase 2 audits both found), every invoice
- * fixture below is prefixed `MOCK-` and listed in the daily log as needing
- * reconciliation when Agent A seeds the e-invoice set.
+ * **Invoice identities are Agent A's seeded values**, copied from
+ * `db/seed/einvoices/` via `docs/specs/EINVOICE_QR.md` §7 — invoice numbers,
+ * e-invoice identifiers, dates and amounts, including which file carries the
+ * deliberate mismatch and what disagrees on it. This half shipped `MOCK-`
+ * placeholders in Phase 3 because no seeded set existed yet, and flagged them
+ * for reconciliation; the Phase 3 unification session did that reconciliation.
  */
 
 import type { components } from "@/lib/api/generated/schema";
@@ -165,25 +163,69 @@ export function resolveBuyer(
  */
 export type ExtractionProfile = "CLEAN" | "MISMATCH" | "UNPARSED_QR";
 
-const MOCK_INVOICE_NUMBER = "MOCK-INV-2026-0041";
-const MOCK_EINVOICE_ID = "MOCK-JO-EINV-88213004";
-
-/** File-name markers selecting a profile — the mock's stand-in for A's seeded PDFs. */
+/**
+ * File-name markers selecting a profile. These match the real seeded file
+ * names in `db/seed/einvoices/`, so uploading the actual PDF a demo would
+ * use lands on the matching profile.
+ */
 export function profileForFileName(fileName: string): ExtractionProfile {
   const name = fileName.toLowerCase();
-  if (name.includes("mismatch")) return "MISMATCH";
+  if (name.includes("mismatch") || name.includes("0002")) return "MISMATCH";
   if (name.includes("unparsed") || name.includes("noqr")) return "UNPARSED_QR";
   return "CLEAN";
 }
 
+/**
+ * `INV-2026-0001-alnoor-amman-retail.pdf` — the happy path, S1 → B1. Values
+ * are the ones printed on the real seeded PDF and carried in its QR payload
+ * (`EINVOICE_QR.md` §3): `JO|JO-EINV-20000101-0001|20000101|30000201|
+ * 2026-05-10|12354.000|1704.000`.
+ */
 const CLEAN_FIELDS = {
-  invoiceNumber: MOCK_INVOICE_NUMBER,
-  einvoiceIdentifier: MOCK_EINVOICE_ID,
-  issueDate: "2026-06-15",
-  dueDate: "2026-09-13",
-  subtotalAmount: "12500.000",
-  taxAmount: "2000.000",
-  faceValue: "14500.000",
+  invoiceNumber: "INV-2026-0001",
+  einvoiceIdentifier: "JO-EINV-20000101-0001",
+  issueDate: "2026-05-10",
+  dueDate: "2026-08-10",
+  subtotalAmount: "10650.000",
+  taxAmount: "1704.000",
+  faceValue: "12354.000",
+};
+
+/**
+ * `INV-2026-0002-alnoor-levant-mismatch.pdf` — the deliberate disagreement.
+ *
+ * The mismatch is on the **face value**: the page prints `24500.000` and the
+ * QR payload carries `25000.000`. This half originally guessed a *tax*
+ * mismatch on an invented invoice; the field matters, because the wizard's
+ * comparison highlights a specific row and the demo walks the supplier
+ * through resolving that row.
+ */
+const MISMATCH_FIELDS = {
+  invoiceNumber: "INV-2026-0002",
+  einvoiceIdentifier: "JO-EINV-20000101-0002",
+  issueDate: "2026-05-18",
+  dueDate: "2026-09-16",
+  subtotalAmount: "21120.690",
+  taxAmount: "3379.310",
+  faceValue: "24500.000",
+};
+
+/** What the QR on the mismatch PDF actually carries. */
+const MISMATCH_QR_FACE_VALUE = "25000.000";
+
+/**
+ * `INV-2026-0003` — the duplicate pair. The same invoice data is issued by
+ * S1 (`-duplicate-a`) and S2 (`-duplicate-b`) against Aqaba Logistics, and
+ * submitting the second must collide.
+ */
+const DUPLICATE_FIELDS = {
+  invoiceNumber: "INV-2026-0003",
+  einvoiceIdentifier: "JO-EINV-20000102-0003",
+  issueDate: "2026-06-01",
+  dueDate: "2026-09-01",
+  subtotalAmount: "6000.000",
+  taxAmount: "960.000",
+  faceValue: "6960.000",
 };
 
 function extractionFor(documentId: string, profile: ExtractionProfile): Extraction {
@@ -199,25 +241,28 @@ function extractionFor(documentId: string, profile: ExtractionProfile): Extracti
   }
 
   if (profile === "MISMATCH") {
-    // The deliberate discrepancy: OCR read the tax line as 2000.000 while the
-    // QR payload carries 2,100.000, so face value disagrees too. Both machine
-    // values are preserved; whichever the supplier confirms is recorded
-    // *alongside* them, never over them (ZM-DOC-006).
+    // The deliberate discrepancy on the seeded `-levant-mismatch` PDF: OCR
+    // reads the printed total 24500.000 while the QR payload carries
+    // 25000.000. Both machine values are preserved; whichever the supplier
+    // confirms is recorded *alongside* them, never over them (ZM-DOC-006).
     return {
       documentId,
       ocr: {
         rawOutput: { engine: "mock-ocr", pages: 1 },
-        extractedFields: { ...CLEAN_FIELDS },
+        extractedFields: { ...MISMATCH_FIELDS },
         confidence: 0.78,
       },
       qr: {
         parsed: true,
-        extractedFields: { ...CLEAN_FIELDS, taxAmount: "2100.000", faceValue: "14600.000" },
+        extractedFields: { ...MISMATCH_FIELDS, faceValue: MISMATCH_QR_FACE_VALUE },
         validationStatus: "VALID",
       },
       mismatches: [
-        { field: "taxAmount", ocrValue: "2000.000", qrValue: "2100.000" },
-        { field: "faceValue", ocrValue: "14500.000", qrValue: "14600.000" },
+        {
+          field: "faceValue",
+          ocrValue: MISMATCH_FIELDS.faceValue,
+          qrValue: MISMATCH_QR_FACE_VALUE,
+        },
       ],
     };
   }
@@ -460,15 +505,18 @@ function runVerification(transaction: MockTransaction): VerificationRun {
   const extraction = einvoice ? extractionForDocument(einvoice.id) : undefined;
   const invoice = transaction.invoice;
 
-  const machineTax = (extraction?.qr?.extractedFields as Record<string, unknown> | undefined)
-    ?.taxAmount;
-  const ocrTax = (extraction?.ocr?.extractedFields as Record<string, unknown> | undefined)
-    ?.taxAmount;
+  // The seeded mismatch is on the face value (the QR says 25000.000, the page
+  // prints 24500.000), so that is the field the consistency checks compare.
+  const qrFaceValue = (extraction?.qr?.extractedFields as Record<string, unknown> | undefined)
+    ?.faceValue;
+  const ocrFaceValue = (extraction?.ocr?.extractedFields as Record<string, unknown> | undefined)
+    ?.faceValue;
 
   const ocrConsistent =
-    !invoice || ocrTax === undefined || String(ocrTax) === invoice.taxAmount;
+    !invoice || ocrFaceValue === undefined || String(ocrFaceValue) === invoice.faceValue;
   const qrParsed = extraction?.qr?.parsed === true;
-  const qrConsistent = !invoice || machineTax === undefined || String(machineTax) === invoice.taxAmount;
+  const qrConsistent =
+    !invoice || qrFaceValue === undefined || String(qrFaceValue) === invoice.faceValue;
 
   const dueDate = invoice?.dueDate ? new Date(`${invoice.dueDate}T00:00:00Z`) : null;
   const now = new Date();
@@ -486,10 +534,10 @@ function runVerification(transaction: MockTransaction): VerificationRun {
       result: invoice && transaction.buyer && einvoice ? "PASS" : "MISSING",
     },
     { checkType: "IDENTITY_MATCH", result: transaction.buyer ? "PASS" : "MISSING" },
-    { checkType: "DUPLICATE_DETECTION", result: "PASS" },
-    { checkType: "TRANSACTION_LOGIC", result: tenorOk ? "PASS" : "REVIEW" },
+    { checkType: "DUPLICATE", result: "PASS" },
+    { checkType: "LOGIC", result: tenorOk ? "PASS" : "REVIEW" },
     {
-      checkType: "PARTY_ELIGIBILITY",
+      checkType: "ELIGIBILITY",
       result: buyerEligible ? "PASS" : "REVIEW",
       details: transaction.buyer?.registryStatus
         ? { buyerRegistryStatus: transaction.buyer.registryStatus }
@@ -501,14 +549,16 @@ function runVerification(transaction: MockTransaction): VerificationRun {
       result: !extraction ? "NOT_APPLICABLE" : ocrConsistent ? "PASS" : "REVIEW",
       details: ocrConsistent
         ? undefined
-        : { ocrValue: String(ocrTax), confirmedValue: invoice?.taxAmount },
+        : { ocrValue: String(ocrFaceValue), confirmedValue: invoice?.faceValue },
     },
     {
       checkType: "QR_CONSISTENCY",
       // ZM-DOC-010: an unparsed QR is `UNPARSED`, not a failure. Nothing about
       // the supplier is implied by a payload we could not read.
       result: !extraction ? "NOT_APPLICABLE" : !qrParsed ? "UNPARSED" : qrConsistent ? "PASS" : "REVIEW",
-      details: qrConsistent ? undefined : { qrValue: String(machineTax), confirmedValue: invoice?.taxAmount },
+      details: qrConsistent
+        ? undefined
+        : { qrValue: String(qrFaceValue), confirmedValue: invoice?.faceValue },
     },
   ];
 
@@ -574,10 +624,11 @@ export function resetTransactionMocks() {
 }
 
 /**
- * Seeds a submitted transaction owned by Petra (S2) carrying the mock invoice
- * identity, so the duplicate path is demonstrable from Al-Noor (S1) in one
- * step rather than requiring two full wizard runs. This is the "duplicate pair
- * across two suppliers" the phase file seeds server-side.
+ * Seeds a submitted transaction owned by Petra (S2) carrying the duplicate
+ * pair's invoice identity, so the duplicate path is demonstrable from Al-Noor
+ * (S1) in one step rather than requiring two full wizard runs. This mirrors
+ * `INV-2026-0003-petra-aqaba-duplicate-b.pdf`, the half of the pair the
+ * server seeds.
  */
 export function seedDuplicateCounterpart(): MockTransaction {
   const existing = transactions.find((t) => t.organizationId === ORG.petra);
@@ -585,18 +636,19 @@ export function seedDuplicateCounterpart(): MockTransaction {
 
   const transaction = createTransaction(ORG.petra);
   linkBuyer(transaction.id!, mockBuyers[0].id);
-  setInvoice(transaction.id!, {
-    invoiceNumber: MOCK_INVOICE_NUMBER,
-    einvoiceIdentifier: MOCK_EINVOICE_ID,
-    issueDate: CLEAN_FIELDS.issueDate,
-    dueDate: CLEAN_FIELDS.dueDate,
-    subtotalAmount: CLEAN_FIELDS.subtotalAmount,
-    taxAmount: CLEAN_FIELDS.taxAmount,
-    faceValue: CLEAN_FIELDS.faceValue,
-  });
+  setInvoice(transaction.id!, { ...DUPLICATE_FIELDS });
   transaction.state = "ELIGIBLE";
   return transaction;
 }
 
-/** The placeholder invoice identity, exported so tests assert on one source. */
-export const MOCK_INVOICE_FIXTURE = { ...CLEAN_FIELDS } as const;
+/**
+ * The seeded invoice identities, exported so tests assert against one source.
+ * These are Agent A's real values from `db/seed/einvoices/` — the `MOCK-`
+ * placeholders this half shipped in Phase 3 were reconciled away by the
+ * Phase 3 unification session.
+ */
+export const INVOICE_FIXTURE = { ...CLEAN_FIELDS } as const;
+export const MISMATCH_FIXTURE = { ...MISMATCH_FIELDS } as const;
+/** What the QR on the mismatch PDF carries, where the page disagrees. */
+export const MISMATCH_QR_FACE_VALUE_FIXTURE = MISMATCH_QR_FACE_VALUE;
+export const DUPLICATE_FIXTURE = { ...DUPLICATE_FIELDS } as const;

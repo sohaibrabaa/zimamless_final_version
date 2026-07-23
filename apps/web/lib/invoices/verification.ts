@@ -7,16 +7,20 @@ export type CheckResult = NonNullable<VerificationCheck["result"]>;
 
 /**
  * The eight automated checks (requirements §8.5), in the order that table
- * lists them. `checkType` is a bare string in the contract, so this is the
- * client's transcription of the same eight rows — the ordering and labelling
- * only; an unrecognised check type still renders, labelled by its own code.
+ * lists them. `checkType` is a bare string in the contract, so these are the
+ * strings the **server actually emits** — three of them (`DUPLICATE`,
+ * `LOGIC`, `ELIGIBILITY`) are shorter than §8.5's prose row titles, and this
+ * half originally transcribed the prose instead. Neither side was wrong
+ * against the contract, which is exactly why the divergence survived until
+ * the Phase 3 audit; live, three of eight rows would have fallen back to
+ * raw-code labels. An unrecognised type still renders, labelled by its code.
  */
 export const CHECK_TYPES = [
   "COMPLETENESS",
   "IDENTITY_MATCH",
-  "DUPLICATE_DETECTION",
-  "TRANSACTION_LOGIC",
-  "PARTY_ELIGIBILITY",
+  "DUPLICATE",
+  "LOGIC",
+  "ELIGIBILITY",
   "FILE_INTEGRITY",
   "OCR_CONSISTENCY",
   "QR_CONSISTENCY",

@@ -260,10 +260,21 @@ describe("verification results are results, not verdicts (ZM-VER-002)", () => {
     expect(overallResultTone("REVIEW")).toBe("info");
   });
 
-  it("names all eight §8.5 check types", () => {
-    expect(CHECK_TYPES.length).toBe(8);
-    expect(CHECK_TYPES).toContain("DUPLICATE_DETECTION");
-    expect(CHECK_TYPES).toContain("QR_CONSISTENCY");
+  it("names all eight §8.5 check types, in the strings the server emits", () => {
+    // Three of these are the server's short forms rather than §8.5's prose
+    // row titles. This half transcribed the prose in Phase 3 and the
+    // divergence survived to the audit, because `checkType` is a bare string
+    // in the contract and neither spelling violated it.
+    expect([...CHECK_TYPES]).toEqual([
+      "COMPLETENESS",
+      "IDENTITY_MATCH",
+      "DUPLICATE",
+      "LOGIC",
+      "ELIGIBILITY",
+      "FILE_INTEGRITY",
+      "OCR_CONSISTENCY",
+      "QR_CONSISTENCY",
+    ]);
   });
 
   it("orders checks by the §8.5 table and keeps unrecognised ones", () => {

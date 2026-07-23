@@ -30,13 +30,25 @@ import { createHash } from 'node:crypto';
  * our internal buyer id, so the fingerprint is stable across a buyer record
  * being merged or recreated — an internal id would let a duplicate through
  * whenever the two suppliers happened to resolve to different rows.
+ *
+ * **The supplier is deliberately NOT part of the key** (v2; v1 included it
+ * and was wrong). ZM-VER-001 requires uniqueness *platform-wide*, and the
+ * fraud the requirement exists to stop is one receivable financed twice —
+ * which is precisely the case where the *claimant* differs. Keying on the
+ * supplier meant a second business claiming the same buyer's invoice
+ * produced a different hash and passed straight through to ELIGIBLE. The
+ * two seeded `INV-2026-0003` PDFs are that scenario, and they must collide.
+ *
+ * The cost of leaving the supplier out is a false collision when two
+ * unrelated suppliers happen to issue the same invoice number to the same
+ * buyer on the same day for the same amount down to the third decimal. That
+ * is vanishingly unlikely, it blocks rather than approves, and it opens a
+ * review record a human resolves — the safe direction to be wrong in.
  */
 
-export const FINGERPRINT_VERSION = 'v1';
+export const FINGERPRINT_VERSION = 'v2';
 
 export interface FingerprintInput {
-  /** Supplier's national establishment number. */
-  supplierEstablishmentNumber: string;
   /** Buyer's national establishment number. */
   buyerEstablishmentNumber: string;
   invoiceNumber: string;
@@ -83,7 +95,6 @@ function normalizeAmount(value: string): string {
 export function fingerprintSource(input: FingerprintInput): string {
   return [
     FINGERPRINT_VERSION,
-    normalizeIdentifier(input.supplierEstablishmentNumber),
     normalizeIdentifier(input.buyerEstablishmentNumber),
     normalizeIdentifier(input.invoiceNumber),
     input.issueDate.trim(),

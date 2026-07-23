@@ -512,6 +512,8 @@
       "choose": "اختيار ملف",
       "replace": "استبدال الملف",
       "remove": "إزالة",
+      "download": "تنزيل",
+      "downloadUnavailable": "هذا المستند غير متاح للتنزيل حالياً.",
       "type": {
         "EINVOICE": "الفاتورة الإلكترونية",
         "PURCHASE_ORDER": "أمر الشراء",
@@ -590,9 +592,9 @@
       "check": {
         "COMPLETENESS": "الحقول والمستندات المطلوبة",
         "IDENTITY_MATCH": "تطابق المورّد والمشتري مع الفاتورة",
-        "DUPLICATE_DETECTION": "لم تُقدَّم من قبل",
-        "TRANSACTION_LOGIC": "اتساق التواريخ والمبالغ",
-        "PARTY_ELIGIBILITY": "أهلية المورّد والمشتري",
+        "DUPLICATE": "لم تُقدَّم من قبل",
+        "LOGIC": "اتساق التواريخ والمبالغ",
+        "ELIGIBILITY": "أهلية المورّد والمشتري",
         "FILE_INTEGRITY": "سلامة المستند",
         "OCR_CONSISTENCY": "تطابق القيم المقروءة مع ما أدخلتَه",
         "QR_CONSISTENCY": "تطابق رمز الاستجابة السريعة مع الفاتورة",

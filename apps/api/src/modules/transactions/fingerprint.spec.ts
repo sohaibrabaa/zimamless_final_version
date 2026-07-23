@@ -10,7 +10,6 @@ import { computeFingerprint, fingerprintSource, normalizeIdentifier } from './fi
  */
 
 const BASE = {
-  supplierEstablishmentNumber: '20000101',
   buyerEstablishmentNumber: '30000203',
   invoiceNumber: 'INV-2026-0003',
   issueDate: '2026-06-01',
@@ -27,24 +26,30 @@ describe('invoice fingerprint', () => {
     expect(computeFingerprint(BASE)).toMatch(/^[0-9a-f]{64}$/);
   });
 
-  describe('the seeded duplicate pair', () => {
+  describe('the seeded duplicate pair (the checkpoint scenario)', () => {
     /**
-     * The two seeded e-invoices carry identical invoice data under
-     * different sellers. The fingerprint includes the supplier, so they do
-     * NOT collide — which is correct: the same invoice number issued by two
-     * unrelated businesses is a coincidence, not a duplicate.
+     * `INV-2026-0003-alnoor-aqaba-duplicate-a.pdf` and
+     * `INV-2026-0003-petra-aqaba-duplicate-b.pdf` carry identical invoice
+     * data — same buyer, number, date, value and tax — under two different
+     * sellers. That is one receivable being claimed by two suppliers, the
+     * single most expensive fraud this platform is exposed to, and the
+     * fingerprint MUST collide on it.
      *
-     * The collision the platform must catch is the same *supplier* invoice
-     * submitted twice, and the double-financing attempt where a second
-     * supplier claims the same receivable is caught by the buyer plus
-     * invoice-number plus amount triple below.
+     * This is the case the v1 key got wrong: it included the submitting
+     * supplier, so the second claimant hashed differently and reached
+     * ELIGIBLE unblocked. `EINVOICE_QR.md` §7 always said this pair "must
+     * collide on fingerprint"; the code disagreed with the spec until v2.
      */
-    it('differs when the supplier differs', () => {
-      const petra = { ...BASE, supplierEstablishmentNumber: '20000102' };
-      expect(computeFingerprint(petra)).not.toBe(computeFingerprint(BASE));
+    it('collides across two suppliers claiming the same receivable', () => {
+      // The input carries no supplier at all — there is nothing to vary.
+      // The equality is structural, which is the point: no future edit can
+      // reintroduce a per-claimant key without this file failing to compile.
+      const alnoorSubmission = { ...BASE };
+      const petraSubmission = { ...BASE };
+      expect(computeFingerprint(petraSubmission)).toBe(computeFingerprint(alnoorSubmission));
     });
 
-    it('matches when the same supplier resubmits the same invoice', () => {
+    it('still matches when one supplier resubmits its own invoice', () => {
       expect(computeFingerprint({ ...BASE })).toBe(computeFingerprint(BASE));
     });
   });
@@ -90,12 +95,14 @@ describe('invoice fingerprint', () => {
   describe('fingerprintSource', () => {
     it('is readable, so a collision can be explained to a reviewer', () => {
       expect(fingerprintSource(BASE)).toBe(
-        'v1|20000101|30000203|INV20260003|2026-06-01|6960.000|960.000',
+        'v2|30000203|INV20260003|2026-06-01|6960.000|960.000',
       );
     });
 
     it('is versioned, so the scheme can change without silently re-keying', () => {
-      expect(fingerprintSource(BASE).startsWith('v1|')).toBe(true);
+      // v1 keyed on the submitting supplier as well. Bumping the version
+      // means stored v1 digests cannot be mistaken for comparable values.
+      expect(fingerprintSource(BASE).startsWith('v2|')).toBe(true);
     });
 
     it('refuses an amount that is not a plain decimal string', () => {

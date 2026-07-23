@@ -11,6 +11,7 @@ import { GovernmentService, SNAPSHOT_VALIDITY_DAYS } from '../government/governm
 import { BuyersService } from '../buyers/buyers.service';
 import { DocumentsService } from '../documents/documents.service';
 import { computeFingerprint } from './fingerprint';
+import { DECLARATION_TEMPLATE_VERSIONS } from './declaration-catalogue';
 
 /**
  * The placeholder an unsubmitted invoice carries.
@@ -219,6 +220,20 @@ export class TransactionsService {
       lockedAt: row.locked_at?.toISOString() ?? null,
       buyer: buyer ? this.buyers.describe(buyer) : null,
       invoice: invoice ? this.describeInvoice(invoice) : null,
+      // Q-12: the transaction had no way to enumerate its own attachments,
+      // so the detail screen could not list them and
+      // `GET /documents/{id}/download-url` had nothing to link from. The
+      // shape is copied from the contract's marketplace listing schema,
+      // which already declares `documents[]` as `{id, documentType}` —
+      // an additive field in an existing shape, not an invented one.
+      // `fileName` and `uploadedAt` are display data; a list of bare ids
+      // and type codes is not something a supplier can read.
+      documents: (await this.documents.listForSubject('TRANSACTION', row.id)).map((doc) => ({
+        id: doc.id,
+        documentType: doc.document_type,
+        fileName: doc.file_name,
+        uploadedAt: doc.uploaded_at.toISOString(),
+      })),
     };
 
     if (audience !== 'BANK') {
@@ -470,26 +485,24 @@ export class TransactionsService {
   /**
    * The real fingerprint for a transaction's invoice data.
    *
-   * Both parties are identified by national establishment number, which is
-   * why this needs the transaction row: the supplier's comes from their
-   * organization and the buyer's from the resolved buyer. Returns null when
-   * either is missing — a transaction with no buyer cannot be fingerprinted,
-   * and submit refuses one anyway.
+   * The buyer is identified by national establishment number, which is why
+   * this needs the transaction row. Returns null when no buyer is resolved
+   * — a transaction with no buyer cannot be fingerprinted, and submit
+   * refuses one anyway.
+   *
+   * The submitting supplier is deliberately absent from the key: see the
+   * header comment in `fingerprint.ts`. Two suppliers claiming the same
+   * receivable is the collision this exists to catch, not one to permit.
    */
   private async fingerprintFor(
     row: TransactionRow,
     invoice: { invoiceNumber: string; issueDate: string; faceValue: string; taxAmount: string },
   ): Promise<string | null> {
-    const supplier = await this.db.queryOne<{ national_establishment_no: string | null }>(
-      `SELECT national_establishment_no FROM organizations WHERE id = $1`,
-      [row.supplier_org_id],
-    );
     const buyer = row.buyer_id ? await this.buyers.findById(row.buyer_id) : null;
 
-    if (!supplier?.national_establishment_no || !buyer?.national_establishment_no) return null;
+    if (!buyer?.national_establishment_no) return null;
 
     return computeFingerprint({
-      supplierEstablishmentNumber: supplier.national_establishment_no,
       buyerEstablishmentNumber: buyer.national_establishment_no,
       invoiceNumber: invoice.invoiceNumber,
       issueDate: invoice.issueDate,
@@ -636,6 +649,18 @@ export class TransactionsService {
       throw AppException.validation(
         'The declaration template version must be recorded with the declarations (LT-04).',
         { field: 'declarationTemplateVersion' },
+      );
+    }
+    // Q-13: a version outside the catalogue is refused rather than stored.
+    // Accepting an unknown string would record an affirmation against
+    // wording the platform cannot produce — see declaration-catalogue.ts.
+    if (!DECLARATION_TEMPLATE_VERSIONS.has(templateVersion)) {
+      throw AppException.validation(
+        `Unknown declaration template version "${templateVersion}".`,
+        {
+          field: 'declarationTemplateVersion',
+          accepted: [...DECLARATION_TEMPLATE_VERSIONS],
+        },
       );
     }
 

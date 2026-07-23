@@ -554,12 +554,17 @@ describeIfDb('Phase 3 — supplier journey against real infrastructure', () => {
 
   describe('duplicate invoices (ZM-VER-001)', () => {
     /** Drives a second transaction to the point of submit. */
-    const submitInvoice = async (invoiceNumber: string, overrides: Record<string, string> = {}) => {
-      const draft = await api('supplier', 'post', '/transactions');
+    const submitInvoice = async (
+      invoiceNumber: string,
+      overrides: Record<string, string> = {},
+      persona = 'supplier',
+      linkBuyerId = buyerId,
+    ) => {
+      const draft = await api(persona, 'post', '/transactions');
       const id = draft.body.id;
       created.push(id);
 
-      await api('supplier', 'put', `/transactions/${id}/invoice`, {
+      await api(persona, 'put', `/transactions/${id}/invoice`, {
         invoiceNumber,
         einvoiceIdentifier: 'JO-EINV-20000101-0001',
         issueDate: '2026-05-10',
@@ -570,8 +575,8 @@ describeIfDb('Phase 3 — supplier journey against real infrastructure', () => {
         paidAmount: '0.000',
         ...overrides,
       });
-      await api('supplier', 'put', `/transactions/${id}/buyer`, { buyerId });
-      await api('supplier', 'post', `/transactions/${id}/declarations`, {
+      await api(persona, 'put', `/transactions/${id}/buyer`, { buyerId: linkBuyerId });
+      await api(persona, 'post', `/transactions/${id}/declarations`, {
         declarationTemplateVersion: '1.0',
         isAuthentic: true,
         goodsDelivered: true,
@@ -582,7 +587,7 @@ describeIfDb('Phase 3 — supplier journey against real infrastructure', () => {
         contactIsBuyerRep: true,
         acceptsRecourse: true,
       });
-      return api('supplier', 'post', `/transactions/${id}/submit`);
+      return api(persona, 'post', `/transactions/${id}/submit`);
     };
 
     it('blocks a duplicate with 409, opens a review, and names no counterparty', async () => {
@@ -593,6 +598,41 @@ describeIfDb('Phase 3 — supplier journey against real infrastructure', () => {
       // Telling this supplier which transaction it collided with would leak
       // the existence and identity of another party's financing.
       expect(JSON.stringify(res.body)).not.toContain(txId);
+    }, 120_000);
+
+    /**
+     * The checkpoint scenario, and the case the v1 fingerprint could not
+     * catch: a *different* supplier claiming the receivable Al-Noor already
+     * submitted. This is one invoice financed twice — the most expensive
+     * fraud the platform is exposed to — and until the fingerprint dropped
+     * the submitting supplier from its key, it reached ELIGIBLE unblocked.
+     *
+     * Petra resolves the same buyer under its own relationship (which is
+     * legitimate and must keep working) and then submits Al-Noor's invoice.
+     */
+    it('blocks a SECOND SUPPLIER claiming the same receivable (ZM-VER-001)', async () => {
+      const resolve = await api('petra', 'post', '/buyers/resolve', {
+        nationalEstablishmentNumber: '30000201',
+        confirmedByUser: true,
+        contact: {
+          contactName: 'Rami Haddad',
+          contactRole: 'Finance',
+          contactPhone: '+962790000222',
+        },
+      });
+      expect(resolve.status).toBe(200);
+
+      const res = await submitInvoice('INV-2026-0001', {}, 'petra', resolve.body.id);
+      expect(res.status).toBe(409);
+      expect(res.body.code).toBe('DUPLICATE_INVOICE');
+      expect(res.body.details.reviewReference).toBeTruthy();
+      // Al-Noor's identity must not leak to the second claimant: telling a
+      // fraudster whose invoice they collided with confirms the receivable
+      // is real and names the counterparty.
+      const serialized = JSON.stringify(res.body);
+      expect(serialized).not.toContain(txId);
+      expect(serialized).not.toContain(orgs.supplier);
+      expect(serialized).not.toContain('Al-Noor');
     }, 120_000);
 
     it('is not evaded by reformatting the invoice number', async () => {

@@ -744,12 +744,16 @@ function forCaller(transaction: MockTransaction, request: Request) {
     invoice: transaction.invoice,
     buyer: transaction.buyer,
     declarationTemplateVersion: transaction.declarationTemplateVersion,
+    // Q-12's resolution, and exactly the four fields the API sends — the
+    // contract's listing `documents[]` shape (`{id, documentType}`) plus the
+    // two a human needs to tell one attachment from another. `mimeType` and
+    // `sizeBytes` were dropped from this payload deliberately: the mock used
+    // to carry them, and a screen built against fields live does not send is
+    // the drift the whole endpoint-status discipline exists to prevent.
     documents: transaction.documents.map((d) => ({
       id: d.id,
       documentType: d.documentType,
       fileName: d.fileName,
-      mimeType: d.mimeType,
-      sizeBytes: d.sizeBytes,
       uploadedAt: d.uploadedAt,
     })),
   };

@@ -512,6 +512,8 @@
       "choose": "Choose file",
       "replace": "Replace file",
       "remove": "Remove",
+      "download": "Download",
+      "downloadUnavailable": "This document is not available to download right now.",
       "type": {
         "EINVOICE": "Electronic invoice",
         "PURCHASE_ORDER": "Purchase order",
@@ -590,9 +592,9 @@
       "check": {
         "COMPLETENESS": "Required fields and documents",
         "IDENTITY_MATCH": "Supplier and buyer match the invoice",
-        "DUPLICATE_DETECTION": "Not already submitted",
-        "TRANSACTION_LOGIC": "Dates and amounts are consistent",
-        "PARTY_ELIGIBILITY": "Supplier and buyer are eligible",
+        "DUPLICATE": "Not already submitted",
+        "LOGIC": "Dates and amounts are consistent",
+        "ELIGIBILITY": "Supplier and buyer are eligible",
         "FILE_INTEGRITY": "Document integrity",
         "OCR_CONSISTENCY": "Read values match what you entered",
         "QR_CONSISTENCY": "QR code matches the invoice",

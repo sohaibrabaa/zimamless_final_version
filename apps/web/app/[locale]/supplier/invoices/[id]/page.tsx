@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { useState } from "react";
 import { useParams } from "next/navigation";
 import { FinancingGate } from "@/components/onboarding/FinancingGate";
 import { VerificationPanel } from "@/components/invoices/VerificationPanel";
@@ -9,7 +10,12 @@ import { SkeletonText } from "@/components/ui/Skeleton";
 import { ErrorState } from "@/components/ui/StatePanels";
 import { MoneyDisplay } from "@/components/money/MoneyDisplay";
 import { useTranslations } from "@/lib/i18n/dictionary-context";
-import { useTransaction, useVerificationRun } from "@/lib/invoices/useTransactions";
+import {
+  requestDownloadUrl,
+  useTransaction,
+  useVerificationRun,
+  type TransactionDocument,
+} from "@/lib/invoices/useTransactions";
 import {
   hasVerificationRun,
   transactionStateLabelKey,
@@ -134,10 +140,7 @@ function TransactionDetail() {
           <h2 className="text-sm font-semibold">{t("invoices.detail.documentsSection")}</h2>
           <ul className="mt-3 flex flex-col gap-2">
             {transaction.documents.map((doc) => (
-              <li key={doc.id} className="flex flex-wrap items-center justify-between gap-2 text-sm">
-                <span>{t(`invoices.documents.type.${doc.documentType}`)}</span>
-                <span className="zm-ltr-embed text-xs text-(--color-muted)">{doc.fileName}</span>
-              </li>
+              <DocumentRow key={doc.id} document={doc} />
             ))}
           </ul>
         </section>
@@ -149,6 +152,58 @@ function TransactionDetail() {
         </section>
       )}
     </div>
+  );
+}
+
+/**
+ * One attached document, with its download.
+ *
+ * The signed URL is requested on click rather than with the transaction: it
+ * lives about two minutes, so minting one per rendered row would hand out
+ * credentials nobody uses and hold an expired link by the time a supplier
+ * reads the page. A refusal is a 404 by design (a document that is not yours
+ * is indistinguishable from one that does not exist), so both cases get the
+ * same neutral message.
+ */
+function DocumentRow({ document: doc }: { document: TransactionDocument }) {
+  const t = useTranslations();
+  const [busy, setBusy] = useState(false);
+  const [failed, setFailed] = useState(false);
+
+  async function open() {
+    if (!doc.id) return;
+    setBusy(true);
+    setFailed(false);
+    try {
+      const url = await requestDownloadUrl(doc.id);
+      window.open(url, "_blank", "noopener,noreferrer");
+    } catch {
+      setFailed(true);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <li className="flex flex-wrap items-center justify-between gap-2 text-sm">
+      <span>{t(`invoices.documents.type.${doc.documentType}`)}</span>
+      <span className="flex flex-wrap items-center gap-3">
+        <span className="zm-ltr-embed text-xs text-(--color-muted)">{doc.fileName}</span>
+        <button
+          type="button"
+          onClick={open}
+          disabled={busy || !doc.id}
+          className="text-xs underline underline-offset-2 disabled:opacity-50"
+        >
+          {busy ? t("common.loading") : t("invoices.documents.download")}
+        </button>
+      </span>
+      {failed && (
+        <p className="w-full text-xs text-(--color-muted)">
+          {t("invoices.documents.downloadUnavailable")}
+        </p>
+      )}
+    </li>
   );
 }
 

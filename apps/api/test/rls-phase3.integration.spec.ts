@@ -15,9 +15,11 @@ import { PersonaDb, PERSONA, ORG } from './helpers/persona-db';
  * rather than passing vacuously — which is the same reasoning that made the
  * Phase 1 audit turn the absent-DATABASE_URL skip into a throw.
  *
- * Requires migrations 0000-0005, `db/seed/0100_seed_dev.sql`, and at least
- * one submitted transaction for Al-Noor (the live verification run creates
- * one; `npm run db:seed` does not).
+ * Requires migrations 0000-0005 and `db/seed/0100_seed_dev.sql`. Everything
+ * else it needs, it arranges and removes itself — see FIX below. It used to
+ * require "at least one submitted transaction, which the live verification
+ * run creates", which meant the suite's result depended on what someone had
+ * run by hand beforehand.
  */
 
 const connectionString = process.env.DATABASE_URL;
@@ -51,12 +53,125 @@ describeIfDb('RLS with rows present (Phase 2 + Phase 3 carry-over)', () => {
     return n;
   };
 
+  /**
+   * Fixture ids, fixed so teardown is exact and a re-run cannot accumulate.
+   *
+   * These rows are arranged here rather than inherited from a live run. The
+   * suite used to depend on residue left behind by the Phase 3 verification
+   * script, which is the same mistake the Phase 2 audit recorded in the other
+   * direction — residue described as fixtures. It also made the suite pass or
+   * fail depending on what someone had run that afternoon.
+   *
+   * Writing these rows by hand is honest for THIS suite in a way it would not
+   * be for the seed. An RLS policy is evaluated on ownership columns; it
+   * neither knows nor cares whether the fingerprint was genuinely computed.
+   * The claim under test is "a Petra token cannot see an Al-Noor row", and
+   * these rows are real Al-Noor rows. The seed refuses to invent invoices for
+   * the opposite reason: there the claim under test would have been about the
+   * duplicate check, which an invented fingerprint would fake.
+   */
+  const FIX = {
+    tx: '0e400000-0000-4000-8000-000000000001',
+    invoice: '0e400000-0000-4000-8000-000000000002',
+    document: '0e400000-0000-4000-8000-000000000003',
+    extraction: '0e400000-0000-4000-8000-000000000004',
+    run: '0e400000-0000-4000-8000-000000000005',
+    check: '0e400000-0000-4000-8000-000000000006',
+    fraudCase: '0e400000-0000-4000-8000-000000000007',
+    indicator: '0e400000-0000-4000-8000-000000000008',
+    attempt: '0e400000-0000-4000-8000-000000000009',
+  } as const;
+
+  const AL_NOOR_OWNER_USER = '0e100000-0000-4000-8000-000000000001';
+
+  /** Child-first, so a re-run starts from a clean slate either way. */
+  const dropFixtures = async (): Promise<void> => {
+    await db.asAdmin('DELETE FROM buyer_resolution_attempts WHERE id = $1', [FIX.attempt]);
+    await db.asAdmin('DELETE FROM fraud_indicators WHERE id = $1', [FIX.indicator]);
+    await db.asAdmin('DELETE FROM fraud_cases WHERE id = $1', [FIX.fraudCase]);
+    await db.asAdmin('DELETE FROM verification_checks WHERE id = $1', [FIX.check]);
+    await db.asAdmin('DELETE FROM verification_runs WHERE id = $1', [FIX.run]);
+    await db.asAdmin('DELETE FROM document_extractions WHERE id = $1', [FIX.extraction]);
+    await db.asAdmin('DELETE FROM documents WHERE id = $1', [FIX.document]);
+    await db.asAdmin('DELETE FROM invoices WHERE id = $1', [FIX.invoice]);
+    await db.asAdmin('DELETE FROM receivable_transactions WHERE id = $1', [FIX.tx]);
+  };
+
   beforeAll(async () => {
     db = await PersonaDb.connect(connectionString!, 'rls-phase3');
+    await dropFixtures();
+
+    await db.asAdmin(
+      `INSERT INTO receivable_transactions
+         (id, reference_number, supplier_org_id, state, minimum_acceptable_amount, created_by)
+       VALUES ($1, 'ZM-RLS-FIXTURE-1', $2, 'ELIGIBLE', 900.000, $3)`,
+      [FIX.tx, ORG.alNoor, AL_NOOR_OWNER_USER],
+    );
+
+    await db.asAdmin(
+      `INSERT INTO invoices
+         (id, transaction_id, invoice_number, einvoice_identifier, issue_date, due_date,
+          subtotal_amount, tax_amount, face_value, paid_amount, outstanding_amount, fingerprint)
+       VALUES ($1, $2, 'RLS-FIXTURE-1', 'JO-EINV-RLSFIXTURE-0001', DATE '2026-01-01',
+               DATE '2026-06-01', 1000.000, 0, 1000.000, 0, 1000.000, 'rls-fixture-v1')`,
+      [FIX.invoice, FIX.tx],
+    );
+
+    await db.asAdmin(
+      `INSERT INTO documents
+         (id, owner_org_id, document_type, storage_path, file_name, mime_type, size_bytes,
+          file_hash, subject_type, subject_id, uploaded_by)
+       VALUES ($1, $2, 'ELECTRONIC_INVOICE', 'rls-fixture/invoice.pdf', 'invoice.pdf',
+               'application/pdf', 1024, 'rls-fixture-hash', 'TRANSACTION', $3, $4)`,
+      [FIX.document, ORG.alNoor, FIX.tx, AL_NOOR_OWNER_USER],
+    );
+
+    await db.asAdmin(
+      `INSERT INTO document_extractions
+         (id, document_id, extraction_kind, raw_output, extracted_fields, confidence, succeeded)
+       VALUES ($1, $2, 'OCR', '{"lines":[]}'::jsonb, '{}'::jsonb, 0.9, true)`,
+      [FIX.extraction, FIX.document],
+    );
+
+    await db.asAdmin(
+      `INSERT INTO verification_runs (id, transaction_id, completed_at, overall_result)
+       VALUES ($1, $2, now(), 'PASS')`,
+      [FIX.run, FIX.tx],
+    );
+
+    await db.asAdmin(
+      `INSERT INTO verification_checks (id, run_id, check_type, result)
+       VALUES ($1, $2, 'COMPLETENESS', 'PASS')`,
+      [FIX.check, FIX.run],
+    );
+
+    await db.asAdmin(
+      `INSERT INTO fraud_cases (id, transaction_id, organization_id, status, summary, opened_by)
+       VALUES ($1, $2, $3, 'OPEN', 'RLS fixture — duplicate invoice referral', $4)`,
+      [FIX.fraudCase, FIX.tx, ORG.alNoor, AL_NOOR_OWNER_USER],
+    );
+
+    await db.asAdmin(
+      `INSERT INTO fraud_indicators (id, fraud_case_id, indicator_type, source_reference)
+       VALUES ($1, $2, 'DUPLICATE_INVOICE', 'rls-fixture-v1')`,
+      [FIX.indicator, FIX.fraudCase],
+    );
+
+    // A search this supplier ran. Buyer search history is competitively
+    // sensitive on its own — who a supplier is looking up says who they are
+    // about to invoice — so it gets the same treatment as the invoice.
+    await db.asAdmin(
+      `INSERT INTO buyer_resolution_attempts (id, supplier_org_id, search_term, status, selected_by)
+       VALUES ($1, $2, '30000201', 'MATCHED', $3)`,
+      [FIX.attempt, ORG.alNoor, AL_NOOR_OWNER_USER],
+    );
   });
 
   afterAll(async () => {
-    await db?.close();
+    if (db) {
+      await dropFixtures().catch(() => undefined);
+      await db.close();
+    }
   });
 
   // -------------------------------------------------------------------

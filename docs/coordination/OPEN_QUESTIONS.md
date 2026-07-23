@@ -139,7 +139,7 @@ Options considered:
 Recommendation: **Option 1**, with `reviewReference` as the key name.
 Interim behaviour: `apps/web/lib/invoices/duplicate.ts` accepts `reviewReference`, `reviewRecordId`, `reviewId` or `caseReference`, and when none is present renders "Not provided" beside the correlation id rather than an empty field or a fabricated value. One file changes when this is ruled.
 Needed by: Phase 3 integration checkpoint (the duplicate drill is in the checkpoint definition)
-Status: OPEN
+Status: **RESOLVED** (Phase 3 unification session). Agent A already sends `details.reviewReference` — B's primary accepted spelling — confirmed live by the journey suite's duplicate tests. `reviewReference` is the contract-de-facto key; B's tolerant adapter may keep its other spellings as a defensive fallback but no longer needs to.
 
 ## Q-12 — No way to list the documents attached to a transaction
 Raised by: Agent B, 2026-07-23, blocking: not blocking (wizard tracks its own uploads)
@@ -151,7 +151,7 @@ Options considered:
 Recommendation: **Option 1**, mirroring how Q-08 was resolved for `governmentRequests`.
 Interim behaviour: `TransactionView` in `apps/web/lib/invoices/useTransactions.ts` widens the generated type with an optional `documents[]` and every screen omits the section when it is absent — never showing an empty list as if the transaction had no documents.
 Needed by: Phase 5 (bank underwriting view); useful at the Phase 3 checkpoint
-Status: OPEN
+Status: **RESOLVED** (Phase 3 unification session), on Option 1's terms but noting the contract already had this shape: the marketplace listing schema declares `documents: [{id, documentType}]`, so this is an additive field on the transaction detail mirroring an existing shape rather than an invented one. `TransactionsService.describe()` now returns `documents: [{id, documentType, fileName, uploadedAt}]` for SUPPLIER and PLATFORM audiences (banks get documents via the Phase 5 listing instead). The supplier transaction detail lists them with a per-document signed-download link, requested on click.
 
 ## Q-13 — No declaration template version, though the requirement says the version is recorded
 Raised by: Agent B, 2026-07-23, blocking: not blocking (provisional version shipped)
@@ -163,4 +163,4 @@ Options considered:
 Recommendation: **Option 1**, ratifying `"1.0"` and the transcription below unless the wording should differ.
 Interim behaviour: `apps/web/lib/invoices/declarations.ts` holds `DECLARATION_TEMPLATE_VERSION = "1.0"` and the eight texts transcribed from ZM-INV-004's bullets, EN + AR. **Agent A's accepted version must match this or the declarations call 422s at integration.**
 Needed by: Phase 3 integration checkpoint
-Status: OPEN
+Status: **RESOLVED** (Phase 3 unification session), on Option 1's terms: `"1.0"` is ratified as the accepted version, confirming B's transcription needed no change. Before this session A's service accepted **any** non-empty string — the exact Q-09 failure mode repeating, as B's §6 risk note predicted. `apps/api/src/modules/transactions/declaration-catalogue.ts` now holds `DECLARATION_TEMPLATE_VERSIONS = {'1.0'}` and `recordDeclarations` 422s on anything outside it, naming the accepted set in the refusal.

@@ -1,6 +1,9 @@
 import { describe, it, expect, beforeEach } from "vitest";
 import {
-  MOCK_INVOICE_FIXTURE,
+  DUPLICATE_FIXTURE,
+  INVOICE_FIXTURE,
+  MISMATCH_FIXTURE,
+  MISMATCH_QR_FACE_VALUE_FIXTURE,
   createDocument,
   createTransaction,
   extractionForDocument,
@@ -39,7 +42,11 @@ beforeEach(() => {
   resetTransactionMocks();
 });
 
-function completeDraft(orgId: string, overrides: Record<string, string> = {}): MockTransaction {
+function completeDraft(
+  orgId: string,
+  overrides: Record<string, string> = {},
+  floor = "11000.000",
+): MockTransaction {
   const transaction = createTransaction(orgId);
   const id = transaction.id!;
   linkBuyer(id, B1.id);
@@ -50,17 +57,8 @@ function completeDraft(orgId: string, overrides: Record<string, string> = {}): M
     sizeBytes: 1024,
     subjectId: id,
   });
-  setInvoice(id, {
-    invoiceNumber: MOCK_INVOICE_FIXTURE.invoiceNumber,
-    einvoiceIdentifier: MOCK_INVOICE_FIXTURE.einvoiceIdentifier,
-    issueDate: MOCK_INVOICE_FIXTURE.issueDate,
-    dueDate: MOCK_INVOICE_FIXTURE.dueDate,
-    subtotalAmount: MOCK_INVOICE_FIXTURE.subtotalAmount,
-    taxAmount: MOCK_INVOICE_FIXTURE.taxAmount,
-    faceValue: MOCK_INVOICE_FIXTURE.faceValue,
-    ...overrides,
-  });
-  setMinimumAmount(id, "13000.000");
+  setInvoice(id, { ...INVOICE_FIXTURE, ...overrides });
+  setMinimumAmount(id, floor);
   setDeclarations(id, "1.0");
   return transaction;
 }
@@ -114,11 +112,13 @@ describe("extraction profiles", () => {
       sizeBytes: 2048,
     });
     const extraction = extractionForDocument(doc.id)!;
-    // The deliberate discrepancy the phase file calls for: the two machine
-    // readings disagree with each other, so a supplier correcting one cannot
-    // silently satisfy both.
-    expect(extraction.ocr?.extractedFields?.taxAmount).toBe("2000.000");
-    expect(extraction.qr?.extractedFields?.taxAmount).toBe("2100.000");
+    // The deliberate discrepancy the phase file calls for, matching the real
+    // seeded `INV-2026-0002-alnoor-levant-mismatch.pdf`: the page prints
+    // 24500.000 and the QR carries 25000.000, so the two machine readings
+    // disagree with each other and correcting one cannot silently satisfy
+    // both.
+    expect(extraction.ocr?.extractedFields?.faceValue).toBe(MISMATCH_FIXTURE.faceValue);
+    expect(extraction.qr?.extractedFields?.faceValue).toBe(MISMATCH_QR_FACE_VALUE_FIXTURE);
     expect(extraction.mismatches?.length).toBeGreaterThan(0);
     // rawOutput is preserved separately from extractedFields (ZM-DOC-006).
     expect(extraction.ocr?.rawOutput).toBeDefined();
@@ -173,7 +173,10 @@ describe("invoice and floor", () => {
       error: "EXCEEDS_OUTSTANDING",
     });
     expect(setMinimumAmount(id, "0.000")).toEqual({ ok: false, error: "NOT_POSITIVE" });
-    expect(setMinimumAmount(id, "14500.000").ok).toBe(true);
+    // Exactly the outstanding amount is permitted — the floor is a minimum
+    // the supplier will accept, and accepting nothing less than face value
+    // is a legitimate (if unlikely to be filled) position.
+    expect(setMinimumAmount(id, INVOICE_FIXTURE.faceValue).ok).toBe(true);
   });
 });
 
@@ -201,10 +204,13 @@ describe("submission and fingerprint uniqueness (ZM-VER-001)", () => {
   });
 
   it("blocks the same invoice submitted by a second supplier, with a review reference", () => {
-    // The checkpoint case: the fingerprint is platform-wide, so the *supplier*
-    // is deliberately not part of it. Petra submits first; Al-Noor is blocked.
+    // The checkpoint case, and the seeded `INV-2026-0003` pair: the
+    // fingerprint is platform-wide, so the *supplier* is deliberately not
+    // part of it. Petra submits first; Al-Noor is blocked. The server half
+    // keyed on the supplier until the Phase 3 audit, which would have let
+    // this exact submission through.
     seedDuplicateCounterpart();
-    const alnoor = completeDraft(ORG.alnoor);
+    const alnoor = completeDraft(ORG.alnoor, { ...DUPLICATE_FIXTURE }, "5000.000");
     const result = submitTransaction(alnoor.id!);
     expect(result.ok).toBe(false);
     if (!result.ok && result.error === "DUPLICATE") {
@@ -215,12 +221,13 @@ describe("submission and fingerprint uniqueness (ZM-VER-001)", () => {
     // Blocked, not rejected: the draft and everything in it survives.
     expect(alnoor.state).toBe("DRAFT");
     expect(alnoor.invoice).toBeDefined();
-    expect(alnoor.minimumAcceptableAmount).toBe("13000.000");
+    expect(alnoor.minimumAcceptableAmount).toBe("5000.000");
   });
 
   it("does not collide when any fingerprint component differs", () => {
     seedDuplicateCounterpart();
-    const alnoor = completeDraft(ORG.alnoor, { invoiceNumber: "MOCK-INV-2026-0042" });
+    // The happy-path invoice is a different receivable entirely.
+    const alnoor = completeDraft(ORG.alnoor);
     expect(submitTransaction(alnoor.id!).ok).toBe(true);
   });
 
@@ -256,17 +263,10 @@ describe("verification reflects the transaction rather than a canned list", () =
       sizeBytes: 1024,
       subjectId: id,
     });
-    // The supplier confirms the OCR figure; the QR still disagrees.
-    setInvoice(id, {
-      invoiceNumber: MOCK_INVOICE_FIXTURE.invoiceNumber,
-      einvoiceIdentifier: MOCK_INVOICE_FIXTURE.einvoiceIdentifier,
-      issueDate: MOCK_INVOICE_FIXTURE.issueDate,
-      dueDate: MOCK_INVOICE_FIXTURE.dueDate,
-      subtotalAmount: MOCK_INVOICE_FIXTURE.subtotalAmount,
-      taxAmount: "2000.000",
-      faceValue: MOCK_INVOICE_FIXTURE.faceValue,
-    });
-    setMinimumAmount(id, "13000.000");
+    // The supplier confirms the printed figure OCR read (24500.000); the QR,
+    // which carries 25000.000, still disagrees.
+    setInvoice(id, { ...MISMATCH_FIXTURE });
+    setMinimumAmount(id, "20000.000");
     setDeclarations(id, "1.0");
 
     const result = submitTransaction(id);
@@ -289,16 +289,8 @@ describe("verification reflects the transaction rather than a canned list", () =
       sizeBytes: 1024,
       subjectId: id,
     });
-    setInvoice(id, {
-      invoiceNumber: "MOCK-INV-2026-0099",
-      einvoiceIdentifier: MOCK_INVOICE_FIXTURE.einvoiceIdentifier,
-      issueDate: MOCK_INVOICE_FIXTURE.issueDate,
-      dueDate: MOCK_INVOICE_FIXTURE.dueDate,
-      subtotalAmount: MOCK_INVOICE_FIXTURE.subtotalAmount,
-      taxAmount: MOCK_INVOICE_FIXTURE.taxAmount,
-      faceValue: MOCK_INVOICE_FIXTURE.faceValue,
-    });
-    setMinimumAmount(id, "13000.000");
+    setInvoice(id, { ...INVOICE_FIXTURE, invoiceNumber: "INV-2026-0099" });
+    setMinimumAmount(id, "11000.000");
     setDeclarations(id, "1.0");
 
     const result = submitTransaction(id);
@@ -320,22 +312,14 @@ describe("verification reflects the transaction rather than a canned list", () =
       sizeBytes: 1024,
       subjectId: id,
     });
-    setInvoice(id, {
-      invoiceNumber: "MOCK-INV-2026-0100",
-      einvoiceIdentifier: MOCK_INVOICE_FIXTURE.einvoiceIdentifier,
-      issueDate: MOCK_INVOICE_FIXTURE.issueDate,
-      dueDate: MOCK_INVOICE_FIXTURE.dueDate,
-      subtotalAmount: MOCK_INVOICE_FIXTURE.subtotalAmount,
-      taxAmount: MOCK_INVOICE_FIXTURE.taxAmount,
-      faceValue: MOCK_INVOICE_FIXTURE.faceValue,
-    });
-    setMinimumAmount(id, "13000.000");
+    setInvoice(id, { ...INVOICE_FIXTURE, invoiceNumber: "INV-2026-0100" });
+    setMinimumAmount(id, "11000.000");
     setDeclarations(id, "1.0");
 
     const result = submitTransaction(id);
     if (!result.ok) throw new Error("expected submission to proceed");
     const eligibility = result.transaction.verification!.checks!.find(
-      (c) => c.checkType === "PARTY_ELIGIBILITY"
+      (c) => c.checkType === "ELIGIBILITY"
     );
     expect(eligibility!.result).toBe("REVIEW");
   });
