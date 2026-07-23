@@ -1,4 +1,4 @@
-import { HttpStatus, Inject, Injectable } from '@nestjs/common';
+import { HttpStatus, Inject, Injectable, Logger } from '@nestjs/common';
 import { PoolClient } from 'pg';
 import { DatabaseService } from '../../database/database.service';
 import { AppException } from '../../common/errors/app.exception';
@@ -8,6 +8,7 @@ import { TIME_PROVIDER, TimeProvider } from '../../common/time/time.provider';
 import { AuditService } from '../../common/audit/audit.service';
 import type { ActorContext } from '../onboarding/onboarding.service';
 import { contentHash } from './content-hash';
+import { CommissionService } from '../marketplace/commission.service';
 
 /**
  * Offer acceptance — the highest-risk code in the system (brief §5).
@@ -81,9 +82,12 @@ const DEFAULT_ACCEPTANCE_ROLES = ['SUPPLIER_OWNER', 'SUPPLIER_SIGNATORY'];
 
 @Injectable()
 export class AcceptanceService {
+  private readonly logger = new Logger(AcceptanceService.name);
+
   constructor(
     private readonly db: DatabaseService,
     private readonly audit: AuditService,
+    private readonly commission: CommissionService,
     @Inject(TIME_PROVIDER) private readonly time: TimeProvider,
   ) {}
 
@@ -226,7 +230,16 @@ export class AcceptanceService {
         capturedAt: now,
       });
 
-      // ---- 8. history, notifications, audit ----------------------------
+      // ---- 8. the commission becomes a real charge (ZM-FEE-012, INV-5) --
+      // Inside this transaction on purpose: the charge and the snapshot that
+      // justifies it commit together or not at all. Until now the platform's
+      // commission existed only as a figure on the offer; from here it is a
+      // recorded calculation with a tier behind it. It is CALCULATED, never
+      // FINALIZED — the platform has not earned it until the supplier is
+      // actually paid, which is INV-5 and happens in SettlementService.
+      await this.recordCommission(client, offer, now);
+
+      // ---- 9. history, notifications, audit ----------------------------
       await client.query(
         `INSERT INTO status_history
            (entity_type, entity_id, previous_status, new_status, reason, changed_by, changed_at)
@@ -336,6 +349,65 @@ export class AcceptanceService {
    * on the live row — so a snapshot that pointed at them would silently
    * change meaning as the deal progressed. ZM-SEL-008 requires the opposite.
    */
+  /**
+   * Record the platform commission as a CALCULATED charge.
+   *
+   * `CommissionService.record` was written in Phase 5 for exactly this moment
+   * and never called — Phase 5 quoted, and nothing recorded. This is the call
+   * it was waiting for.
+   *
+   * ## Which figure is charged when the tier has moved
+   *
+   * `quote()` prices the gross against the tier that is active *now*. The
+   * offer, however, committed a specific `platform_commission_amount`, and the
+   * supplier accepted a net payout computed from it. If an administrator
+   * changed the tiers between the offer being made and accepted, those two
+   * disagree — and the committed figure wins, every time. Charging the new
+   * tier would mean charging the supplier something other than the deal they
+   * agreed to, which the immutable snapshot exists to prevent.
+   *
+   * So the tier metadata comes from the live lookup (there is nowhere else to
+   * get it — the offer stores an amount, not a tier), while the amount is the
+   * one that was agreed. A divergence is recorded in the audit trail rather
+   * than silently reconciled, because it means the tier table moved under a
+   * live offer and somebody should know.
+   */
+  private async recordCommission(
+    client: PoolClient,
+    offer: { transaction_id: string; gross_funding_amount: string; platform_commission_amount: string },
+    now: Date,
+  ): Promise<void> {
+    const gross = Money.from(offer.gross_funding_amount);
+    const committed = Money.from(offer.platform_commission_amount);
+    const quote = await this.commission.quote(gross, client);
+
+    const diverged = !quote.amount.equals(committed);
+    if (diverged) {
+      this.logger.warn(
+        `Commission tier drift on transaction ${offer.transaction_id}: the active tier prices ` +
+          `${gross.toString()} at ${quote.amount.toString()}, but the accepted offer committed ` +
+          `${committed.toString()}. Charging the committed amount.`,
+      );
+    }
+
+    await this.commission.record(client, {
+      transactionId: offer.transaction_id,
+      gross,
+      // The agreed amount, with the tier that was found for this gross.
+      quote: diverged ? { ...quote, amount: committed } : quote,
+    });
+
+    if (diverged) {
+      await this.audit.recordIn(client, {
+        actionType: 'COMMISSION_TIER_DRIFT',
+        targetEntityType: 'TRANSACTION',
+        targetEntityId: offer.transaction_id,
+        previousValue: { tierWouldCharge: quote.amount.toString() },
+        newValue: { charged: committed.toString(), tierId: quote.tierId, capturedAt: now.toISOString() },
+      });
+    }
+  }
+
   private async writeSnapshot(
     client: PoolClient,
     input: {
