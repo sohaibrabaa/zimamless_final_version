@@ -24,6 +24,8 @@ import { FraudService } from './modules/cases/fraud.service';
 import { CaseListService } from './modules/cases/case-list.service';
 import { NotificationsService } from './modules/notifications/notifications.service';
 import { NotificationsController } from './modules/notifications/notifications.controller';
+import { DemoController } from './modules/demo/demo.controller';
+import { DemoService } from './modules/demo/demo.service';
 import {
   DummyEmailChannel,
   DummyWhatsappChannel,
@@ -124,6 +126,8 @@ export const APP_CONFIG = 'APP_CONFIG';
     PaymentsController,
     CasesController,
     NotificationsController,
+    // --- Phase 9 ---
+    DemoController,
   ],
   providers: [
     {
@@ -231,6 +235,9 @@ export const APP_CONFIG = 'APP_CONFIG';
     DummyEmailChannel,
     DummyWhatsappChannel,
     ManualCallChannel,
+
+    // --- Phase 9 ---
+    DemoService,
     {
       provide: NOTIFICATION_CHANNELS,
       useFactory: (

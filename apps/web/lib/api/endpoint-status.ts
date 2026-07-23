@@ -134,7 +134,7 @@ export const endpointStatus: EndpointStatusEntry[] = [
   // left: `isLive` takes the first match, so two rows for one endpoint means
   // editing the wrong one changes nothing and looks like it should.
   { method: "POST", path: "/admin/relisting-requests/{id}/approve", phase: 9, status: "mock", notes: "not served — the ZM-REC-018 review desk decides these, Phase 9" },
-  { method: "POST", path: "/demo/time-travel", phase: 9, status: "mock", demoCritical: true },
+  { method: "POST", path: "/demo/time-travel", phase: 9, status: "mock", demoCritical: true, notes: "Served + integration-proven (phase9-demo): double-guarded 404, 403 to supplier, forward jump drives the maturity sweep to OVERDUE_UNCONFIRMED. UI control on platform/settings. Stays mock until smoke-tested through that screen live" },
 ];
 
 export function endpointKey(method: EndpointStatusEntry["method"], path: string): string {

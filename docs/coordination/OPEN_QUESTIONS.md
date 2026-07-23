@@ -45,7 +45,7 @@ Options considered:
 2. Arabic-Indic digits when `locale === "ar"`. More faithfully "localized", but changes every amount on every Arabic screen and in generated Arabic documents, and interacts with the contract's canonical-English rule (ZM-I18N-003b).
 Recommendation: **Option 1**, i.e. ratify what ships today, on the grounds that money strings are compared against contract and ledger values that are Latin-numeric everywhere else. The dead branch has been removed and the choice is now stated explicitly in `lib/money.ts` with a pointer here. Cheap to reverse — one `Intl.NumberFormat` locale argument — until Arabic contract/notification templates are written in Phase 6+.
 Needed by: before Arabic document templates are authored (Phase 6), after which the choice is baked into rendered PDFs.
-Status: OPEN
+Status: RULED (see DECISIONS.md D-17 — Western digits in both locales, 2026-07-23)
 
 ## Q-04 — `POST /auth/context` returns a response body the contract does not declare
 Raised by: Phase 1 unification session, 2026-07-23, blocking: not blocking
@@ -199,7 +199,7 @@ Options considered:
 Recommendation: **Option 1** now, **Option 2** if a task inbox is ratified — the sweep writes the same context either way, so promoting it later is a second write, not a rewrite.
 Interim behaviour: `apps/api/src/modules/funding/funding-deadlines.service.ts` escalates via `notifications` with `template_key = 'FUNDING_CONFIRMATION_ESCALATED'` (which doubles as the idempotency key, so a transaction escalates exactly once) plus an `audit_logs` entry whose `new_value` carries transaction id, settlement id, invoice number, supplier org, net payout, `bankMarkedSentAt`, and hours pending. `PLATFORM_SUPER_ADMIN` is deliberately excluded per AS-04, and a deployment with no active Operations Admin logs at ERROR and writes no audit entry rather than silently claiming an escalation occurred.
 Needed by: Phase 7 integration checkpoint (AS-04 is a named checkpoint step)
-Status: OPEN
+Status: RULED (see DECISIONS.md D-18 — escalation stays on notifications, no admin_tasks table, 2026-07-23)
 
 ## Q-17 — ZM-NOT-007 requires a manual call record; no endpoint in the contract or the overlay can create one
 Raised by: solo agent, 2026-07-23, blocking: not blocking (every other ZM-NOT-007 field is stored and delivered; only the manual-call branch is unreachable)
