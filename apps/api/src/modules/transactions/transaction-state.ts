@@ -65,6 +65,19 @@ const TRANSITIONS: ReadonlyMap<TransactionState, ReadonlySet<TransactionState>> 
     // OFFER_ACCEPTED is Phase 6's to perform.
     new Set<TransactionState>(['ELIGIBLE', 'OFFER_ACCEPTED', 'CANCELLED']),
   ],
+  [
+    'OFFER_ACCEPTED',
+    // Phase 6. CONDITIONS_PENDING and back again: the state is *derived* from
+    // whether any mandatory condition is unresolved, so it moves in both
+    // directions as conditions are fulfilled, waived, or (a bank's
+    // prerogative) added to the picture late. CONTRACTED is reachable
+    // directly when the accepted offer carried no mandatory conditions at all.
+    new Set<TransactionState>(['CONDITIONS_PENDING', 'CONTRACTED', 'CANCELLED']),
+  ],
+  ['CONDITIONS_PENDING', new Set<TransactionState>(['OFFER_ACCEPTED', 'CONTRACTED', 'CANCELLED'])],
+  // CONTRACTED onwards is Phase 7's (funding and settlement). Declaring those
+  // transitions now would assert behaviour no code can perform.
+  ['CONTRACTED', new Set<TransactionState>([])],
   ['FRAUD_REVIEW', new Set<TransactionState>(['ELIGIBLE', 'REJECTED'])],
 ]);
 

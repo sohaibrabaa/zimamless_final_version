@@ -43,6 +43,17 @@ import { OffersService } from './modules/marketplace/offers.service';
 import { PolicyFiltersService } from './modules/marketplace/policy-filters.service';
 import { CommissionService } from './modules/marketplace/commission.service';
 import { ListingDeadlinesService } from './modules/marketplace/listing-deadlines.service';
+import {
+  AcceptanceController,
+  ContractsController,
+} from './modules/contracts/contracts.controller';
+import { AcceptanceService } from './modules/contracts/acceptance.service';
+import { ContractsService } from './modules/contracts/contracts.service';
+import { ConditionsService } from './modules/contracts/conditions.service';
+import {
+  DummySignatureProvider,
+  SIGNATURE_PROVIDER,
+} from './modules/contracts/signature.provider';
 
 export const APP_CONFIG = 'APP_CONFIG';
 
@@ -74,6 +85,9 @@ export const APP_CONFIG = 'APP_CONFIG';
     AdminRiskModelsController,
     MarketplaceController,
     OffersController,
+    // --- Phase 6 ---
+    AcceptanceController,
+    ContractsController,
   ],
   providers: [
     {
@@ -144,6 +158,16 @@ export const APP_CONFIG = 'APP_CONFIG';
     OffersService,
     PolicyFiltersService,
     ListingDeadlinesService,
+
+    // --- Phase 6: selection, contracts, signatures ----------------------
+    AcceptanceService,
+    ContractsService,
+    ConditionsService,
+    // The provider is bound to a symbol, not to its class, so ZM-CON-009's
+    // "insertable without core domain changes" is a one-line swap here and
+    // nothing else. Nothing outside this file names DummySignatureProvider.
+    DummySignatureProvider,
+    { provide: SIGNATURE_PROVIDER, useExisting: DummySignatureProvider },
 
     { provide: APP_GUARD, useClass: AuthGuard },
     { provide: APP_INTERCEPTOR, useClass: AuditInterceptor },

@@ -64,6 +64,32 @@ describe('transitions the machine refuses', () => {
     expect(canTransition('FUNDED', 'PAID')).toBe(false);
   });
 
+  it('moves between OFFER_ACCEPTED and CONDITIONS_PENDING in both directions', () => {
+    // The state is derived from whether a mandatory condition is unresolved,
+    // so it has to be able to move back when the last one is fulfilled — and
+    // forward again if a bank records something late.
+    expect(canTransition('OFFER_ACCEPTED', 'CONDITIONS_PENDING')).toBe(true);
+    expect(canTransition('CONDITIONS_PENDING', 'OFFER_ACCEPTED')).toBe(true);
+  });
+
+  it('reaches CONTRACTED from either accepted state', () => {
+    // Directly when the accepted offer carried no mandatory conditions at all.
+    expect(canTransition('OFFER_ACCEPTED', 'CONTRACTED')).toBe(true);
+    expect(canTransition('CONDITIONS_PENDING', 'CONTRACTED')).toBe(true);
+  });
+
+  it('cannot go back to the marketplace once an offer is accepted', () => {
+    // Acceptance is irreversible (INV-1/INV-4). Unwinding it is a withdrawal
+    // case in Phase 8, not a state change.
+    expect(canTransition('OFFER_ACCEPTED', 'OPEN_FOR_OFFERS')).toBe(false);
+    expect(canTransition('OFFER_ACCEPTED', 'ELIGIBLE')).toBe(false);
+    expect(canTransition('CONTRACTED', 'OFFER_ACCEPTED')).toBe(false);
+  });
+
+  it('declares nothing beyond CONTRACTED, because Phase 7 has not built it', () => {
+    expect(canTransition('CONTRACTED', 'READY_FOR_DISBURSEMENT')).toBe(false);
+  });
+
   it('requireTransition throws with both states named', () => {
     expect(() => requireTransition('DRAFT', 'ELIGIBLE')).toThrow(InvalidTransition);
     try {

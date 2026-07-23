@@ -55,12 +55,12 @@ endpoint, and has no mock→live promotion to track.
 | GET/PATCH /offers/{id} | 5 | — | mock | built. PATCH creates a NEW version and moves the old one to REVISED; lineage kept. Another bank's offer is a 404, not a 403 |
 | POST /offers/{id}/approve | 5 | — | mock | built. **200**, not 201. 403 SELF_APPROVAL_FORBIDDEN if the approver created it (INV-12) — block it in the UI too, but the server is the authority |
 | POST /offers/{id}/withdraw | 5 | — | mock | built. **200**. Pre-acceptance only, no penalty, audited. After acceptance it is 409 — that is the Phase 8 withdrawal-case route |
-| POST /offers/{id}/accept | 6 | — | mock | DEMO-CRITICAL |
-| POST /listings/{id}/reject-all | 6 | — | mock | |
-| POST/GET …/{id}/contract | 6 | — | mock | |
-| POST /contracts/{id}/sign | 6 | — | mock | |
-| GET …/{id}/conditions | 6 | — | mock | |
-| POST /conditions/{id}/fulfil | 6 | — | mock | |
+| POST /offers/{id}/accept | 6 | — | mock | DEMO-CRITICAL · built. **200, no request body.** Returns the AcceptedOfferSnapshot, not the offer. A replay returns the SAME snapshot with 200 — safe to retry. Second offer on a locked transaction is 409 TRANSACTION_ALREADY_LOCKED. Irreversible: a database trigger refuses to clear the lock |
+| POST /listings/{id}/reject-all | 6 | — | mock | built. **200**. Transaction returns to ELIGIBLE and may be relisted; the listing is CANCELLED. Banks are told only that they were not selected |
+| POST/GET …/{id}/contract | 6 | — | mock | built. POST is **201**; 409 if already generated (never regenerates a signable document); **422 with `details.findings[]`** when the ZM-CON-006 checks fail — render the whole list as a checklist. GET is visible to both parties only |
+| POST /contracts/{id}/sign | 6 | — | mock | built. **200**. Body `{accepted:true}`; `false` is 422, not a no-op. 403 for a non-signatory. A signature counts only at `status:'VERIFIED'` — `SIGNED` is an intermediate. Contract reaches FULLY_SIGNED and the transaction CONTRACTED when all are verified |
+| GET …/{id}/conditions | 6 | — | mock | built. Conditions on the ACCEPTED offer only; an empty array before acceptance, not a 404 |
+| POST /conditions/{id}/fulfil | 6 | — | mock | built. **200**. Supplier records fulfilment with `documentIds` (must already be attached to the transaction); only the BANK may send `waiverReason`, and a blank one is 422. CONDITIONS_PENDING is derived — it clears itself |
 | POST …/{id}/funding/mark-sent | 7 | — | mock | |
 | POST …/{id}/funding/otp | 7 | — | mock | |
 | POST …/{id}/funding/confirm | 7 | — | mock | |

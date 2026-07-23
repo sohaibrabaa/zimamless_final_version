@@ -92,7 +92,15 @@ export class StorageService {
     const existing = await fetch(`${this.baseUrl}/bucket/${this.bucket}`, {
       headers: this.headers(),
     });
-    if (existing.ok) return;
+    if (existing.ok) {
+      // The bucket predates Phase 6, when the server itself started writing
+      // generated contract documents. Its stored mime allow-list would refuse
+      // them, and a bucket created months ago is not going to grow a new
+      // type on its own — so the accepted set is reasserted on every boot
+      // rather than only at creation.
+      await this.reconcileBucketMimeTypes();
+      return;
+    }
 
     const created = await fetch(`${this.baseUrl}/bucket`, {
       method: 'POST',
@@ -103,7 +111,7 @@ export class StorageService {
         // Never public. See the class comment.
         public: false,
         file_size_limit: MAX_DOCUMENT_BYTES,
-        allowed_mime_types: [...ALLOWED_MIME_TYPES],
+        allowed_mime_types: [...BUCKET_MIME_TYPES],
       }),
     });
 
@@ -112,6 +120,36 @@ export class StorageService {
       throw new Error(`Failed to create the "${this.bucket}" storage bucket: ${detail}`);
     }
     this.logger.log(`Storage bucket "${this.bucket}" is present and private.`);
+  }
+
+  /**
+   * Widens an existing bucket's mime allow-list to `BUCKET_MIME_TYPES`.
+   *
+   * Never narrows it: this runs at boot and a boot-time write that could
+   * remove an accepted type would break uploads the moment someone edits the
+   * constant, in an environment where nobody is watching the log.
+   */
+  private async reconcileBucketMimeTypes(): Promise<void> {
+    const response = await fetch(`${this.baseUrl}/bucket/${this.bucket}`, {
+      method: 'PUT',
+      headers: this.headers({ 'Content-Type': 'application/json' }),
+      body: JSON.stringify({
+        id: this.bucket,
+        public: false,
+        file_size_limit: MAX_DOCUMENT_BYTES,
+        allowed_mime_types: [...BUCKET_MIME_TYPES],
+      }),
+    });
+    if (!response.ok) {
+      // Not fatal. A bucket whose allow-list could not be widened still
+      // serves every existing flow; contract generation is what would fail,
+      // and it will fail loudly at the upload with the storage error rather
+      // than being pre-empted here by a boot that refuses to start.
+      this.logger.warn(
+        `Could not reconcile the "${this.bucket}" bucket mime allow-list (${response.status}). ` +
+          'Contract document upload may be refused by storage.',
+      );
+    }
   }
 
   /**
@@ -239,3 +277,16 @@ export const ALLOWED_MIME_TYPES: readonly string[] = [
   'image/jpeg',
   'image/tiff',
 ];
+
+/**
+ * What the bucket itself accepts — a superset of what a *user* may upload.
+ *
+ * `text/html` is here and deliberately NOT in `ALLOWED_MIME_TYPES`. Generated
+ * contract documents are HTML (PA-09) and are written by the server from a
+ * template it controls. A supplier-uploaded HTML file is a different thing
+ * entirely: it would be stored in a bucket whose download URLs are handed to
+ * other organizations' browsers, which is a scripting vector with no
+ * legitimate use case in this product. The server may write HTML here; a
+ * request may not.
+ */
+export const BUCKET_MIME_TYPES: readonly string[] = [...ALLOWED_MIME_TYPES, 'text/html'];

@@ -606,3 +606,113 @@ them — both worth knowing about:
 FLAGGED AGAIN — **Q-03 (Arabic digit set)**. Now genuinely pressing: Phase 6
 ships Arabic contract templates, which is prose with numbers in it on a
 document a supplier signs.
+
+## 2026-07-23 — Agent A (session 6, Phase 6)
+Selection and contracts. This phase holds the code the brief calls the
+highest-risk in the system, and most of what follows is about how that claim
+was tested rather than how it was written.
+
+DONE (`phases/PHASE_6_SELECTION_CONTRACTS.md`, Agent A tasks — all 12 items):
+Atomic offer acceptance exactly per brief §5, in one transaction with a real
+row lock; the INV-4 immutability trigger; reject-all; the contract template
+engine with four seeded templates (EN + AR, per type + fallback); the
+ZM-CON-006 pre-contract checks; contract generation with a stored HTML
+document and a hash; the dummy `SignatureProvider` with separate sign and
+verify; conditions with derived `CONDITIONS_PENDING`. Seven endpoints.
+
+CHANGED (shared surfaces — read this section):
+  - **Migration `0008_phase6_contracts.sql`** — the INV-4 trigger on
+    `receivable_transactions`, the AS-01 `offer_acceptance_roles` setting,
+    and four contract templates. Additive only; no column, constraint,
+    policy or response shape altered. `db:verify` is now 20 checks (was 17).
+  - **The `documents` storage bucket now accepts `text/html`** — for
+    server-generated contract documents only. The *user upload* allow-list is
+    unchanged and deliberately still excludes it: a supplier-uploaded HTML
+    file lands in a bucket whose download URLs go to other organizations'
+    browsers. Nothing you upload changes.
+  - **`transaction-state.ts`** gained OFFER_ACCEPTED / CONDITIONS_PENDING /
+    CONTRACTED transitions. Nothing existing was removed.
+  - Nothing renamed.
+
+SEED: none new. `npm run db:scenario:phase5` still produces the listing with
+two approvable offers, which is now also the starting point for the Phase 6
+demo — approve them, then accept.
+
+BLOCKED ON: **the deploy**, unchanged, six phases old, deliberately deferred.
+
+TWO THINGS I BROKE OR FOUND IN MY OWN EARLIER WORK:
+
+  1. **The seed has been creating duplicate bank organizations since Phase 1,
+     and the hosted database now holds three copies of each bank.**
+     `db/tools/seed.mjs` used `ON CONFLICT DO NOTHING` with a lookup
+     fallback — but `uq_org_national_no` is a PARTIAL index covering
+     suppliers only, so banks had nothing to conflict with, the insert always
+     returned a row, and the fallback was never reached for exactly the org
+     types that needed it. The seed is fixed (it looks before inserting). The
+     **existing duplicates are still there** and need a remap-and-delete
+     pass — they carry memberships, so it is a data migration, not a seed
+     re-run. Practical consequence for both of us: `memberships[0]` from
+     `/auth/me` is ordering-dependent and can name a duplicate. If you pin an
+     organization id anywhere, pin the canonical `0e000000-…` one.
+  2. Three schema assumptions I wrote before reading, all caught by the live
+     suite: `invoices` has no `status` column (cancellation is on the
+     transaction's state); `invoice_declarations` is one row of booleans per
+     transaction, not a row per key; `supplier_bank_accounts` stores
+     `iban_enc bytea`, not plaintext.
+
+NOTE FOR B — seven things about acceptance and contracts:
+
+  1. **`/accept` returns the SNAPSHOT, not the offer**, and it is a **200**,
+     not a 201. It takes **no request body** — every commercial term is
+     already fixed on the offer, and a body would invite a client to restate
+     a figure that can then disagree.
+  2. **A replayed accept returns the original snapshot with 200**, not an
+     error. Safe to retry on a dropped connection; the modal does not need to
+     guard against a double-click producing a scary message.
+  3. **Acceptance is irreversible and the database enforces it.** There is no
+     unlock. Say so in the confirmation modal in those words — the phase file
+     asks for "atomic and irreversible" and it is literally true, down to a
+     trigger that refuses to clear the lock.
+  4. **A second accept on the same transaction is 409
+     `TRANSACTION_ALREADY_LOCKED`.** Render it as "another offer was accepted"
+     rather than as a failure the user can retry.
+  5. **Contract generation can fail with a LIST.** 422, with
+     `details.findings` as an array of `{code, message}`. Render all of them
+     as a checklist — that shape is deliberate, so the supplier is not
+     drip-fed one blocker at a time.
+  6. **`documentHash` is over the exact bytes the API stored.** If you render
+     the contract yourself from `termsSnapshot` instead of displaying the
+     stored document, the hash on screen stops meaning anything. Serve what
+     the API produced.
+  7. **A signature is only real once `status === 'VERIFIED'`.** `SIGNED` is
+     an intermediate the dummy provider passes through in milliseconds and a
+     real provider will sit in for minutes. Drive the UI off VERIFIED, and
+     `FULLY_SIGNED` off the contract's own status, not off counting rows.
+
+VERIFICATION: 383 API unit tests (was 328), Phase 6 live integration suite
+(32 checks incl. the concurrency harness), `db:verify` 20/20, lint and
+typecheck clean across all workspaces.
+
+The harness is the part worth knowing about: two accepts on different offers
+of the same transaction, fired without awaiting either, repeated 8 times, and
+then asserted **against the database** rather than only the HTTP statuses —
+one SELECTED, one NOT_SELECTED, one selection row, one snapshot, and
+`locked_by_offer_id` pointing at the offer that actually won. Every other
+test in the phase would pass against a naive read-then-write implementation.
+Only this one would not.
+
+FLAGGED — **Q-03 (Arabic digit set) is now overdue.** This phase ships the
+first Arabic legal prose in the product: the AR contract template, with
+amounts and dates, on a document a supplier signs. I used Arabic-Indic
+section numbers and Western digits for money — the common Jordanian banking
+convention, but my assumption standing in for a ruling, and now baked into a
+contract template rather than a UI label.
+
+  8. **A contract does NOT need every listed signatory to sign.** ZM-CON-010's
+     default is one authorized supplier signatory and one authorized bank
+     signatory. A bank with two signatories gets two PENDING slots because
+     either may sign — not because both must. The unsigned slot stays PENDING
+     after FULLY_SIGNED, deliberately: that person did not sign, and the
+     record says so. Drive the UI off `contract.status`, not off "are all
+     signature rows verified". (I had this wrong first — the live run caught
+     it at two-of-three verified.)

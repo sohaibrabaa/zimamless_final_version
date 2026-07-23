@@ -153,6 +153,25 @@ try {
   // --- Organizations -------------------------------------------------------
   const orgIds = new Map();
   for (const org of ORGANIZATIONS) {
+    // Look before inserting. `ON CONFLICT DO NOTHING` alone is not idempotent
+    // here: `uq_org_national_no` is a PARTIAL index covering suppliers only,
+    // so a bank or the platform org has no unique constraint to conflict
+    // with, and every re-run of this seed inserted a fresh duplicate. The
+    // lookup below existed already as a fallback for when the insert
+    // returned no row — it was simply never reached for the org types that
+    // needed it most. Found during Phase 6, after the hosted database had
+    // accumulated three copies of each bank.
+    const preexisting = await client.query(
+      `SELECT id FROM organizations
+        WHERE national_establishment_no = $1 AND organization_type = $2
+        ORDER BY created_at LIMIT 1`,
+      [org.nationalEstablishmentNo, org.type],
+    );
+    if (preexisting.rows[0]) {
+      orgIds.set(org.slug, preexisting.rows[0].id);
+      continue;
+    }
+
     const { rows } = await client.query(
       `INSERT INTO organizations
          (organization_type, legal_name, status, national_establishment_no,
