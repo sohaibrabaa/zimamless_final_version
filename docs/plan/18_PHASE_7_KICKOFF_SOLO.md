@@ -39,6 +39,13 @@ Two known, deliberate gaps you inherit:
    live.** See §6; with one agent this is now a defect you can and should stop
    reproducing.
 
+One piece of outstanding housekeeping, unrelated to this phase but yours now:
+the hosted database still carries duplicate bank and platform organizations
+from an old seed bug (the seed itself is fixed). The merge tool is written and
+its dry run is clean — run `node db/tools/dedupe-organizations.mjs` to see the
+plan and `--apply` to execute. It affects no test and no demo path; do it when
+convenient, and don't rediscover the duplicates and assume they are new.
+
 ## 2. Non-negotiables
 
 These carried through six phases. They do not relax because the team shrank.
@@ -137,6 +144,14 @@ finish them, and test them; discard them if you have a better shape.
   (`CALCULATED`, tier snapshot per `ZM-FEE-012`); **`FINALIZED` only on
   `PAYOUT_COMPLETED`** (INV-5, `ZM-FEE-013..015`). Reversals are compensating
   records only, never edits.
+
+  > **Heads-up: this one reaches backwards.** "Prepared at acceptance" means
+  > `AcceptanceService` — Phase 6 code that is already built, already atomic,
+  > and covered by 36 passing integration tests. You are retrofitting a money
+  > path that currently works. Write the commission record inside the existing
+  > acceptance transaction (so it commits or vanishes with the snapshot), and
+  > re-run the full Phase 6 integration suite afterwards, not just your new
+  > tests. Do not loosen an existing Phase 6 assertion to accommodate it.
 - **Listing fee** — an unpaid obligation becomes `DEDUCTED` in the split.
 - **Ledger** — a balanced journal for every leg (funding received, commission,
   listing fee, supplier payout, reversal). Journals balance (INV-6), append-only
@@ -244,7 +259,89 @@ isolate. `main` is the only branch, and it should stay that way.
   explicitly in the message.
 - Do not commit secrets, `.env`, or generated artefacts.
 
-## 10. How to work
+## 10. Running things
+
+There is no `CLAUDE.md` in this repo, so nothing below is discoverable without
+reading it here. Config comes from `.env` at the repo root (`DATABASE_URL` is
+the Supabase **session pooler** string, not the direct host — the direct host
+is IPv6-only and will not resolve).
+
+**Database** — from the repo root:
+
+```
+npm run db:migrate     # apply pending migrations (currently 0000-0009)
+npm run db:verify      # 20 structural checks; MUST pass before you call anything done
+npm run db:seed        # personas, orgs, buyers. Idempotent. Refuses NODE_ENV=production
+```
+
+**Backend** — from `apps/api` (the jest configs are relative; running these
+from the repo root fails with a confusing "can't find config" error):
+
+```
+npm run typecheck
+npm run lint
+npm run test                 # unit — fast, no database
+npm run test:integration     # hosted DB, --runInBand, ~8 minutes
+npm run test:rls             # RLS suite: connects as each persona, bypassing Nest
+npm run start:dev
+```
+
+**Frontend** — from `apps/web`:
+
+```
+npm run typecheck
+npm run lint
+npm run test          # vitest
+npm run check:i18n    # EN/AR key parity — must stay at 100%
+npm run dev           # port 3001
+```
+
+**ML service** (needed by the risk paths; not by Phase 7 itself, but the
+Phase 3 journey suite fails hard if it is down):
+
+```
+services/ml/.venv/Scripts/python -m uvicorn app.main:app --app-dir services/ml --port 8000
+```
+
+**Contract conformance** — two steps, and the second fails unhelpfully without
+the first:
+
+```
+npm run openapi:emit -w @zimmamless/api
+node scripts/contract-conformance.mjs apps/api/openapi.generated.json
+```
+
+## 11. Testing time-dependent behaviour — read before writing an expiry test
+
+Phase 7 is full of clocks: a **15-minute** OTP validity and a **24-hour**
+stalled-confirmation escalation. You cannot test either by waiting, and you
+must not test them by back-dating rows with raw SQL — that proves the query
+works, not that the domain logic reads the clock correctly.
+
+There are two instruments, and picking the wrong one is the trap:
+
+- **`FixedTimeProvider`** (`common/time/time.provider.ts`) — a frozen clock for
+  unit tests, with `setTo(date)` and `advanceDays(n)`. **This is the only tool
+  with minute resolution.** Use it for everything about OTP expiry: valid at 14
+  minutes, expired at 16, and the boundary.
+- **The demo time machine** — a server-side offset applied inside
+  `SystemTimeProvider.now()`, changed via `/demo/time-travel`. It is measured
+  in **whole days** (`offsetDays`), so it can express "tomorrow" but not
+  "twenty minutes from now". Use it for the 24-hour escalation, and for
+  demonstrating the flow live.
+
+So: **OTP expiry belongs in unit tests against `FixedTimeProvider`; the 24h
+escalation can use either.** Do not try to drive a 15-minute expiry through the
+time machine — advancing a day will expire the OTP, but you will have proved
+nothing about the 15-minute boundary.
+
+The time machine is guarded twice server-side and both must be true: the
+`DEMO_TIME_MACHINE_ENABLED` env var **and** the `demo_time_machine_enabled`
+platform setting. Hiding the control in the UI is explicitly not sufficient
+(ZM-DEMO-003/004). In production the offset is never read. Never add a third
+way to move the clock.
+
+## 12. How to work
 
 - Build in verifiable increments; run the suites as you go rather than at the
   end. The integration suite runs ~8 minutes against the hosted pooler — run it
