@@ -11,15 +11,18 @@ export type Pagination = components["schemas"]["Pagination"];
 
 /**
  * Widens the generated `Offer` type with the maker identity fields the
- * contract does not declare (Q-14). Both endpoints this hook calls
- * (`GET /offers`, `GET /offers/{id}`) are bank-scoped to the offer's own
- * organization, so carrying these two extra fields past the typed response
+ * contract does not declare (Q-14) and the offer's own `transactionId`
+ * (needed to reach the Phase 6 conditions/contract endpoints, which are
+ * keyed by transaction, not by listing or offer). Both endpoints this hook
+ * calls (`GET /offers`, `GET /offers/{id}`) are bank-scoped to the offer's
+ * own organization, so carrying these extra fields past the typed response
  * never crosses a confidentiality boundary — see the note in
  * `lib/mocks/handlers.ts` next to where they are added.
  */
 export interface OfferWithCreator extends Offer {
   createdByUserId?: string;
   createdByUserName?: string;
+  transactionId?: string;
 }
 
 export type OfferInput = OfferInputPayload;

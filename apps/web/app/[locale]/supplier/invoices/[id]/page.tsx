@@ -7,6 +7,7 @@ import { FinancingGate } from "@/components/onboarding/FinancingGate";
 import { VerificationPanel } from "@/components/invoices/VerificationPanel";
 import { RiskPanel } from "@/components/risk/RiskPanel";
 import { ListingActivationPanel } from "@/components/marketplace/ListingActivationPanel";
+import { PostAcceptanceTimeline } from "@/components/marketplace/PostAcceptanceTimeline";
 import { Badge } from "@/components/ui/Badge";
 import { SkeletonText } from "@/components/ui/Skeleton";
 import { ErrorState } from "@/components/ui/StatePanels";
@@ -182,6 +183,10 @@ function TransactionDetail() {
           eligible={transaction.state === "ELIGIBLE"}
           onActivated={reload}
         />
+      )}
+
+      {id && transaction.state && (
+        <PostAcceptanceTimeline state={transaction.state} locale={locale} transactionId={id} />
       )}
     </div>
   );

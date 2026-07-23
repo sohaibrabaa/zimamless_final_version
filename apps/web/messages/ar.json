@@ -811,7 +811,9 @@
         "NOT_SELECTED": "غير مُختار",
         "WITHDRAWN": "مسحوب",
         "EXPIRED": "منتهي الصلاحية"
-      }
+      },
+      "notSelectedExplain": "قبل المورّد عرضاً آخر. لا تُشارَك أي معلومة عن البنك الفائز أو أي عرض آخر.",
+      "viewContract": "عرض العقد"
     },
     "offers": {
       "myOffersTab": "عروضي",
@@ -856,6 +858,69 @@
       "empty": "لم تُقدَّم أي عروض على هذا الإدراج بعد.",
       "deadlinePassed": "انقضى الموعد النهائي للاختيار",
       "timeRemaining": "{hours} س {minutes} د للاختيار"
+    },
+    "acceptance": {
+      "accept": "قبول هذا العرض",
+      "confirmTitle": "تأكيد القبول",
+      "irreversibleWarning": "القبول إجراء فوري ونهائي لا رجعة فيه. بمجرد التأكيد، يُغلق هذا العرض ويُرفض تلقائياً كل عرض آخر على هذا الإدراج.",
+      "confirmAccept": "قبول وتثبيت هذا العرض",
+      "successTitle": "تم قبول العرض",
+      "successIntro": "تم تثبيت هذا العرض الآن. لا يمكن إعادة إدراج الفاتورة أو المطالبة بها من أي تمويل آخر.",
+      "viewConditions": "عرض الشروط",
+      "rejectAll": "رفض جميع العروض",
+      "rejectAllConfirmTitle": "رفض جميع العروض؟",
+      "rejectAllExplain": "سيُرفض كل عرض على هذا الإدراج وتعود الفاتورة مؤهلة، حرة لإعادة الإدراج. لا يمكن التراجع عن هذا.",
+      "rejectAllConfirm": "رفض جميع العروض",
+      "allRejected": "رُفضت جميع العروض على هذا الإدراج. عادت الفاتورة إلى حالة مؤهلة."
+    },
+    "timeline": {
+      "title": "التقدّم",
+      "step": {
+        "OFFER_ACCEPTED": "تم قبول العرض",
+        "CONDITIONS_PENDING": "الشروط قيد الإنجاز",
+        "CONTRACTED": "العقد موقّع بالكامل"
+      },
+      "viewConditions": "عرض قائمة الشروط",
+      "viewContract": "عرض العقد"
+    },
+    "conditions": {
+      "title": "الشروط",
+      "intro": "كل شرط مرتبط بالعرض المقبول. يجب إنجاز الشروط الإلزامية أو التنازل عنها قبل إمكانية إنشاء العقد.",
+      "empty": "لم يحمل هذا العرض أي شروط.",
+      "notesLabel": "ملاحظات",
+      "markFulfilled": "وضع علامة كمُنجَز",
+      "status": {
+        "PENDING": "قيد الانتظار",
+        "FULFILLED": "مُنجَز",
+        "WAIVED": "متنازَل عنه",
+        "FAILED": "فشل"
+      }
+    },
+    "contract": {
+      "title": "العقد",
+      "notGenerated": "لم يُنشَأ عقد لهذه المعاملة بعد.",
+      "generate": "إنشاء العقد",
+      "notReady": "هذه المعاملة ليست جاهزة بعد للعقد.",
+      "checkFailure": {
+        "CONDITIONS_UNFULFILLED": "يجب إنجاز كل شرط إلزامي أو التنازل عنه أولاً.",
+        "DECLARATIONS_NOT_RECONFIRMED": "تعذّر إعادة تأكيد إقرارات المورّد.",
+        "BANK_ACCOUNT_UNVERIFIED": "لم يُتحقَّق بعد من حساب الصرف المصرفي للمورّد."
+      },
+      "status": {
+        "PENDING_SIGNATURES": "بانتظار التوقيعات",
+        "FULLY_SIGNED": "موقّع بالكامل"
+      },
+      "templateVersion": "إصدار القالب {version}",
+      "canonicalLanguageNote": "يسود النص الإنجليزي في حال وجود أي تعارض بين اللغتين.",
+      "termsSection": "الشروط",
+      "signaturesSection": "التوقيعات",
+      "supplierSignature": "المورّد",
+      "bankSignature": "البنك",
+      "signed": "موقّع",
+      "pending": "بانتظار",
+      "signAction": "توقيع هذا العقد",
+      "notSignatory": "فقط الموقّع المخوَّل عن منظمتكم يمكنه توقيع هذا العقد.",
+      "listEmpty": "لم تصل أي معاملة إلى مرحلة العقد بعد."
     }
   }
 }

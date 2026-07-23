@@ -580,3 +580,78 @@ NEEDS FROM A:
    reaches ELIGIBLE and is listed — correct (no invented listings) but
    worth a seed helper if a checkpoint demo needs a populated feed
    immediately.
+
+## 2026-07-23 — Agent B (session 6, Phase 6)
+No Phase 6 kickoff document existed for B either — used the phase's own
+master plan file, `phases/PHASE_6_SELECTION_CONTRACTS.md`, as the scope
+reference, same as Phase 5. Agent A had not started Phase 6.
+
+DONE (all mock — all six screens the phase file names for B):
+- Acceptance confirmation modal (atomic-and-irreversible, full breakdown
+  one last time) + result screen, and a reject-all flow with its own
+  confirmation, both on the offer comparison screen.
+- Post-acceptance transaction timeline (OFFER_ACCEPTED → CONDITIONS_PENDING
+  → CONTRACTED) on the supplier's transaction detail.
+- Conditions checklist with a fulfil action; contract review screen on
+  both portals (rendered terms, template version, EN-governs note);
+  click-to-accept signing — the sign button is **hidden**, not disabled,
+  for a non-signatory, and the server independently enforces the same
+  boundary.
+- Bank result screens: SELECTED/NOT_SELECTED, with an explanatory note
+  that zero competitor information is shared — `Offer` never carried that
+  data at the type level to begin with, so this was mostly copy + a
+  contract link.
+- `acceptOffer` (extended into `lib/mocks/marketplace-store.ts`): every
+  observable invariant §12.1 lists, enforced in-memory — the transaction's
+  `lockedAt` check comes first, so a second acceptance on any offer on the
+  same listing is impossible once the first lands; an idempotency-key
+  cache makes a network retry return the exact original result instead of
+  re-executing; every other active/pending offer flips to NOT_SELECTED in
+  the same call; the snapshot is written before the function returns.
+- `lib/mocks/contract-store.ts` (new): contract generation gated by all
+  four ZM-CON-006 checks, a real per-transactionType EN+AR template engine
+  reading only the frozen snapshot, click-to-accept signing requiring one
+  signature per side before FULLY_SIGNED and the transaction moving to
+  CONTRACTED.
+
+A REAL BUG CAUGHT BY A TEST: `signContract` updated the contract's own
+status to FULLY_SIGNED on the second signature but never moved the
+*transaction* to CONTRACTED — a one-line miss that "looked right" reading
+the code (the contract-status update was correct; the state side effect
+one branch later was missing). The FULLY_SIGNED test failed immediately
+or it would have shipped silently broken. Fixed.
+
+VERIFIED: 187/187 web vitest (25 new — 14 contract-domain, 11
+contract-store, +15 appended to marketplace-store's spec for acceptance;
+all 154 from Phase 5 still green), 254/254 API jest unchanged; typecheck,
+lint and `next build` clean in `web` and root-wide across all three
+workspaces; i18n parity **678 keys** (was 629). Manual smoke:
+`/supplier/contracts`, `/bank/offers`, `/supplier/invoices` all 200
+against the dev server.
+
+SWAPPED TO LIVE: none. 7 more endpoints (accept, reject-all, contract
+GET/POST, sign, conditions GET, fulfil) join the mock board — 57 mocked,
+still zero live, six phases running on the same undeployed-API carry-over.
+
+CONTRACT GAPS FOUND: **Q-15**. `AcceptedOfferSnapshot` is missing half its
+money components against ZM-SEL-007's "every money component," and
+`conditionsSnapshot` is typed as an array of objects with no declared
+properties at all (stricter than free-form). Not blocking — same
+widen-the-type pattern as Q-14, also used to carry the rendered contract
+text and each signature's organization type past the declared `Contract`
+shape. Reasoning in OPEN_QUESTIONS.md and completion report §6.
+
+NEEDS FROM A:
+1. **Nothing blocking.** The properties worth preserving exactly from the
+   mock: idempotency-key replay must return the original result, not
+   re-execute; every other active/pending offer must flip to NOT_SELECTED
+   in the same operation that selects the winner; FULLY_SIGNED (and
+   CONTRACTED) must require both a supplier and a bank signature.
+2. **Q-15**: the snapshot/contract need the full money breakdown, a real
+   conditions shape, and something for the client to read contract text
+   from if not a signed-URL document pattern like Phase 3's.
+3. Reject-all's listing status (CANCELLED) is a guess at the closest fit
+   in the declared enum — confirm your real engine's value.
+4. AS-01's acceptance role gate is enforced against SUPPLIER_OWNER
+   specifically (the only seeded role matching "Owner/Admin") — reconcile
+   if your real role set differs.

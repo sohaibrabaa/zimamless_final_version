@@ -32,6 +32,7 @@ import {
 } from "@/lib/marketplace/offer-money";
 import { evaluateEligibility, type EligibilityResult, type ListingFacts } from "@/lib/marketplace/policy-filters";
 import type { OfferInputPayload } from "@/lib/marketplace/offer-domain";
+import { contentHash } from "@/lib/contracts/contract-domain";
 import { compareMoney, isValidMoneyString } from "@/lib/money";
 import { computeRiskAssessment, type RiskInputs } from "@/lib/risk/risk-engine";
 import type { RiskAssessment } from "@/lib/risk/risk-presentation";
@@ -61,6 +62,9 @@ export interface OfferConditionRecord {
   description: string;
   isMandatory: boolean;
   fulfilment: "PENDING" | "FULFILLED" | "WAIVED" | "FAILED";
+  /** Set only once fulfilled (`POST /conditions/{id}/fulfil`) — evidence attached in the conditions checklist. */
+  evidenceDocumentIds?: string[];
+  fulfilmentNotes?: string;
 }
 
 export type OfferStatus =
@@ -80,6 +84,9 @@ export interface OfferRecord {
   createdByUserName: string;
   approvedByUserId?: string;
   approvedAt?: string;
+  /** ZM-SEL-005: an explicit supplier act, never automatic. */
+  selectedBy?: string;
+  selectedAt?: string;
   status: OfferStatus;
   versionNumber: number;
   previousOfferId?: string;
@@ -126,6 +133,8 @@ export function resetMarketplaceMocks() {
   listings = [];
   offers = [];
   offerHistory = [];
+  snapshots = [];
+  idempotencyResults.clear();
   sequence = 0;
 }
 
@@ -324,9 +333,23 @@ function toOfferView(offer: OfferRecord) {
   };
 }
 
-/** Includes maker identity — approval-queue/my-offers screens only, never the bank-listing view. */
+/**
+ * Includes maker identity (Q-14) and `transactionId` — approval-queue/
+ * my-offers/offer-status screens only, never the bank-listing view.
+ * `transactionId` rides along for the same reason `createdByUserId` does:
+ * both endpoints this feeds are already scoped to the offer's own bank, and
+ * a bank needs its own offer's transaction id to reach the Phase 6
+ * conditions/contract endpoints, which are keyed by transaction, not by
+ * listing or offer.
+ */
 function toOfferViewWithCreator(offer: OfferRecord) {
-  return { ...toOfferView(offer), createdByUserId: offer.createdByUserId, createdByUserName: offer.createdByUserName };
+  const listing = findListingRecord(offer.listingId);
+  return {
+    ...toOfferView(offer),
+    createdByUserId: offer.createdByUserId,
+    createdByUserName: offer.createdByUserName,
+    transactionId: listing?.transactionId,
+  };
 }
 
 export type CreateOfferResult =
@@ -536,4 +559,212 @@ export function listOffersForListing(
 
 export function offerBelongsToOrganization(offerId: string, organizationId: string): boolean {
   return offers.some((o) => o.id === offerId && o.bankOrganizationId === organizationId);
+}
+
+// ---------------------------------------------------------------------------
+// Acceptance (§12.1) — the highest-risk code in the system. A mock cannot
+// reproduce a real `SELECT … FOR UPDATE` database transaction, but every
+// *observable* invariant §12.1 lists is enforced here: a locked transaction
+// can never be locked twice, every other active/pending offer on the same
+// listing is marked NOT_SELECTED in the same call, the snapshot is written
+// before this function returns (never "eventually"), and an idempotency-key
+// replay returns the original result without re-running any of it.
+// ---------------------------------------------------------------------------
+
+export interface AcceptedOfferSnapshotRecord {
+  id: string;
+  transactionId: string;
+  offerId: string;
+  bankOrganizationId: string;
+  bankName: string;
+  supplierOrganizationId: string;
+  transactionType: string;
+  recourseType: string;
+  grossFundingAmount: string;
+  bankDiscountAmount: string;
+  bankFeesAmount: string;
+  platformCommissionAmount: string;
+  listingFeeAmount: string;
+  otherDeductionsAmount: string;
+  netSupplierPayout: string;
+  expectedPayoutDate?: string;
+  validUntil: string;
+  conditions: OfferConditionRecord[];
+  sourceOfferVersion: number;
+  selectedBy: string;
+  selectedAt: string;
+  snapshotHash: string;
+}
+
+let snapshots: AcceptedOfferSnapshotRecord[] = [];
+const idempotencyResults = new Map<string, AcceptOfferResult>();
+
+export type AcceptOfferResult =
+  | { ok: true; snapshot: AcceptedOfferSnapshotRecord }
+  | {
+      ok: false;
+      error: "NOT_FOUND" | "ALREADY_LOCKED" | "OFFER_NOT_ACTIVE" | "OFFER_EXPIRED" | "BELOW_FLOOR" | "INVALID_GROSS";
+    };
+
+function snapshotContent(offer: OfferRecord, transactionId: string): string {
+  return JSON.stringify({
+    transactionId,
+    offerId: offer.id,
+    versionNumber: offer.versionNumber,
+    grossFundingAmount: offer.grossFundingAmount,
+    bankDiscountAmount: offer.bankDiscountAmount,
+    bankFeesAmount: offer.bankFeesAmount,
+    platformCommissionAmount: offer.platformCommissionAmount,
+    listingFeeAmount: offer.listingFeeAmount,
+    otherDeductionsAmount: offer.otherDeductionsAmount,
+    netSupplierPayout: offer.netSupplierPayout,
+    conditions: offer.conditions,
+  });
+}
+
+/**
+ * ZM-SEL-001..008. `supplierOrganizationId` and `idempotencyKey` are both
+ * required — the former is the ownership check (a supplier can only accept
+ * an offer on their own listing), the latter is what makes a network retry
+ * safe (a second call with the same key returns the first call's exact
+ * result rather than double-locking or double-notifying).
+ */
+export function acceptOffer(
+  offerId: string,
+  supplierOrganizationId: string,
+  actorUserId: string,
+  idempotencyKey: string
+): AcceptOfferResult {
+  const cached = idempotencyResults.get(idempotencyKey);
+  if (cached) return cached;
+
+  const result = acceptOfferUncached(offerId, supplierOrganizationId, actorUserId);
+  idempotencyResults.set(idempotencyKey, result);
+  return result;
+}
+
+function acceptOfferUncached(
+  offerId: string,
+  supplierOrganizationId: string,
+  actorUserId: string
+): AcceptOfferResult {
+  const offer = offers.find((o) => o.id === offerId);
+  if (!offer) return { ok: false, error: "NOT_FOUND" };
+  const listing = findListingRecord(offer.listingId);
+  if (!listing || listing.supplierOrganizationId !== supplierOrganizationId) {
+    return { ok: false, error: "NOT_FOUND" };
+  }
+  const transaction = findTransaction(listing.transactionId);
+  if (!transaction) return { ok: false, error: "NOT_FOUND" };
+
+  // ZM-SEL-004: the lock check comes first and is checked against the
+  // transaction, not the offer — this is what makes a second acceptance
+  // attempt (on this offer or any other on the same listing) impossible
+  // once the first has landed.
+  if (transaction.lockedAt) return { ok: false, error: "ALREADY_LOCKED" };
+  if (offer.status !== "ACTIVE") return { ok: false, error: "OFFER_NOT_ACTIVE" };
+  if (!isOfferWindowOpen(offer.validUntil)) return { ok: false, error: "OFFER_EXPIRED" };
+
+  const outstanding = transaction.outstandingAmount ?? "0.000";
+  if (compareMoney(offer.grossFundingAmount, outstanding) > 0) return { ok: false, error: "INVALID_GROSS" };
+  if (
+    transaction.minimumAcceptableAmount &&
+    isBelowFloor(offer.netSupplierPayout, transaction.minimumAcceptableAmount)
+  ) {
+    return { ok: false, error: "BELOW_FLOOR" };
+  }
+
+  const now = new Date().toISOString();
+
+  // Every other active/pending offer on this listing loses, in the same
+  // call — ZM-SEL-002 step 6.
+  offers = offers.map((o) => {
+    if (o.listingId !== listing.id || o.id === offer.id) return o;
+    if (o.status === "ACTIVE" || o.status === "PENDING_INTERNAL_APPROVAL") {
+      return { ...o, status: "NOT_SELECTED" as OfferStatus };
+    }
+    return o;
+  });
+
+  offer.status = "SELECTED";
+  offer.selectedBy = actorUserId;
+  offer.selectedAt = now;
+
+  listing.status = "OFFER_SELECTED";
+  transaction.lockedAt = now;
+  // §8.6/§10.5: OFFER_ACCEPTED, or straight to CONDITIONS_PENDING if this
+  // offer actually has mandatory conditions to clear before a contract can
+  // generate (ZM-CON-006) — never silently skipped.
+  setTransactionState(
+    transaction.id!,
+    offer.conditions.some((c) => c.isMandatory) ? "CONDITIONS_PENDING" : "OFFER_ACCEPTED"
+  );
+
+  const snapshot: AcceptedOfferSnapshotRecord = {
+    id: nextId("snap"),
+    transactionId: transaction.id!,
+    offerId: offer.id,
+    bankOrganizationId: offer.bankOrganizationId,
+    bankName: offer.bankName,
+    supplierOrganizationId,
+    transactionType: offer.transactionType,
+    recourseType: offer.recourseType,
+    grossFundingAmount: offer.grossFundingAmount,
+    bankDiscountAmount: offer.bankDiscountAmount,
+    bankFeesAmount: offer.bankFeesAmount,
+    platformCommissionAmount: offer.platformCommissionAmount,
+    listingFeeAmount: offer.listingFeeAmount,
+    otherDeductionsAmount: offer.otherDeductionsAmount,
+    netSupplierPayout: offer.netSupplierPayout,
+    expectedPayoutDate: offer.expectedPayoutDate,
+    validUntil: offer.validUntil,
+    // A copy, not a reference — ZM-SEL-008: the snapshot must stay
+    // unchanged even if the source offer is later modified. There is no
+    // path that mutates a SELECTED offer's conditions after this point,
+    // but the copy makes that a non-issue rather than an invariant someone
+    // has to remember never to break.
+    conditions: offer.conditions.map((c) => ({ ...c })),
+    sourceOfferVersion: offer.versionNumber,
+    selectedBy: actorUserId,
+    selectedAt: now,
+    snapshotHash: contentHash(snapshotContent(offer, transaction.id!)),
+  };
+  snapshots = [...snapshots, snapshot];
+
+  return { ok: true, snapshot };
+}
+
+export function findSnapshotForTransaction(transactionId: string): AcceptedOfferSnapshotRecord | undefined {
+  return snapshots.find((s) => s.transactionId === transactionId);
+}
+
+/**
+ * `POST /conditions/{id}/fulfil` is keyed on the condition alone — the
+ * contract has no transaction id in that path — so fulfilling one has to
+ * find its owning snapshot by searching every condition on every snapshot.
+ * Condition ids are generated per-snapshot (`nextId`), so this is exact,
+ * not a heuristic.
+ */
+export function findSnapshotByConditionId(conditionId: string): AcceptedOfferSnapshotRecord | undefined {
+  return snapshots.find((s) => s.conditions.some((c) => c.id === conditionId));
+}
+
+export type RejectAllResult = { ok: true } | { ok: false; error: "NOT_FOUND" };
+
+/** ZM-MKT (§10.5 outcomes table): the transaction returns to ELIGIBLE, free to be relisted. */
+export function rejectAllOffers(listingId: string, supplierOrganizationId: string): RejectAllResult {
+  const listing = findListingRecord(listingId);
+  if (!listing || listing.supplierOrganizationId !== supplierOrganizationId) {
+    return { ok: false, error: "NOT_FOUND" };
+  }
+  offers = offers.map((o) => {
+    if (o.listingId !== listingId) return o;
+    if (o.status === "ACTIVE" || o.status === "PENDING_INTERNAL_APPROVAL") {
+      return { ...o, status: "NOT_SELECTED" as OfferStatus };
+    }
+    return o;
+  });
+  listing.status = "CANCELLED";
+  setTransactionState(listing.transactionId, "ELIGIBLE");
+  return { ok: true };
 }

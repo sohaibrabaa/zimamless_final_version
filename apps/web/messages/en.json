@@ -811,7 +811,9 @@
         "NOT_SELECTED": "Not selected",
         "WITHDRAWN": "Withdrawn",
         "EXPIRED": "Expired"
-      }
+      },
+      "notSelectedExplain": "The supplier accepted a different offer. No information about the winning bank or any other offer is shared.",
+      "viewContract": "View contract"
     },
     "offers": {
       "myOffersTab": "My offers",
@@ -856,6 +858,69 @@
       "empty": "No offers have been submitted on this listing yet.",
       "deadlinePassed": "Selection deadline passed",
       "timeRemaining": "{hours}h {minutes}m to select"
+    },
+    "acceptance": {
+      "accept": "Accept this offer",
+      "confirmTitle": "Confirm acceptance",
+      "irreversibleWarning": "Accepting is atomic and irreversible. Once confirmed, this offer is locked in and every other offer on this listing is automatically declined.",
+      "confirmAccept": "Accept and lock in this offer",
+      "successTitle": "Offer accepted",
+      "successIntro": "This offer is now locked in. The invoice cannot be relisted or claimed by any other financing.",
+      "viewConditions": "View conditions",
+      "rejectAll": "Reject all offers",
+      "rejectAllConfirmTitle": "Reject all offers?",
+      "rejectAllExplain": "Every offer on this listing will be declined and the invoice returns to eligible, free to be relisted. This cannot be undone.",
+      "rejectAllConfirm": "Reject all offers",
+      "allRejected": "All offers on this listing were rejected. The invoice has returned to eligible."
+    },
+    "timeline": {
+      "title": "Progress",
+      "step": {
+        "OFFER_ACCEPTED": "Offer accepted",
+        "CONDITIONS_PENDING": "Conditions pending",
+        "CONTRACTED": "Contract fully signed"
+      },
+      "viewConditions": "View conditions checklist",
+      "viewContract": "View contract"
+    },
+    "conditions": {
+      "title": "Conditions",
+      "intro": "Every condition attached to the accepted offer. Mandatory conditions must be fulfilled before a contract can be generated.",
+      "empty": "This offer carried no conditions.",
+      "notesLabel": "Notes",
+      "markFulfilled": "Mark fulfilled",
+      "status": {
+        "PENDING": "Pending",
+        "FULFILLED": "Fulfilled",
+        "WAIVED": "Waived",
+        "FAILED": "Failed"
+      }
+    },
+    "contract": {
+      "title": "Contract",
+      "notGenerated": "No contract has been generated for this transaction yet.",
+      "generate": "Generate contract",
+      "notReady": "This transaction is not yet ready for a contract.",
+      "checkFailure": {
+        "CONDITIONS_UNFULFILLED": "Every mandatory condition must be fulfilled or waived first.",
+        "DECLARATIONS_NOT_RECONFIRMED": "The supplier's declarations could not be reconfirmed.",
+        "BANK_ACCOUNT_UNVERIFIED": "The supplier's disbursement bank account is not yet verified."
+      },
+      "status": {
+        "PENDING_SIGNATURES": "Pending signatures",
+        "FULLY_SIGNED": "Fully signed"
+      },
+      "templateVersion": "Template version {version}",
+      "canonicalLanguageNote": "The English text governs in the event of any discrepancy between languages.",
+      "termsSection": "Terms",
+      "signaturesSection": "Signatures",
+      "supplierSignature": "Supplier",
+      "bankSignature": "Bank",
+      "signed": "Signed",
+      "pending": "Pending",
+      "signAction": "Sign this contract",
+      "notSignatory": "Only an authorized signatory for your organization can sign this contract.",
+      "listEmpty": "No transactions have reached a contract yet."
     }
   }
 }

@@ -1,14 +1,17 @@
 import { describe, it, expect, beforeEach } from "vitest";
 import {
+  acceptOffer,
   activateListing,
   approveOffer,
   bankListingView,
   createOffer,
   currentListingForTransaction,
   findOffer,
+  findSnapshotForTransaction,
   listEligibleListingsForBank,
   listOffersForBank,
   listOffersForListing,
+  rejectAllOffers,
   resetMarketplaceMocks,
   reviseOffer,
   supplierListingView,
@@ -311,5 +314,134 @@ describe("confidentiality (ZM-MKT-011/013, ZM-OFR-013)", () => {
       validUntil: new Date(Date.now() + 3_600_000).toISOString(),
     });
     expect(supplierListingView(listing).offerCount).toBe(1);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Acceptance (§12.1 / ZM-SEL-001..008)
+// ---------------------------------------------------------------------------
+
+function activeOfferOn(listingId: string, orgId: string = ORG.lcb, gross = "1000.000") {
+  const created = createOffer(listingId, orgId, "user-maker-1", "Maker One", {
+    transactionType: "INVOICE_FINANCING",
+    recourseType: "FULL_RECOURSE",
+    grossFundingAmount: gross,
+    validUntil: new Date(Date.now() + 3_600_000).toISOString(),
+  });
+  if (!created.ok) throw new Error("expected offer creation to succeed");
+  const approved = approveOffer(created.offer.id, orgId, "user-approver-1");
+  if (!approved.ok) throw new Error("expected approval to succeed");
+  return created.offer;
+}
+
+describe("acceptOffer", () => {
+  it("locks the transaction, selects the offer, and writes a snapshot", () => {
+    const id = submittedTransaction(ORG.alnoor, "500.000");
+    activateListing(id);
+    const listing = currentListingForTransaction(id)!;
+    const offer = activeOfferOn(listing.id);
+
+    const result = acceptOffer(offer.id, ORG.alnoor, "user-owner-1", "key-1");
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+
+    expect(findTransaction(id)!.lockedAt).toBeTruthy();
+    expect(findOffer(offer.id)!.status).toBe("SELECTED");
+    expect(result.snapshot.transactionId).toBe(id);
+    expect(result.snapshot.netSupplierPayout).toBe(offer.netSupplierPayout);
+    expect(findSnapshotForTransaction(id)).toEqual(result.snapshot);
+  });
+
+  it("ZM-SEL-002 step 6: every other active/pending offer on the listing loses in the same call", () => {
+    const id = submittedTransaction(ORG.alnoor, "500.000");
+    activateListing(id);
+    const listing = currentListingForTransaction(id)!;
+    const winner = activeOfferOn(listing.id, ORG.lcb);
+    const loserCreated = createOffer(listing.id, ORG.jnb, "user-maker-jnb", "JNB Maker", {
+      transactionType: "INVOICE_FINANCING",
+      recourseType: "FULL_RECOURSE",
+      grossFundingAmount: "900.000",
+      validUntil: new Date(Date.now() + 3_600_000).toISOString(),
+    });
+    if (!loserCreated.ok) throw new Error("expected the second offer to be created");
+
+    acceptOffer(winner.id, ORG.alnoor, "user-owner-1", "key-2");
+
+    expect(findOffer(winner.id)!.status).toBe("SELECTED");
+    // The losing offer was PENDING_INTERNAL_APPROVAL (never approved) and
+    // still loses — "every other active/pending offer," not just ACTIVE.
+    expect(findOffer(loserCreated.offer.id)!.status).toBe("NOT_SELECTED");
+  });
+
+  it("ZM-SEL-004: a second acceptance attempt is impossible once the transaction is locked", () => {
+    const id = submittedTransaction(ORG.alnoor, "500.000");
+    activateListing(id);
+    const listing = currentListingForTransaction(id)!;
+    const offer = activeOfferOn(listing.id, ORG.lcb);
+    const other = activeOfferOn(listing.id, ORG.jnb);
+
+    acceptOffer(offer.id, ORG.alnoor, "user-owner-1", "key-a");
+    const second = acceptOffer(other.id, ORG.alnoor, "user-owner-1", "key-b");
+    expect(second).toEqual({ ok: false, error: "ALREADY_LOCKED" });
+  });
+
+  it("idempotency-key replay returns the original result without re-executing", () => {
+    const id = submittedTransaction(ORG.alnoor, "500.000");
+    activateListing(id);
+    const listing = currentListingForTransaction(id)!;
+    const offer = activeOfferOn(listing.id);
+
+    const first = acceptOffer(offer.id, ORG.alnoor, "user-owner-1", "same-key");
+    const replay = acceptOffer(offer.id, ORG.alnoor, "user-owner-1", "same-key");
+    expect(replay).toEqual(first);
+    // Exactly one snapshot exists — the replay did not create a second one.
+    expect(findSnapshotForTransaction(id)).toEqual((first as { snapshot: unknown }).snapshot);
+  });
+
+  it("refuses to accept an offer that is not ACTIVE", () => {
+    const id = submittedTransaction(ORG.alnoor, "500.000");
+    activateListing(id);
+    const listing = currentListingForTransaction(id)!;
+    const created = createOffer(listing.id, ORG.lcb, "user-maker-1", "Maker One", {
+      transactionType: "INVOICE_FINANCING",
+      recourseType: "FULL_RECOURSE",
+      grossFundingAmount: "1000.000",
+      validUntil: new Date(Date.now() + 3_600_000).toISOString(),
+    });
+    if (!created.ok) throw new Error("expected offer creation to succeed");
+    // Never approved — still PENDING_INTERNAL_APPROVAL.
+    const result = acceptOffer(created.offer.id, ORG.alnoor, "user-owner-1", "key-pending");
+    expect(result).toEqual({ ok: false, error: "OFFER_NOT_ACTIVE" });
+  });
+
+  it("only the listing's own supplier organization may accept", () => {
+    const id = submittedTransaction(ORG.alnoor, "500.000");
+    activateListing(id);
+    const listing = currentListingForTransaction(id)!;
+    const offer = activeOfferOn(listing.id);
+    const result = acceptOffer(offer.id, ORG.petra, "user-owner-1", "key-wrong-org");
+    expect(result).toEqual({ ok: false, error: "NOT_FOUND" });
+  });
+});
+
+describe("rejectAllOffers", () => {
+  it("moves every active/pending offer to NOT_SELECTED and returns the transaction to ELIGIBLE", () => {
+    const id = submittedTransaction(ORG.alnoor, "500.000");
+    activateListing(id);
+    const listing = currentListingForTransaction(id)!;
+    const offer = activeOfferOn(listing.id);
+
+    const result = rejectAllOffers(listing.id, ORG.alnoor);
+    expect(result).toEqual({ ok: true });
+    expect(findOffer(offer.id)!.status).toBe("NOT_SELECTED");
+    expect(findTransaction(id)!.state).toBe("ELIGIBLE");
+    expect(findTransaction(id)!.lockedAt).toBeFalsy();
+  });
+
+  it("refuses a supplier organization that does not own the listing", () => {
+    const id = submittedTransaction(ORG.alnoor, "500.000");
+    activateListing(id);
+    const listing = currentListingForTransaction(id)!;
+    expect(rejectAllOffers(listing.id, ORG.petra)).toEqual({ ok: false, error: "NOT_FOUND" });
   });
 });

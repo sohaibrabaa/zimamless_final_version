@@ -55,12 +55,12 @@ endpoint, and has no mock→live promotion to track.
 | GET/PATCH /offers/{id} | 5 | — | mock | offer status detail · revision creates a new version, prior retained immutably |
 | POST /offers/{id}/approve | 5 | — | mock | approval queue · SELF_APPROVAL_FORBIDDEN enforced server-side |
 | POST /offers/{id}/withdraw | 5 | — | mock | my offers · pre-acceptance, no penalty |
-| POST /offers/{id}/accept | 6 | — | mock | DEMO-CRITICAL |
-| POST /listings/{id}/reject-all | 6 | — | mock | |
-| POST/GET …/{id}/contract | 6 | — | mock | |
-| POST /contracts/{id}/sign | 6 | — | mock | |
-| GET …/{id}/conditions | 6 | — | mock | |
-| POST /conditions/{id}/fulfil | 6 | — | mock | |
+| POST /offers/{id}/accept | 6 | — | mock | DEMO-CRITICAL · acceptance modal, atomic-in-memory + idempotency-key replay-safe (ZM-SEL-001..008) |
+| POST /listings/{id}/reject-all | 6 | — | mock | reject-all flow on the offer comparison screen |
+| POST/GET …/{id}/contract | 6 | — | mock | contract review screens (both portals) · generation gated by ZM-CON-006 |
+| POST /contracts/{id}/sign | 6 | — | mock | click-to-accept signing · FULLY_SIGNED only once both sides sign |
+| GET …/{id}/conditions | 6 | — | mock | conditions checklist |
+| POST /conditions/{id}/fulfil | 6 | — | mock | conditions checklist · fulfil action |
 | POST …/{id}/funding/mark-sent | 7 | — | mock | |
 | POST …/{id}/funding/otp | 7 | — | mock | |
 | POST …/{id}/funding/confirm | 7 | — | mock | |

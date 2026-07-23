@@ -41,10 +41,33 @@ export default function BankOfferStatusPage() {
         {t("marketplace.offer.backToOffers")}
       </Link>
 
-      <div className="mt-3 mb-5 flex flex-wrap items-center gap-3">
+      <div className="mt-3 mb-1 flex flex-wrap items-center gap-3">
         <h1 className="text-lg font-semibold">{t("marketplace.offer.statusTitle")}</h1>
-        {offer.status && <Badge tone={offer.status === "ACTIVE" ? "success" : "neutral"}>{t(`marketplace.offer.status.${offer.status}`)}</Badge>}
+        {offer.status && (
+          <Badge tone={offer.status === "ACTIVE" || offer.status === "SELECTED" ? "success" : "neutral"}>
+            {t(`marketplace.offer.status.${offer.status}`)}
+          </Badge>
+        )}
       </div>
+
+      {/* ZM-MKT-011: this bank learns nothing about the winner or the
+          competing offers — the copy says so rather than leaving the bank
+          to wonder whether something is merely not loaded. */}
+      {offer.status === "NOT_SELECTED" && (
+        <p className="mb-5 rounded-lg border border-(--color-border) px-4 py-3 text-sm text-(--color-muted)">
+          {t("marketplace.offer.notSelectedExplain")}
+        </p>
+      )}
+      {offer.status === "SELECTED" && offer.transactionId && (
+        <p className="mb-5">
+          <Link
+            href={`/${locale}/bank/offers/${id}/contract`}
+            className="text-sm underline underline-offset-2"
+          >
+            {t("marketplace.offer.viewContract")}
+          </Link>
+        </p>
+      )}
 
       <dl className="grid gap-3 rounded-lg border border-(--color-border) p-4 sm:grid-cols-2">
         <div>
