@@ -73,12 +73,12 @@ export const endpointStatus: EndpointStatusEntry[] = [
   { method: "GET", path: "/admin/risk-models", phase: 4, status: "mock", notes: "handler not implemented — no admin screen this session, not B's Phase 4 scope" },
   { method: "POST", path: "/admin/risk-models", phase: 4, status: "mock", notes: "handler not implemented — no admin screen this session, not B's Phase 4 scope" },
 
-  { method: "POST", path: "/transactions/{id}/listing", phase: 5, status: "mock", notes: "supplier listing-activation screen · requires a real ELIGIBLE transaction, moves it to OPEN_FOR_OFFERS" },
-  { method: "GET", path: "/transactions/{id}/listing-current", phase: 5, status: "mock", notes: "v3.1.0 · supplier listing-activation screen + offer comparison screen" },
+  { method: "POST", path: "/transactions/{id}/listing", phase: 5, status: "live", notes: "supplier listing-activation screen. Promoted 2026-07-24 on test/live/listing.live.spec.tsx — activateListingForTransaction on a disposable ELIGIBLE fixture; the fee obligation written in the same act (ZM-FEE-002) is asserted in the DB" },
+  { method: "GET", path: "/transactions/{id}/listing-current", phase: 5, status: "live", notes: "v3.1.0 · supplier listing-activation + offer comparison screens. Promoted 2026-07-24 on test/live/listing.live.spec.tsx — server-set deadlines rendered through useCurrentListing" },
   { method: "GET", path: "/listings/{id}", phase: 5, status: "mock" },
   { method: "GET", path: "/listings/{id}/offers", phase: 5, status: "live", notes: "role-split · offer comparison screen (supplier) and own-offer check (bank). Promoted 2026-07-24 on test/live/acceptance.live.spec.tsx — real ACTIVE offer rendered through useListingOffers inside the real SessionProvider, money as 3-dp strings" },
   { method: "GET", path: "/marketplace/eligible", phase: 5, status: "live", notes: "bank marketplace feed · real per-bank policy-filter eligibility (ZM-MKT-002). Promoted 2026-07-23 on test/live/marketplace.live.spec.tsx — rendered through useEligibleListings in the real SessionProvider; rows key off listingId (not id), no offerCount, no floor, myOffer carries no bankOrgId (INV-11)" },
-  { method: "GET", path: "/marketplace/listings/{id}", phase: 5, status: "mock", notes: "v3.1.0 · bank underwriting view, incl. the Phase 4 risk components" },
+  { method: "GET", path: "/marketplace/listings/{id}", phase: 5, status: "live", notes: "v3.1.0 · bank underwriting view. Promoted 2026-07-24 on test/live/listing.live.spec.tsx — the freshly activated listing opened through useListing as a bank; no floor field anywhere in the consumed body (INV-8)" },
   { method: "GET", path: "/banks/policy-filters", phase: 5, status: "mock", notes: "policy-filter configuration screen" },
   { method: "POST", path: "/banks/policy-filters", phase: 5, status: "mock" },
   { method: "PATCH", path: "/banks/policy-filters/{id}", phase: 5, status: "mock", notes: "v3.1.0 · edit/deactivate (D-12)" },
@@ -124,11 +124,11 @@ export const endpointStatus: EndpointStatusEntry[] = [
   { method: "POST", path: "/notifications/{id}/manual-call", phase: 8, status: "mock", notes: "D-16 (Q-17) · additive. Platform staff incl. compliance. No screen consumes it yet — the operator call-log UI is Phase 9. Blank notes refused; previous notes kept in the audit entry" },
   { method: "POST", path: "/notifications/{id}/read", phase: 8, status: "live", notes: "v3.1.0 · sets DELIVERED — the only delivery the platform can honestly observe. Promoted 2026-07-23; 404 (not 403) for another user's notification asserted live" },
 
-  { method: "GET", path: "/admin/settings", phase: 9, status: "mock", notes: "Served + integration-proven (phase9-admin). No screen yet beyond the time-machine control" },
-  { method: "PATCH", path: "/admin/settings", phase: 9, status: "mock", notes: "Served: known-key only, audited, 403 to support role. phase9-admin" },
-  { method: "GET", path: "/admin/commission-tiers", phase: 9, status: "mock", notes: "Served. phase9-admin" },
+  { method: "GET", path: "/admin/settings", phase: 9, status: "live", notes: "Promoted 2026-07-24 on test/live/admin.live.spec.tsx — the settings screen's read, whitelist-edit rows over live config (platform/settings page grew into the editor)" },
+  { method: "PATCH", path: "/admin/settings", phase: 9, status: "live", notes: "Promoted 2026-07-24 on test/live/admin.live.spec.tsx — read→edit→read round trip of maturity_reminder_days, restored after" },
+  { method: "GET", path: "/admin/commission-tiers", phase: 9, status: "live", notes: "Promoted 2026-07-24 on test/live/admin.live.spec.tsx — tiers table on platform/settings, money as 3-dp strings" },
   { method: "POST", path: "/admin/commission-tiers", phase: 9, status: "mock", notes: "Served: super-admin only, create-only, money bounds validated. phase9-admin" },
-  { method: "GET", path: "/admin/audit-logs", phase: 9, status: "mock", notes: "Served: paginated, targetEntityId filter, platform-only. phase9-admin" },
+  { method: "GET", path: "/admin/audit-logs", phase: 9, status: "live", notes: "Promoted 2026-07-24 on test/live/admin.live.spec.tsx — real entries on the new platform/audit screen; the targetEntityId filter proven server-side against a staged fixture's walk" },
   // GET /admin/relisting-requests was listed here as Phase 9 and is now served
   // and promoted under Phase 8 above. The duplicate is removed rather than
   // left: `isLive` takes the first match, so two rows for one endpoint means

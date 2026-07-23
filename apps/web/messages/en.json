@@ -18,7 +18,8 @@
     "mockDataBadge": "Mock data",
     "unknownError": "An unexpected error occurred. Please try again.",
     "correlationId": "Reference ID",
-    "pageOf": "Page {page} of {total}"
+    "pageOf": "Page {page} of {total}",
+    "previous": "Previous"
   },
   "language": {
     "switcherLabel": "Language",
@@ -1085,6 +1086,39 @@
       "unreadOnly": "Unread only",
       "markRead": "Mark as read",
       "unreadCount": "{count} unread"
+    }
+  },
+  "admin": {
+    "audit": {
+      "title": "Audit Log",
+      "subtitle": "Every recorded mutation on the platform — who did what, to which entity, and when. Read-only by design.",
+      "when": "When (UTC)",
+      "action": "Action",
+      "target": "Target",
+      "actor": "Actor",
+      "system": "system",
+      "filterLabel": "Filter by entity ID",
+      "filterPlaceholder": "Transaction, offer or case ID…",
+      "filterApply": "Apply",
+      "empty": "No audit entries match.",
+      "pageInfo": "Page"
+    },
+    "settings": {
+      "title": "Platform settings",
+      "subtitle": "Current configuration. Editable keys are the ones an operator tunes between demos; every change is audited.",
+      "invalidJson": "The value must be valid JSON (e.g. [30,14,7] or true)."
+    },
+    "tiers": {
+      "title": "Commission tiers",
+      "subtitle": "Tiers are created, never edited — a new tier supersedes an old one.",
+      "range": "Transaction range (JOD)",
+      "percentage": "Commission",
+      "fixed": "Fixed fee",
+      "payer": "Fee payer",
+      "active": "Active",
+      "yes": "Yes",
+      "no": "No",
+      "empty": "No commission tiers configured."
     }
   }
 }
