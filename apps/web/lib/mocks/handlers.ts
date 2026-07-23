@@ -60,6 +60,14 @@ import {
   retryPayout as retryFundingPayout,
 } from "./funding-store";
 import {
+  confirmPaymentStatus,
+  listCases,
+  listNotifications,
+  markNotificationRead,
+  paymentHistory,
+  recordBuyerPayment,
+} from "./payments-store";
+import {
   conditionsForTransaction,
   findContractById,
   findContractForTransaction,
@@ -1270,6 +1278,110 @@ export const handlers = [
       ? HttpResponse.json(settlement)
       : HttpResponse.json(errorBody("NOT_FOUND", "Settlement not found"), { status: 404 });
   }),
+
+  // ---------------------------------------------------------------
+  // Phase 8 — payments, cases, notifications
+  // ---------------------------------------------------------------
+
+  mockOnly(
+    "GET",
+    "/transactions/{id}/payments",
+    `${API_BASE}/transactions/:id/payments`,
+    ({ params, request }) => {
+      const history = paymentHistory(String(params.id));
+      // ZM-PMT-018 reproduced in the mock, not just described: a supplier's
+      // payload is built without the notes, so a screen cannot be developed
+      // against a field the live API will not send it.
+      const forSupplier = !isBankCaller(request);
+      return HttpResponse.json({
+        payments: history.payments.map((p) =>
+          forSupplier
+            ? { id: p.id, amount: p.amount, paymentDate: p.paymentDate, bankReference: p.bankReference, reportedAt: p.reportedAt }
+            : p
+        ),
+        outstandingAmount: history.outstandingAmount,
+        overdueDays: history.overdueDays,
+      });
+    }
+  ),
+
+  mockOnly(
+    "POST",
+    "/transactions/{id}/payments",
+    `${API_BASE}/transactions/:id/payments`,
+    async ({ params, request }) => {
+      const body = (await request.json()) as {
+        amount?: string;
+        paymentDate?: string;
+        bankReference?: string;
+        bankInternalNotes?: string;
+      };
+      const result = recordBuyerPayment(String(params.id), {
+        amount: body.amount ?? "0.000",
+        paymentDate: body.paymentDate ?? "",
+        bankReference: body.bankReference,
+        bankInternalNotes: body.bankInternalNotes,
+      });
+      if (!result.ok) {
+        return HttpResponse.json(errorBody("CONFLICT", "Not payable in this state."), {
+          status: 409,
+        });
+      }
+      setTransactionState(String(params.id), result.state);
+      return HttpResponse.json(result, { status: 201 });
+    }
+  ),
+
+  mockOnly(
+    "POST",
+    "/transactions/{id}/confirm-status",
+    `${API_BASE}/transactions/:id/confirm-status`,
+    async ({ params, request }) => {
+      const body = (await request.json()) as { status?: string };
+      const result = confirmPaymentStatus(String(params.id), String(body.status));
+      if (!result.ok) {
+        return HttpResponse.json(
+          {
+            ...errorBody("VALIDATION_FAILED", "Record the payments that settle this invoice first."),
+            details: { outstandingAmount: result.outstandingAmount },
+          },
+          { status: 422 }
+        );
+      }
+      setTransactionState(String(params.id), result.state);
+      return HttpResponse.json(result);
+    }
+  ),
+
+  mockOnly("GET", "/cases", `${API_BASE}/cases`, ({ request }) => {
+    const membership = activeMembership(request);
+    const url = new URL(request.url);
+    const type = url.searchParams.get("type") ?? undefined;
+    return HttpResponse.json({
+      items: listCases(membership?.organizationType ?? "SUPPLIER", type),
+      pagination: { page: 1, pageSize: 20, total: 0, totalPages: 1 },
+    });
+  }),
+
+  mockOnly("GET", "/notifications", `${API_BASE}/notifications`, ({ request }) => {
+    const url = new URL(request.url);
+    const unread = url.searchParams.get("unread") === "true";
+    const { userId } = currentActor(request);
+    return HttpResponse.json(listNotifications(userId, unread));
+  }),
+
+  mockOnly(
+    "POST",
+    "/notifications/{id}/read",
+    `${API_BASE}/notifications/:id/read`,
+    ({ params, request }) => {
+      const { userId } = currentActor(request);
+      const item = markNotificationRead(String(params.id), userId);
+      return item
+        ? HttpResponse.json(item)
+        : HttpResponse.json(errorBody("NOT_FOUND", "Notification not found"), { status: 404 });
+    }
+  ),
 ];
 
 /**

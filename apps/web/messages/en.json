@@ -990,5 +990,101 @@
         "REVERSED": "Reversed"
       }
     }
+  },
+  "payments": {
+    "state": {
+      "FUNDED": "Funded",
+      "PARTIALLY_PAID": "Partly paid",
+      "PAID": "Paid",
+      "OVERDUE_UNCONFIRMED": "Awaiting bank confirmation",
+      "OVERDUE": "Overdue — confirmed by the bank",
+      "RECOURSE_ACTIVE": "Recourse in progress",
+      "DISPUTED": "Under dispute",
+      "FRAUD_REVIEW": "Under review",
+      "CLOSED": "Closed"
+    },
+    "timeline": {
+      "title": "Payments",
+      "empty": "No payments have been reported yet.",
+      "outstanding": "Outstanding",
+      "overdueDays": "{count} days past due",
+      "reportedOn": "Reported {date}",
+      "reference": "Reference {reference}",
+      "awaitingExplainer": "This invoice passed its due date and the bank has not yet reported whether the buyer paid. This is not a record of non-payment. No action is needed from you.",
+      "pausedExplainer": "Automatic reminders and status changes are paused for this transaction while the matter is open."
+    },
+    "report": {
+      "title": "Report a buyer payment",
+      "amount": "Amount received",
+      "date": "Payment date",
+      "reference": "Bank reference",
+      "notes": "Internal notes",
+      "notesHint": "Visible to your bank only. Never shown to the supplier.",
+      "submit": "Record payment"
+    },
+    "confirm": {
+      "title": "Confirm the status",
+      "explainer": "Only you can say whether the buyer paid. Until you confirm, the platform records this as awaiting confirmation and makes no claim about the buyer.",
+      "statusLabel": "What happened",
+      "PAID": "The buyer paid in full",
+      "PARTIALLY_PAID": "The buyer paid part of it",
+      "OVERDUE": "The buyer has not paid",
+      "notes": "Notes",
+      "submit": "Confirm"
+    },
+    "cases": {
+      "title": "Cases",
+      "empty": "There are no cases.",
+      "type": {
+        "FRAUD": "Fraud review",
+        "DISPUTE": "Dispute",
+        "WITHDRAWAL": "Withdrawal",
+        "RECOURSE": "Recourse"
+      },
+      "openedOn": "Opened {date}",
+      "filterAll": "All types"
+    },
+    "dispute": {
+      "open": "Raise a dispute",
+      "title": "Raise a dispute",
+      "explainer": "Raising a dispute pauses automatic reminders and status changes while the matter is open. The platform records what you and the other party agree; it does not decide the outcome.",
+      "typeLabel": "What is contested",
+      "descriptionLabel": "Describe the issue",
+      "submit": "Raise dispute"
+    },
+    "recourse": {
+      "title": "Recourse",
+      "claim": "Claimed",
+      "repaid": "Repaid",
+      "remaining": "Remaining",
+      "initiate": "Initiate recourse",
+      "reasonLabel": "Reason",
+      "amountLabel": "Amount claimed",
+      "amountHint": "Cannot exceed the amount you advanced.",
+      "submit": "Initiate recourse",
+      "reason": {
+        "INVALID_INVOICE": "The invoice was invalid",
+        "HIDDEN_DISPUTE_OR_RETURN": "An undisclosed dispute or return",
+        "DOUBLE_FINANCING": "The invoice was financed elsewhere",
+        "NON_DELIVERY": "The goods or services were not delivered",
+        "NON_PAYMENT": "The buyer did not pay",
+        "OTHER": "Other"
+      },
+      "status": {
+        "RECOURSE_INITIATED": "Initiated",
+        "SUPPLIER_NOTIFIED": "Supplier notified",
+        "PAYMENT_PENDING": "Awaiting repayment",
+        "SETTLED": "Settled",
+        "DISPUTED": "Disputed",
+        "LEGAL_ESCALATION": "Escalated"
+      }
+    },
+    "inbox": {
+      "title": "Notifications",
+      "empty": "You have no notifications.",
+      "unreadOnly": "Unread only",
+      "markRead": "Mark as read",
+      "unreadCount": "{count} unread"
+    }
   }
 }

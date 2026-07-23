@@ -27,6 +27,7 @@ export const portalNav: Record<Portal, NavItem[]> = {
     { href: "contracts", labelKey: "nav.contracts" },
     { href: "funding", labelKey: "nav.funding" },
     { href: "payments", labelKey: "nav.payments" },
+    { href: "notifications", labelKey: "nav.notifications" },
   ],
   bank: [
     { href: "dashboard", labelKey: "nav.dashboard" },
@@ -35,6 +36,7 @@ export const portalNav: Record<Portal, NavItem[]> = {
     { href: "offers", labelKey: "nav.offers" },
     { href: "funding", labelKey: "nav.funding" },
     { href: "payments", labelKey: "nav.payments" },
+    { href: "notifications", labelKey: "nav.notifications" },
     { href: "recourse", labelKey: "nav.recourse" },
     { href: "settings/policy-filters", labelKey: "nav.policyFilters" },
   ],
@@ -43,6 +45,7 @@ export const portalNav: Record<Portal, NavItem[]> = {
     { href: "applications", labelKey: "nav.applications" },
     { href: "transactions", labelKey: "nav.transactions" },
     { href: "cases", labelKey: "nav.cases" },
+    { href: "notifications", labelKey: "nav.notifications" },
     { href: "settings", labelKey: "nav.settings" },
     { href: "audit", labelKey: "nav.audit" },
   ],
