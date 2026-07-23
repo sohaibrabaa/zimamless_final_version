@@ -15,7 +15,7 @@ endpoint, and has no mock→live promotion to track.
 
 | Endpoint | Phase | Announced live (A, date) | B status | Notes |
 |---|---|---|---|---|
-| GET /auth/me | 1 | — | mock | demo flag (D-10) included |
+| GET /auth/me | 1 | **2026-07-23** | **live** | demo flag (D-10) included. Rendered through the real SessionProvider in test/live/transactions.live.spec.tsx. `activeOrganizationId` is echoed **only** when the header names a real membership — the Phase 1 circularity bug, asserted both ways |
 | POST /auth/context | 1 | — | mock | |
 | PATCH /auth/language | 1 | — | mock | |
 | POST /onboarding/register * | 2 | — | mock | v3.1.0 · consumed by supplier bootstrap form |
@@ -36,7 +36,7 @@ endpoint, and has no mock→live promotion to track.
 | POST /documents/upload-url | 3 | — | mock | wizard steps 2–3 · **200**, not 201. PUT the file to `uploadUrl` yourself; no finalize call — hashing and OCR run lazily on first extraction read or at submit. Byte upload deliberately skipped under MSW |
 | GET /documents/{id}/download-url | 3 | — | mock | no screen consumes it yet (needs the document list, **see Q-12**). Authorization checked **before** any URL is issued (ZM-DOC-004); refusal is 404; URL lives 2 minutes |
 | GET /documents/{id}/extraction | 3 | — | mock | wizard step 2 (pre-fill + mismatch table) · first call triggers hashing + OCR (~2–5s). `qr.validationStatus`: `VALID`/`INVALID`/`UNPARSED`/`UNAVAILABLE` — **UNAVAILABLE means no QR on the page**, UNPARSED means one we could not read |
-| GET/POST /transactions | 3 | — | mock | supplier transaction list; POST creates the wizard draft — 201, no body. `referenceNumber` is `ZM-<n>` |
+| GET/POST /transactions | 3 | **2026-07-23** | **live (GET only)** | GET promoted: real rows rendered through useTransactionList inside the real SessionProvider, scoped server-side by the derived X-Organization-Id. POST stays mock — the wizard has not been driven live. Supplier transaction list; POST creates the wizard draft — 201, no body. `referenceNumber` is `ZM-<n>` |
 | GET /transactions/{id} | 3 | — | mock | transaction detail · body varies by audience: supplier/platform get `minimumAcceptableAmount`, a bank never does (INV-8) |
 | PUT …/{id}/invoice | 3 | — | mock | wizard step 2 · `outstandingAmount` recomputed server-side, never accepted. Money is 3-dp strings. Editable in DRAFT / INFORMATION_REQUIRED only (409 otherwise) |
 | PUT …/{id}/buyer | 3 | — | mock | wizard step 1 · the buyer must have been resolved by this supplier first, else 422 |

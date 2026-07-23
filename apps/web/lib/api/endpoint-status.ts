@@ -36,7 +36,7 @@ export const endpointStatus: EndpointStatusEntry[] = [
   // excluded from the frozen contract and from /docs-json, and so is not in
   // the generated client. It is infrastructure, not a contract endpoint, and
   // listing it here implied a promotion path it does not have.
-  { method: "GET", path: "/auth/me", phase: 1, status: "mock", notes: "demo flag (D-10) included" },
+  { method: "GET", path: "/auth/me", phase: 1, status: "live", notes: "demo flag (D-10) included. Promoted 2026-07-23 on test/live/transactions.live.spec.tsx — rendered through the real SessionProvider; activeOrganizationId is echoed only when the header names a real membership, which is the Phase 1 circularity bug" },
   { method: "POST", path: "/auth/context", phase: 1, status: "mock" },
   { method: "PATCH", path: "/auth/language", phase: 1, status: "mock" },
 
@@ -59,7 +59,7 @@ export const endpointStatus: EndpointStatusEntry[] = [
   { method: "POST", path: "/documents/upload-url", phase: 3, status: "mock", notes: "wizard steps 2 and 3 · byte upload is skipped under MSW by design" },
   { method: "GET", path: "/documents/{id}/download-url", phase: 3, status: "mock", notes: "transaction detail · download link per attachment (Q-12 resolved). Requested on click, not on render — the URL lives ~2 minutes" },
   { method: "GET", path: "/documents/{id}/extraction", phase: 3, status: "mock", notes: "wizard step 2 · OCR/QR pre-fill and mismatch table" },
-  { method: "GET", path: "/transactions", phase: 3, status: "mock", notes: "supplier transaction list" },
+  { method: "GET", path: "/transactions", phase: 3, status: "live", notes: "supplier transaction list. Promoted 2026-07-23 — real rows rendered through useTransactionList inside the real SessionProvider, scoped server-side by the derived X-Organization-Id" },
   { method: "POST", path: "/transactions", phase: 3, status: "mock", notes: "wizard entry — creates the draft" },
   { method: "GET", path: "/transactions/{id}", phase: 3, status: "mock", notes: "transaction detail · floor stripped for bank callers" },
   { method: "PUT", path: "/transactions/{id}/invoice", phase: 3, status: "mock", notes: "wizard step 2" },

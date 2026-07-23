@@ -1162,10 +1162,10 @@ OUTSTANDING: unchanged. Live promotion is still 0 of ~90 and remains the
 
 ## 2026-07-23 (later still) — first live endpoint promotions, and D-16
 
-**PROMOTED TO LIVE — 5 of ~90, the first since Phase 1.** Not by assertion:
+**PROMOTED TO LIVE — 7 of ~90, the first ever.** Not by assertion:
 `apps/web/test/live/` renders the real component against the real API over a
 real Supabase JWT with no MSW installed (`npm run test:live` from `apps/web`,
-16 tests). Separate config because it needs the API up, the seed applied and
+20 tests). Separate config because it needs the API up, the seed applied and
 network access; the default suite stays hermetic.
 
   - `GET /notifications` · `POST /notifications/{id}/read` — inbox rendered,
@@ -1198,7 +1198,28 @@ CHANGED (test, worth knowing): the Phase 8 inbox test asserted
   the product was used is testing the wrong thing; it now asserts the shape and
   that the fixture's own messages are present.
 
-OUTSTANDING: 85 of ~90 endpoints still `mock` — not assumed broken, just not
+OUTSTANDING: 83 of ~90 endpoints still `mock` — not assumed broken, just not
   yet exercised through a screen. The demo path (onboarding → invoice → risk →
   listing → offers → acceptance → contract → funding) is the priority order for
   the next promotion pass.
+
+**Also promoted (second pass):** `GET /auth/me` and `GET /transactions`.
+
+These two needed the real `SessionProvider`, not a hand-configured api client,
+because the transaction list is scoped server-side by an `X-Organization-Id`
+the *client* derives. Only the Supabase browser SDK is substituted in that
+spec, and it is handed a real access token from a real password grant —
+everything downstream is real. The Phase 1 circularity is asserted in both
+directions: `/auth/me` echoes `activeOrganizationId` when the header names a
+real membership and omits it when no header is sent, so a client that tried to
+read the value it was supposed to send would get nothing and every scoped
+endpoint would 403.
+
+Writing that test produced a false alarm worth recording. The list rendered
+empty with no error, which looks exactly like a scoping failure. It was the
+assertion: the hook is *disabled* until the provider has derived an active
+organization, and a disabled resource is also not loading — so waiting on the
+loading flag resolves during the gap before the org exists. Waiting for rows
+rather than for loading to clear fixed it. Second time today a live-suite
+assertion looked like a product defect and was not; both were the test reading
+a real system through an assumption that only held against a mock.
