@@ -15,6 +15,7 @@ import {
   fundingReceivedJournal,
 } from '../ledger/settlement-postings';
 import { requireTransition, TransactionState } from '../transactions/transaction-state';
+import { GeneratedOtp, OtpService } from './otp.service';
 import type { ActorContext } from '../onboarding/onboarding.service';
 
 /**
@@ -68,6 +69,7 @@ export class FundingService {
   constructor(
     private readonly db: DatabaseService,
     private readonly ledger: LedgerService,
+    private readonly otp: OtpService,
     private readonly audit: AuditService,
     @Inject(TIME_PROVIDER) private readonly time: TimeProvider,
   ) {}
@@ -191,6 +193,145 @@ export class FundingService {
 
       return marked[0];
     });
+  }
+
+  // =====================================================================
+  // OTP generation and the FUNDED gate
+  // =====================================================================
+
+  /**
+   * The bank generates the code. Plaintext comes back once, here, and nowhere
+   * else ever again.
+   */
+  async generateOtp(transactionId: string, ctx: ActorContext): Promise<GeneratedOtp> {
+    await this.requireBankParty(transactionId, ctx);
+    await this.requireAwaitingConfirmation(transactionId);
+    return this.otp.generate(transactionId, ctx);
+  }
+
+  /**
+   * The supplier confirms — and this is where INV-10 lives.
+   *
+   * `FUNDED` requires **both** halves and neither alone suffices:
+   *
+   *   1. a VERIFIED OTP, which is this call succeeding; and
+   *   2. settlement evidence — the bank's recorded assertion that it executed
+   *      the transfer.
+   *
+   * The two are checked in one transaction, after the OTP row has been locked
+   * and updated, so there is no window in which a verification exists and the
+   * gate is evaluated against stale settlement state.
+   *
+   * A correct code with no settlement evidence does **not** fund. It records
+   * the confirmation and leaves the transaction pending, because the supplier
+   * saying "I have the code" is not evidence that money moved. That asymmetry
+   * is the invariant, not a defensive extra.
+   */
+  async confirm(
+    transactionId: string,
+    ctx: ActorContext,
+    code: string,
+  ): Promise<{ transactionState: TransactionState; fundedAt: string | null }> {
+    await this.requireSupplierParty(transactionId, ctx);
+    const now = this.time.now();
+
+    return this.db.transaction(async (client) => {
+      const { rows: locked } = await client.query<{ state: TransactionState }>(
+        `SELECT state FROM receivable_transactions WHERE id = $1 FOR UPDATE`,
+        [transactionId],
+      );
+      if (locked.length === 0) throw AppException.notFound('Transaction');
+      const state = locked[0].state;
+
+      // Verifying throws the generic failure itself; nothing below runs unless
+      // the code was right.
+      await this.otp.verifyIn(client, transactionId, ctx, code);
+
+      const settlement = await this.findSettlementIn(client, transactionId);
+      if (!this.hasSettlementEvidence(settlement)) {
+        // INV-10, the half people forget. The code was correct and that is
+        // recorded, but funding is not complete until the bank's side exists.
+        await this.audit.recordIn(client, {
+          actionType: 'FUNDING_OTP_VERIFIED_WITHOUT_SETTLEMENT',
+          targetEntityType: 'TRANSACTION',
+          targetEntityId: transactionId,
+          previousValue: { transactionState: state },
+          newValue: { transactionState: state, otpVerified: true, settlementEvidence: false },
+        });
+        return { transactionState: state, fundedAt: null };
+      }
+
+      if (state === 'FUNDED') {
+        // Already funded: a replayed confirmation is not an error to the
+        // caller, but it must not re-post anything.
+        return {
+          transactionState: state,
+          fundedAt: settlement?.payout_completed_at?.toISOString() ?? null,
+        };
+      }
+
+      requireTransition(state, 'FUNDED');
+      await client.query(
+        `UPDATE receivable_transactions SET state = 'FUNDED', updated_at = now() WHERE id = $1`,
+        [transactionId],
+      );
+      await client.query(
+        `INSERT INTO status_history
+           (entity_type, entity_id, previous_status, new_status, reason, changed_by, changed_at)
+         VALUES ('TRANSACTION',$1,$2,'FUNDED',
+                 'Supplier confirmed receipt and settlement evidence is present',$3,$4)`,
+        [transactionId, state, ctx.userId, now],
+      );
+
+      await this.audit.recordIn(client, {
+        actionType: 'TRANSACTION_FUNDED',
+        targetEntityType: 'TRANSACTION',
+        targetEntityId: transactionId,
+        previousValue: { transactionState: state },
+        newValue: {
+          transactionState: 'FUNDED',
+          otpVerified: true,
+          settlementEvidence: true,
+          settlementId: settlement?.id ?? null,
+        },
+      });
+
+      return { transactionState: 'FUNDED', fundedAt: now.toISOString() };
+    });
+  }
+
+  /** Only a transaction awaiting confirmation may have a code issued for it. */
+  private async requireAwaitingConfirmation(transactionId: string): Promise<void> {
+    const row = await this.db.queryOne<{ state: TransactionState }>(
+      `SELECT state FROM receivable_transactions WHERE id = $1`,
+      [transactionId],
+    );
+    if (!row) throw AppException.notFound('Transaction');
+    if (row.state !== 'FUNDING_CONFIRMATION_PENDING') {
+      throw new AppException(
+        ErrorCode.INVALID_STATE_TRANSITION,
+        'A confirmation code can only be issued once the bank has marked the transfer sent.',
+        HttpStatus.CONFLICT,
+        { state: row.state },
+      );
+    }
+  }
+
+  /** Only the supplier on the accepted snapshot may confirm receipt. */
+  private async requireSupplierParty(
+    transactionId: string,
+    ctx: ActorContext,
+  ): Promise<void> {
+    const snapshot = await this.db.queryOne<{ supplier_org_id: string }>(
+      `SELECT supplier_org_id FROM accepted_offer_snapshots WHERE transaction_id = $1`,
+      [transactionId],
+    );
+    if (!snapshot) throw AppException.notFound('Transaction');
+    if (snapshot.supplier_org_id !== ctx.organizationId) {
+      // Not even the bank may confirm on the supplier's behalf — that would
+      // collapse the two parties into one and defeat the whole mechanism.
+      throw AppException.notFound('Transaction');
+    }
   }
 
   // =====================================================================

@@ -10,7 +10,7 @@ import {
 } from '@nestjs/common';
 import { ApiOperation, ApiResponse, ApiTags } from '@nestjs/swagger';
 import { FundingService, SettlementRow } from './funding.service';
-import { MarkSentDto } from './dto';
+import { ConfirmFundingDto, MarkSentDto } from './dto';
 import { Idempotent } from '../../common/idempotency/idempotency.interceptor';
 import { CurrentContext, CurrentUser, RequireRoles } from '../auth/decorators';
 import { MembershipRow, PlatformUser } from '../auth/auth.service';
@@ -57,6 +57,56 @@ export class FundingController {
   ): Promise<Record<string, unknown>> {
     const settlement = await this.funding.markSent(id, contextOf(user, membership), body);
     return describeSettlement(settlement);
+  }
+
+  @Post('transactions/:id/funding/otp')
+  @HttpCode(HttpStatus.CREATED)
+  @RequireRoles('BANK_OPERATIONS', 'BANK_ADMIN')
+  @ApiOperation({
+    summary: 'Bank generates the funding OTP — returned ONCE',
+    description:
+      'The plaintext code is in this response and nowhere else, ever again: storage is a keyed ' +
+      'hash bound to the transaction (ZM-FND-005). The bank passes it to the supplier out of ' +
+      'band. It is not a signature and carries no signing authority (ZM-FND-008) — its only ' +
+      'job is to prove both parties are present at the funding event.',
+  })
+  @ApiResponse({ status: 201, description: 'Code generated — show it once, then discard' })
+  @ApiResponse({ status: 429, description: 'Maximum regenerations reached' })
+  async generateOtp(
+    @CurrentUser() user: PlatformUser,
+    @CurrentContext() membership: MembershipRow,
+    @Param('id', ParseUUIDPipe) id: string,
+  ): Promise<Record<string, unknown>> {
+    const generated = await this.funding.generateOtp(id, contextOf(user, membership));
+    return {
+      otp: generated.otp,
+      expiresAt: generated.expiresAt.toISOString(),
+      resendsRemaining: generated.resendsRemaining,
+    };
+  }
+
+  @Post('transactions/:id/funding/confirm')
+  @HttpCode(HttpStatus.OK)
+  @Idempotent()
+  @RequireRoles('SUPPLIER_OWNER', 'SUPPLIER_SIGNATORY')
+  @ApiOperation({
+    summary: 'Supplier confirms receipt — the cross-party half of funding',
+    description:
+      'On success AND with settlement evidence present, the transaction becomes FUNDED. Both ' +
+      'are required; neither alone suffices (INV-10). A correct code with no settlement ' +
+      'evidence records the confirmation and leaves the transaction pending. Failures are ' +
+      'generic: wrong, expired and already-used are indistinguishable, and the only detail ' +
+      'returned is attemptsRemaining (ZM-FND-009).',
+  })
+  @ApiResponse({ status: 200, description: 'Confirmed — state and fundedAt' })
+  @ApiResponse({ status: 401, description: 'OTP_INVALID with attemptsRemaining, and nothing else' })
+  async confirm(
+    @CurrentUser() user: PlatformUser,
+    @CurrentContext() membership: MembershipRow,
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() body: ConfirmFundingDto,
+  ): Promise<Record<string, unknown>> {
+    return this.funding.confirm(id, contextOf(user, membership), body.otp);
   }
 
   @Get('transactions/:id/settlement')

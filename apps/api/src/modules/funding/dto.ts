@@ -1,5 +1,5 @@
-import { ApiPropertyOptional } from '@nestjs/swagger';
-import { IsOptional, IsString, IsUUID, MaxLength } from 'class-validator';
+import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
+import { IsNotEmpty, IsOptional, IsString, IsUUID, MaxLength } from 'class-validator';
 
 export class MarkSentDto {
   @ApiPropertyOptional({
@@ -19,4 +19,18 @@ export class MarkSentDto {
   @IsOptional()
   @IsUUID()
   evidenceDocumentId?: string;
+}
+
+export class ConfirmFundingDto {
+  @ApiProperty({
+    description: 'The one-time code the bank issued and passed to the supplier out of band.',
+  })
+  @IsString()
+  @IsNotEmpty()
+  // Deliberately no length or format validator. A "must be 6 digits" rejection
+  // would answer a question about the code's shape before any attempt is
+  // counted, which is a free oracle and an attempt-budget bypass. Malformed
+  // input is simply a wrong code (ZM-FND-009).
+  @MaxLength(64)
+  otp!: string;
 }

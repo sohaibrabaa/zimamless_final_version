@@ -10,6 +10,7 @@ import { AuditService } from './common/audit/audit.service';
 import { AuditInterceptor } from './common/audit/audit.interceptor';
 import { IdempotencyInterceptor } from './common/idempotency/idempotency.interceptor';
 import { LedgerService } from './modules/ledger/ledger.service';
+import { OtpService } from './modules/funding/otp.service';
 import { FundingService } from './modules/funding/funding.service';
 import { FundingController } from './modules/funding/funding.controller';
 import { TIME_PROVIDER, SystemTimeProvider } from './common/time/time.provider';
@@ -177,6 +178,7 @@ export const APP_CONFIG = 'APP_CONFIG';
     // describes, never separately.
     LedgerService,
     FundingService,
+    OtpService,
     // The provider is bound to a symbol, not to its class, so ZM-CON-009's
     // "insertable without core domain changes" is a one-line swap here and
     // nothing else. Nothing outside this file names DummySignatureProvider.
