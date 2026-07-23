@@ -1109,3 +1109,51 @@ OUTSTANDING (unchanged from Phase 7, still not claimed):
 NEEDS PO SIGN-OFF: the `BUYER_PAYMENT_CONFIRMATION` wording (LT-14). It is
   catalogued in `docs/specs/NOTIFICATIONS.md` with its constraint — operational
   only, never a demand for payment — and deliberately not sent until ratified.
+
+---
+
+## 2026-07-23 (later) — Phase 7/8 review pass
+
+Re-read both kickoff prompts against the code rather than against the
+completion reports. Four things came out of it.
+
+LIVE (new): `GET /admin/relisting-requests` — platform only. Named explicitly
+  in Phase 8 §8.5 and never built. The withdrawal flow was already writing
+  `REQUESTED` rows that nothing could read, so the write had no consumer. The
+  seven ZM-REC-018 checks report `null` when unrecorded rather than being
+  omitted: "checked and failed" and "not yet checked" mean opposite things to a
+  reviewer. Contract coverage 74 → 75 of 82, no drift. No screen consumes it
+  yet — the review desk and `POST …/approve` are Phase 9.
+
+CHANGED (behaviour a consumer would otherwise assume wrongly):
+  - **Maturity reminders no longer backfill.** They returned every reached
+    threshold, so a transaction funded five days before maturity produced three
+    notifications in one minute claiming it was due in 30, 14 and 7 days. Only
+    the nearest threshold fires now, and the subject quotes the *real* days
+    remaining, not the threshold that triggered it. Anything counting reminder
+    rows per transaction should expect fewer.
+  - **`recordManualCall` is audited and takes a row lock.** It overwrote the
+    previous operator's notes with no trace; `manual_call_notes` is one column,
+    so that was a hard delete of evidence (INV-7). The superseded text now
+    lives in the audit entry's `previousValue`.
+
+CHANGED (DB): none.
+
+FRONTEND: the payments mock hardcoded `overdueDays: 0`, which meant
+  `PaymentTimeline`'s overdue-days line could never render. With nothing
+  promoted to live the mock *is* the demo, so a fixture that switches a feature
+  off silently is worse than no fixture.
+
+DOCS: **Q-17** raised — `ZM-NOT-007` requires a manual call record; the frozen
+  contract declares no notification paths and the overlay declares only list
+  and read, so the requirement has storage and no input. Declared partially met
+  in `docs/specs/NOTIFICATIONS.md` rather than worked around. Q-16 still named
+  the retired `PLATFORM_OPERATIONS_ADMIN` role — the exact bug Phase 8's own
+  lesson 2 was written about — and now names `PLATFORM_OPS_ADMIN`.
+
+BLOCKED ON: nothing.
+
+OUTSTANDING: unchanged. Live promotion is still 0 of ~90 and remains the
+  largest demo risk; `POST /admin/relisting-requests/{id}/approve` and
+  `POST /transactions/{id}/relist-request` stay unserved, with the other five
+  Phase 9 paths.

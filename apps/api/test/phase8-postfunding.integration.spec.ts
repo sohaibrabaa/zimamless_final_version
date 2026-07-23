@@ -891,6 +891,48 @@ describeIfDb('Phase 8 — post-funding lifecycle', () => {
       });
       expect(res.status).toBe(403);
     }, 60_000);
+
+    it('surfaces the request in the admin relisting queue', async () => {
+      const res = await api('platformOps', 'get', '/admin/relisting-requests?status=REQUESTED');
+      expect(res.status).toBe(200);
+
+      const mine = (res.body as { transactionId: string; status: string }[]).find(
+        (r) => r.transactionId === withdrawn.transactionId,
+      );
+      expect(mine).toBeDefined();
+      expect(mine?.status).toBe('REQUESTED');
+    }, 60_000);
+
+    it('reports the seven ZM-REC-018 checks as null rather than omitting them', async () => {
+      // "Not yet checked" and "checked and failed" mean opposite things to a
+      // reviewer. An absent key reads as the second, so the queue names every
+      // check explicitly even though the stored jsonb is still `{}`.
+      const res = await api('platformOps', 'get', '/admin/relisting-requests');
+      const mine = (res.body as { transactionId: string; verification: Record<string, unknown> }[])
+        .find((r) => r.transactionId === withdrawn.transactionId)!;
+
+      for (const check of [
+        'stillUnpaid',
+        'notFinanced',
+        'unchanged',
+        'stillValid',
+        'noFraudIndicator',
+        'supplierEligible',
+        'buyerEligible',
+      ]) {
+        expect(mine.verification).toHaveProperty(check);
+        expect(mine.verification[check]).toBeNull();
+      }
+    }, 60_000);
+
+    it('refuses a bank and a supplier reading the relisting queue', async () => {
+      // A bank would learn which receivables are about to return to the market
+      // before they are listed.
+      for (const persona of ['bankOps', 'supplier'] as const) {
+        const res = await api(persona, 'get', '/admin/relisting-requests');
+        expect([403, 404]).toContain(res.status);
+      }
+    }, 60_000);
   });
 
   describe('ZM-FRD-004 — only compliance records a confirmed finding', () => {

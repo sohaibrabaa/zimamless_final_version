@@ -24,6 +24,7 @@ damage a real Jordanian business.
 | 8.6 | Notification engine with real delivery evidence; the inbox |
 | 8.7 | `GET /cases` — role-scoped across all four case types |
 | 8.8 | Supplier/bank payment screens, case desk, inbox — both languages |
+| 8.10 | `GET /admin/relisting-requests` — added in review; see below |
 
 **63/63** integration tests against the hosted database. **539** API unit
 tests, **232** frontend tests, lint/typecheck clean on both workspaces, i18n
@@ -156,6 +157,46 @@ renders empty rather than being left visible as machinery in a message to a
 real person.
 
 ---
+
+## Found in review, after this report first claimed the phase complete
+
+Three defects and one scope miss, all found by re-reading both kickoff prompts
+against the code rather than against this document.
+
+**Reminders backfilled false due dates.** The sweep returned *every* reached
+threshold, so an invoice funded five days before maturity had reached 30, 14
+and 7 at once and the supplier received three notifications in the same minute
+saying it was due in 30, 14 and 7 days. Phase 8's own checkpoint seeds dates
+near maturity, so this fired in the demo. The unit test asserting it called the
+behaviour "catching up" — but a reminder is a factual claim about a date, and a
+late one is not a reminder. Only the nearest threshold fires now, and the
+subject quotes the real days remaining rather than the bucket.
+
+**`recordManualCall` destroyed evidence.** `manual_call_notes` is a single
+column, so a second operator's call silently overwrote the first operator's
+account of a conversation that happened offline and cannot be reconstructed —
+a hard delete in a system that forbids them (INV-7), and with no audit entry at
+all. Now audited with the previous notes in `previousValue`, under a row lock.
+
+**`GET /admin/relisting-requests` was never built**, though §8.5 of the phase
+prompt names it explicitly. The withdrawal flow was already writing `REQUESTED`
+rows that nothing could read, which made the write pointless — the queue is the
+only thing that turns a recorded request into a reviewable one. Now served,
+platform-only, and the seven ZM-REC-018 checks report `null` when unrecorded
+rather than being omitted: "checked and failed" and "not yet checked" mean
+opposite things to a reviewer, and an absent key reads as the first when it is
+the second. Contract coverage went 74 → 75 of 82 paths with no drift.
+
+**A mock that disabled a screen element.** `overdueDays` was hardcoded to `0`,
+so `PaymentTimeline`'s overdue-days line could never render. With no endpoint
+promoted to live, the mock is what the demo shows, and a fixture that silently
+switches off a feature is worse than no fixture — the code looks built and
+never appears.
+
+`ZM-NOT-007` is now declared **partially met**: the manual-call record has
+storage and audit, and no route can create it, because the frozen contract
+declares no notification paths and the overlay declares only list and read.
+Raised as **Q-17** rather than worked around.
 
 ## Deliberately not done
 

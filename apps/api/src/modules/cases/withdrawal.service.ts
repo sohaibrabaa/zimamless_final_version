@@ -60,6 +60,34 @@ export class WithdrawalService {
   ) {}
 
   /**
+   * The relisting review queue (ZM-REC-018, ZM-MKT-016).
+   *
+   * Platform-only, and that is the requirement rather than caution: relisting
+   * is the platform certifying to *future bidders* that a receivable which
+   * already collapsed once is financeable again. A supplier reading the queue
+   * would learn nothing it does not already know about its own transaction; a
+   * bank reading it would see which receivables are about to return to the
+   * market before they are listed.
+   *
+   * A withdrawal decision writes `REQUESTED` here and stops. Nothing in this
+   * phase approves one — see `docs/completion/PHASE_8.md`.
+   */
+  async listRelistingRequests(ctx: ActorContext, status?: string): Promise<RelistingRequestRow[]> {
+    if (ctx.organizationType !== 'PLATFORM') {
+      throw AppException.insufficientRole(['PLATFORM_OPS_ADMIN']);
+    }
+    const { rows } = await this.db.query<RelistingRequestRow>(
+      `SELECT id, transaction_id, status, verification, notes,
+              requested_at, decided_at, decision_notes
+         FROM relisting_requests
+        WHERE ($1::text IS NULL OR status = $1::relisting_request_status)
+        ORDER BY requested_at DESC`,
+      [status ?? null],
+    );
+    return rows;
+  }
+
+  /**
    * The bank opens a withdrawal case against its own accepted offer.
    *
    * Only the bank that made the offer may withdraw it — an obvious statement
@@ -326,6 +354,55 @@ export class WithdrawalService {
     );
     return (row?.value as Record<string, PenaltyRule> | undefined) ?? null;
   }
+}
+
+export interface RelistingRequestRow {
+  id: string;
+  transaction_id: string;
+  status: string;
+  verification: Record<string, boolean | null>;
+  notes: string | null;
+  requested_at: Date;
+  decided_at: Date | null;
+  decision_notes: string | null;
+}
+
+/**
+ * The ZM-REC-018 checks a relisting must clear before the receivable returns
+ * to the marketplace.
+ *
+ * Listed explicitly, and reported as `null` when unrecorded rather than
+ * omitted, so the queue distinguishes "checked and failed" from "nobody has
+ * looked yet". Those mean opposite things to a reviewer, and a missing key
+ * reads as the first when it is the second.
+ */
+const ZM_REC_018_CHECKS = [
+  'stillUnpaid',
+  'notFinanced',
+  'unchanged',
+  'stillValid',
+  'noFraudIndicator',
+  'supplierEligible',
+  'buyerEligible',
+] as const;
+
+export function describeRelistingRequest(row: RelistingRequestRow): Record<string, unknown> {
+  const recorded = row.verification ?? {};
+  const verification: Record<string, boolean | null> = {};
+  for (const check of ZM_REC_018_CHECKS) {
+    verification[check] = typeof recorded[check] === 'boolean' ? recorded[check] : null;
+  }
+
+  return {
+    id: row.id,
+    transactionId: row.transaction_id,
+    status: row.status,
+    verification,
+    notes: row.notes,
+    requestedAt: row.requested_at.toISOString(),
+    decidedAt: row.decided_at ? row.decided_at.toISOString() : null,
+    decisionNotes: row.decision_notes,
+  };
 }
 
 /**

@@ -113,6 +113,7 @@ export const endpointStatus: EndpointStatusEntry[] = [
   { method: "POST", path: "/transactions/{id}/fraud-review", phase: 8, status: "mock", notes: "freezes and concludes nothing; compliance is notified" },
   { method: "POST", path: "/fraud-cases/{id}/decide", phase: 8, status: "mock", notes: "compliance only (ZM-FRD-004) — the only confirmed status in the system" },
   { method: "GET", path: "/cases", phase: 8, status: "mock", notes: "v3.1.0 · fraud cases EXCLUDED for a bank or supplier, not redacted" },
+  { method: "GET", path: "/admin/relisting-requests", phase: 8, status: "mock", notes: "v3.1.0 · platform only. No screen consumes it yet — the ZM-REC-018 review desk is Phase 9, alongside POST approve. The seven checks report null when unrecorded, never omitted" },
   { method: "POST", path: "/transactions/{id}/relist-request", phase: 8, status: "mock", notes: "v3.1.0" },
   { method: "POST", path: "/transactions/{id}/cancel", phase: 8, status: "mock", notes: "v3.1.0" },
   { method: "GET", path: "/notifications", phase: 8, status: "mock", notes: "v3.1.0 · scoped to recipient_user_id alone; no destination or gateway reference returned" },

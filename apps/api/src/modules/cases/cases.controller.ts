@@ -14,7 +14,11 @@ import {
 import { ApiOperation, ApiQuery, ApiResponse, ApiTags } from '@nestjs/swagger';
 import { describeRecourse, RecourseService } from './recourse.service';
 import { describeDispute, DisputesService } from './disputes.service';
-import { describeWithdrawal, WithdrawalService } from './withdrawal.service';
+import {
+  describeRelistingRequest,
+  describeWithdrawal,
+  WithdrawalService,
+} from './withdrawal.service';
 import { describeFraudCase, FraudService } from './fraud.service';
 import { CaseListService, type CaseType } from './case-list.service';
 import {
@@ -268,6 +272,33 @@ export class CasesController {
   ): Promise<Record<string, unknown>> {
     const ctx = contextOf(user, membership);
     return describeWithdrawal(await this.withdrawals.decide(id, ctx, body), audienceOf(ctx));
+  }
+
+  @Get('admin/relisting-requests')
+  @RequireRoles('PLATFORM_OPS_ADMIN', 'PLATFORM_SUPER_ADMIN')
+  @ApiOperation({
+    summary: 'Relisting review queue',
+    description:
+      'Every request a withdrawal decision raised, newest first. Each carries the seven ' +
+      'ZM-REC-018 verification outcomes, reported as null when nobody has recorded them yet ' +
+      'rather than omitted — "checked and failed" and "not yet checked" mean opposite things ' +
+      'to a reviewer, and an absent key reads as the first when it is the second. Nothing in ' +
+      'Phase 8 approves a request; this is the queue, not the decision.',
+  })
+  @ApiQuery({
+    name: 'status',
+    required: false,
+    enum: ['REQUESTED', 'UNDER_REVIEW', 'APPROVED', 'DENIED'],
+  })
+  @ApiResponse({ status: 200, description: 'Relisting requests' })
+  async listRelistingRequests(
+    @CurrentUser() user: PlatformUser,
+    @CurrentContext() membership: MembershipRow,
+    @Query('status') status?: string,
+  ): Promise<Record<string, unknown>[]> {
+    const ctx = contextOf(user, membership);
+    const rows = await this.withdrawals.listRelistingRequests(ctx, status);
+    return rows.map(describeRelistingRequest);
   }
 
   // -----------------------------------------------------------------
