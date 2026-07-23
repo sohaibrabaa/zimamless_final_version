@@ -55,9 +55,29 @@ const TRANSITIONS: ReadonlyMap<TransactionState, ReadonlySet<TransactionState>> 
     new Set<TransactionState>(['ELIGIBLE', 'INFORMATION_REQUIRED', 'REJECTED', 'FRAUD_REVIEW']),
   ],
   ['INFORMATION_REQUIRED', new Set<TransactionState>(['AUTOMATED_CHECKS', 'UNDER_REVIEW', 'CANCELLED'])],
-  // ELIGIBLE's onward transition to OPEN_FOR_OFFERS is Phase 5's to add,
-  // when listing activation exists to perform it.
-  ['ELIGIBLE', new Set<TransactionState>(['CANCELLED'])],
+  // Phase 5 added OPEN_FOR_OFFERS, as the Phase 3 note here anticipated.
+  ['ELIGIBLE', new Set<TransactionState>(['OPEN_FOR_OFFERS', 'CANCELLED'])],
+  [
+    'OPEN_FOR_OFFERS',
+    // Back to ELIGIBLE when a listing lapses with nothing selected: the
+    // receivable is untouched and the supplier may relist, so returning it
+    // to a terminal state would destroy value over a missed deadline.
+    // OFFER_ACCEPTED is Phase 6's to perform.
+    new Set<TransactionState>(['ELIGIBLE', 'OFFER_ACCEPTED', 'CANCELLED']),
+  ],
+  [
+    'OFFER_ACCEPTED',
+    // Phase 6. CONDITIONS_PENDING and back again: the state is *derived* from
+    // whether any mandatory condition is unresolved, so it moves in both
+    // directions as conditions are fulfilled, waived, or (a bank's
+    // prerogative) added to the picture late. CONTRACTED is reachable
+    // directly when the accepted offer carried no mandatory conditions at all.
+    new Set<TransactionState>(['CONDITIONS_PENDING', 'CONTRACTED', 'CANCELLED']),
+  ],
+  ['CONDITIONS_PENDING', new Set<TransactionState>(['OFFER_ACCEPTED', 'CONTRACTED', 'CANCELLED'])],
+  // CONTRACTED onwards is Phase 7's (funding and settlement). Declaring those
+  // transitions now would assert behaviour no code can perform.
+  ['CONTRACTED', new Set<TransactionState>([])],
   ['FRAUD_REVIEW', new Set<TransactionState>(['ELIGIBLE', 'REJECTED'])],
 ]);
 

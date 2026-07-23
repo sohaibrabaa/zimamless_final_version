@@ -1,0 +1,70 @@
+{
+  "coefficients": [
+    0.4514354046,
+    0.2674249478,
+    0.0591415044,
+    -0.5671303215,
+    1.251541132,
+    -0.7992967091,
+    0.2679257572,
+    -0.5235119322,
+    0.9214080856,
+    1.1495605152,
+    0.8819755852
+  ],
+  "featureNames": [
+    "tenor_days",
+    "log_face_value",
+    "tax_ratio",
+    "completeness_ratio",
+    "duplicate_collision",
+    "electronic_invoice_attached",
+    "partially_paid",
+    "prior_submitted_count",
+    "dispute_count",
+    "duplicate_referral_count",
+    "recourse_count"
+  ],
+  "intercept": -1.0764808198,
+  "means": [
+    87.5736956025,
+    3.9126095469,
+    0.1598845088,
+    0.8812519371,
+    0.0411111111,
+    0.9342222222,
+    0.1162222222,
+    3.0015555556,
+    0.1824444444,
+    0.1015555556,
+    0.0882222222
+  ],
+  "metrics": {
+    "accuracy": 0.851333,
+    "auc": 0.90986,
+    "brier": 0.107098,
+    "iterations": 4000,
+    "log_loss": 0.342912,
+    "positive_rate": 0.3165,
+    "samples": 6000,
+    "test_samples": 1500,
+    "train_samples": 4500
+  },
+  "seed": 20260723,
+  "stds": [
+    44.4337752039,
+    0.4317953226,
+    0.0201522184,
+    0.0973733617,
+    0.1985471925,
+    0.2478932466,
+    0.3204912125,
+    1.7286468125,
+    0.4203736727,
+    0.3136130351,
+    0.3003611818
+  ],
+  "synthetic": true,
+  "trainerVersion": "risk-logreg-1.0",
+  "version": "risk-logreg-1.0+seed20260723"
+}

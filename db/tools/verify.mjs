@@ -146,10 +146,14 @@ try {
   `);
   check('D-02: minimum_acceptable_amount not selectable by authenticated', floor.length === 0);
 
-  // --- 6. Column revokes added by 0003 ---------------------------------
+  // --- 6. Column revokes added by 0003 and 0006 ------------------------
   for (const [table, column, label] of [
     ['funding_otps', 'otp_hash', 'otp_hash'],
     ['buyer_payments', 'bank_internal_notes', 'bank_internal_notes (ZM-PMT-018)'],
+    // ZM-RSK-013: a bank must not be able to read the scoring weights out
+    // of the database and reconstruct what the API deliberately withholds.
+    ['risk_model_versions', 'weights', 'risk model weights (ZM-RSK-013)'],
+    ['risk_model_versions', 'training_metrics', 'risk model training_metrics (ZM-RSK-013)'],
   ]) {
     const { rows } = await client.query(
       `SELECT 1 FROM information_schema.column_privileges
@@ -200,8 +204,21 @@ try {
 
   // --- 11. Frozen platform settings -------------------------------------
   const { rows: settings } = await client.query(`SELECT count(*)::int AS n FROM platform_settings`);
-  // 17 from the frozen schema + 3 from migration 0002.
-  check('platform_settings seeded', settings[0].n >= 20, `${settings[0].n} keys (expected 20)`);
+  // 17 from the frozen schema + 3 from migration 0002 + offer_acceptance_roles
+  // from 0008. A lower bound rather than an equality: later phases add keys,
+  // and a check that has to be edited for every addition gets edited without
+  // being read.
+  check('platform_settings seeded', settings[0].n >= 21, `${settings[0].n} keys (expected ≥ 21)`);
+
+  // AS-01 must be configurable rather than a constant in code.
+  const { rows: acceptanceRoles } = await client.query(
+    `SELECT jsonb_array_length(value) AS n FROM platform_settings WHERE key = 'offer_acceptance_roles'`,
+  );
+  check(
+    'AS-01 offer_acceptance_roles is configured',
+    acceptanceRoles.length === 1 && acceptanceRoles[0].n >= 1,
+    acceptanceRoles.length === 1 ? `${acceptanceRoles[0].n} role(s)` : 'missing',
+  );
 
   // --- 12. Append-only rules on audit and ledger ------------------------
   const { rows: rules } = await client.query(`
@@ -210,6 +227,32 @@ try {
       AND rulename IN ('audit_no_update','audit_no_delete','ledger_no_update','ledger_no_delete')
   `);
   check('append-only rules on audit_logs and ledger_entries (INV-7)', rules.length === 4, `${rules.length}/4`);
+
+  // --- 13. INV-4: the lock is immutable at the database level ------------
+  // The service guard in AcceptanceService is the fast path. This trigger is
+  // what holds when the service is not in the path at all — a direct SQL
+  // session, a job, or a migration written in a hurry.
+  const { rows: lockTrigger } = await client.query(`
+    SELECT tgname FROM pg_trigger
+     WHERE tgname = 'trg_transaction_lock_immutable' AND NOT tgisinternal
+  `);
+  check(
+    'INV-4 locked_at immutability trigger present',
+    lockTrigger.length === 1,
+    lockTrigger.length === 1 ? 'trg_transaction_lock_immutable' : 'MISSING',
+  );
+
+  // --- 14. Contract templates (ZM-CON-002: a fallback must exist) --------
+  const { rows: templates } = await client.query(`
+    SELECT count(*)::int AS total,
+           count(*) FILTER (WHERE transaction_type IS NULL)::int AS fallbacks
+      FROM contract_templates WHERE is_active
+  `);
+  check(
+    'active contract templates incl. a default fallback (ZM-CON-002)',
+    templates[0].total >= 1 && templates[0].fallbacks >= 1,
+    `${templates[0].total} active, ${templates[0].fallbacks} fallback`,
+  );
 
   console.log('');
   const failed = results.filter((r) => !r.pass);

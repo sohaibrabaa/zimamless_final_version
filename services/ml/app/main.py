@@ -25,6 +25,7 @@ from pydantic import BaseModel, Field
 from . import ocr as ocr_module
 from .einvoice import validator
 from .extraction import PIPELINE_VERSION, run_extraction
+from .risk import inference as risk_inference
 
 logging.basicConfig(level=os.getenv("LOG_LEVEL", "INFO").upper())
 logger = logging.getLogger(__name__)
@@ -50,6 +51,12 @@ class HealthResponse(BaseModel):
             "but OCR degrades to UNPARSED rather than failing."
         )
     )
+    riskModelAvailable: bool = Field(
+        description=(
+            "False means /risk/score still answers, but with modelAvailable=false, "
+            "and the API falls back to a rules-only score (ZM-RSK-017)."
+        )
+    )
 
 
 class ValidateRequest(BaseModel):
@@ -70,6 +77,7 @@ def health() -> HealthResponse:
         status="ok",
         version=PIPELINE_VERSION,
         ocrEngineAvailable=ocr_module.engine_available(),
+        riskModelAvailable=risk_inference.model_available(),
     )
 
 
@@ -105,6 +113,45 @@ async def extract_document(
         len(result.mismatches),
     )
     return result.to_dict()
+
+
+class RiskScoreRequest(BaseModel):
+    """The always-known facts the model scores on.
+
+    Note the absence of anything government-sourced. That is the point, and
+    `app/risk/features.py` explains why at length: a feature that encodes
+    whether a registry answered would let the model learn to penalise
+    downtime, which ZM-RSK-005 forbids and no downstream clamp can undo.
+    """
+
+    tenorDays: float = 0
+    faceValue: float = 0
+    subtotalAmount: float = 0
+    taxAmount: float = 0
+    completenessRatio: float = 1.0
+    duplicateCollision: bool = False
+    electronicInvoiceAttached: bool = False
+    partiallyPaid: bool = False
+    priorSubmittedCount: float = 0
+    disputeCount: float = 0
+    duplicateReferralCount: float = 0
+    recourseCount: float = 0
+
+
+@app.post("/risk/score")
+def score_risk(request: RiskScoreRequest) -> dict:
+    """
+    Per-transaction risk estimate with contributing features (ZM-RSK-017).
+
+    Always 200, including when no model is loaded — the body's
+    `modelAvailable` flag is the signal, so the API has one code path and
+    cannot forget to catch an exception. `contributions` are signed log-odds
+    terms, largest effect first.
+
+    This is risk ESTIMATION on synthetic training data. It is not, and must
+    not be described as, forensic fraud detection (ZM-RSK-018).
+    """
+    return risk_inference.score(request.model_dump())
 
 
 @app.post("/einvoice/validate")

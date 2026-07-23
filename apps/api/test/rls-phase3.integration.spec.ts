@@ -295,9 +295,18 @@ describeIfDb('RLS with rows present (Phase 2 + Phase 3 carry-over)', () => {
     });
 
     it('a bank sees no transaction that has never been listed', async () => {
-      // Phase 3 creates no listings, so a bank has been given sight of
-      // nothing — and the policy, not the API, is what enforces that here.
-      const rows = await db.asUser(PERSONA.bankAMaker, 'SELECT id FROM receivable_transactions');
+      // This used to assert a bank sees ZERO transactions, on the reasoning
+      // that Phase 3 created no listings at all. Phase 5 made that premise
+      // false: a bank legitimately sees listings it was found eligible for,
+      // which is the marketplace working. The claim the test was always
+      // about is narrower and still holds — an UNLISTED transaction is
+      // invisible — so it is now asserted directly against this suite's own
+      // fixture, which is never listed.
+      const rows = await db.asUser<{ id: string }>(
+        PERSONA.bankAMaker,
+        'SELECT id FROM receivable_transactions WHERE id = $1',
+        [FIX.tx],
+      );
       expect(rows).toHaveLength(0);
     });
 

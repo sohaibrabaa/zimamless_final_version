@@ -30,7 +30,19 @@ Decimal.set({
   toExpPos: 9e15,
 });
 
-const MONEY_PATTERN = /^-?\d+\.\d{3}$/;
+/**
+ * The wire format, exported so DTO validators match on the same expression
+ * this class parses with.
+ *
+ * A second copy of this regex living in a DTO file is how "the API rejected
+ * it but Money would have accepted it" starts — the two drift, and the
+ * mismatch surfaces as a 500 from deep inside a service instead of a 422 at
+ * the edge naming the field.
+ */
+export const MONEY_PATTERN = /^-?\d+\.\d{3}$/;
+
+export const MONEY_MESSAGE =
+  'must be a decimal string with exactly 3 decimal places, e.g. "1250.000"';
 
 export class MoneyError extends Error {}
 

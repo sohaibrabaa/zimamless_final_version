@@ -40,27 +40,27 @@ endpoint, and has no mock→live promotion to track.
 | POST …/{id}/declarations | 3 | — | mock | wizard step 5 · 201. All eight must be true; a false one is **422** with `details.notAffirmed[]` naming which · **template version provisional, see Q-13** |
 | POST …/{id}/submit | 3 | — | mock | wizard step 6 · **200**, not 201. 409 `DUPLICATE_INVOICE` with `details.reviewReference` → blocked screen (ZM-VER-001, Q-11 resolved by that key) |
 | GET …/{id}/verification | 3 | — | mock | verification panel · all 8 checks always recorded, passes included. `NOT_APPLICABLE` is not `PASS` |
-| GET …/{id}/risk | 4 | — | mock | |
-| GET/POST /admin/risk-models | 4 | — | mock | |
-| POST …/{id}/listing | 5 | — | mock | |
-| GET …/{id}/listing-current * | 5 | — | mock | v3.1.0 |
-| GET /listings/{id} | 5 | — | mock | |
-| GET /listings/{id}/offers | 5 | — | mock | role-split |
-| GET /marketplace/eligible | 5 | — | mock | |
-| GET /marketplace/listings/{id} * | 5 | — | mock | v3.1.0 |
-| GET/POST /banks/policy-filters | 5 | — | mock | |
-| PATCH /banks/policy-filters/{id} * | 5 | — | mock | v3.1.0 |
-| POST /listings/{id}/offers/create | 5 | — | mock | |
-| GET /offers * | 5 | — | mock | v3.1.0 |
-| GET/PATCH /offers/{id} | 5 | — | mock | |
-| POST /offers/{id}/approve | 5 | — | mock | |
-| POST /offers/{id}/withdraw | 5 | — | mock | |
-| POST /offers/{id}/accept | 6 | — | mock | DEMO-CRITICAL |
-| POST /listings/{id}/reject-all | 6 | — | mock | |
-| POST/GET …/{id}/contract | 6 | — | mock | |
-| POST /contracts/{id}/sign | 6 | — | mock | |
-| GET …/{id}/conditions | 6 | — | mock | |
-| POST /conditions/{id}/fulfil | 6 | — | mock | |
+| GET …/{id}/risk | 4 | — | mock | built. components[] may carry null (render "not scored", not 0); dataAvailabilityPct is a separate NUMBER, style neutrally; mlFallbackReason present only when mlUsed=false |
+| GET/POST /admin/risk-models | 4 | — | mock | built. platform roles only. POST creates, never edits; activating needs activationReason |
+| POST …/{id}/listing | 5 | — | mock | built. 201. Show the fee BEFORE confirming (ZM-FEE-007) — it is incurred at activation whether or not financing succeeds. Returns both deadlines |
+| GET …/{id}/listing-current * | 5 | — | mock | v3.1.0 · built. 404 when never listed. offerCount present for supplier/platform only |
+| GET /listings/{id} | 5 | — | mock | built. Same role split as listing-current |
+| GET /listings/{id}/offers | 5 | — | mock | built. **role-split**: supplier gets every ACTIVE offer in full; a bank gets its OWN offer or an empty array — never a competitor, never a count (INV-11) |
+| GET /marketplace/eligible | 5 | — | mock | built. Paginated. Only OPEN_FOR_OFFERS listings this bank was found eligible for; filtered by join, not post-fetch |
+| GET /marketplace/listings/{id} * | 5 | — | mock | v3.1.0 · built. **403** (not 404) when the bank was evaluated and excluded — it is entitled to know it was. No floor, no offerCount, no competitors |
+| GET/POST /banks/policy-filters | 5 | — | mock | built. POST is BANK_ADMIN only; other bank roles may read |
+| PATCH /banks/policy-filters/{id} * | 5 | — | mock | v3.1.0 · built. Deactivation is `isActive:false`, never a delete — eligibility rows cite the filter that produced them |
+| POST /listings/{id}/offers/create | 5 | — | mock | built. 201. Do NOT send platformCommissionAmount/listingFeeAmount (400, named). netSupplierPayout optional but compared exactly. 409 if this bank already has a current offer — revise instead. 422 below floor, **generic, no numbers** |
+| GET /offers * | 5 | — | mock | v3.1.0 · built. Approval queue + my offers; `?status=PENDING_INTERNAL_APPROVAL`. Scoped to the active bank org in SQL |
+| GET/PATCH /offers/{id} | 5 | — | mock | built. PATCH creates a NEW version and moves the old one to REVISED; lineage kept. Another bank's offer is a 404, not a 403 |
+| POST /offers/{id}/approve | 5 | — | mock | built. **200**, not 201. 403 SELF_APPROVAL_FORBIDDEN if the approver created it (INV-12) — block it in the UI too, but the server is the authority |
+| POST /offers/{id}/withdraw | 5 | — | mock | built. **200**. Pre-acceptance only, no penalty, audited. After acceptance it is 409 — that is the Phase 8 withdrawal-case route |
+| POST /offers/{id}/accept | 6 | — | mock | DEMO-CRITICAL · built. **200, no request body.** Returns the AcceptedOfferSnapshot, not the offer. A replay returns the SAME snapshot with 200 — safe to retry. Second offer on a locked transaction is 409 TRANSACTION_ALREADY_LOCKED. Irreversible: a database trigger refuses to clear the lock |
+| POST /listings/{id}/reject-all | 6 | — | mock | built. **200**. Transaction returns to ELIGIBLE and may be relisted; the listing is CANCELLED. Banks are told only that they were not selected |
+| POST/GET …/{id}/contract | 6 | — | mock | built. POST is **201**; 409 if already generated (never regenerates a signable document); **422 with `details.findings[]`** when the ZM-CON-006 checks fail — render the whole list as a checklist. GET is visible to both parties only |
+| POST /contracts/{id}/sign | 6 | — | mock | built. **200**. Body `{accepted:true}`; `false` is 422, not a no-op. 403 for a non-signatory. A signature counts only at `status:'VERIFIED'` — `SIGNED` is an intermediate. Contract reaches FULLY_SIGNED and the transaction CONTRACTED when all are verified |
+| GET …/{id}/conditions | 6 | — | mock | built. Conditions on the ACCEPTED offer only; an empty array before acceptance, not a 404 |
+| POST /conditions/{id}/fulfil | 6 | — | mock | built. **200**. Supplier records fulfilment with `documentIds` (must already be attached to the transaction); only the BANK may send `waiverReason`, and a blank one is 422. CONDITIONS_PENDING is derived — it clears itself |
 | POST …/{id}/funding/mark-sent | 7 | — | mock | |
 | POST …/{id}/funding/otp | 7 | — | mock | |
 | POST …/{id}/funding/confirm | 7 | — | mock | |
