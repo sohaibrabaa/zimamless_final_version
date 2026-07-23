@@ -539,6 +539,28 @@ export class BuyersService {
     );
   }
 
+  /**
+   * The same rows as `findById`, for a set of ids, in one query.
+   *
+   * Exists so a list endpoint can resolve every row's buyer without a query
+   * per row. `= ANY($1::uuid[])` is one round trip whatever the length, which
+   * is the difference between a list that scales and one that fires a query
+   * per item and falls over on a busy connection pool.
+   */
+  async findByIds(ids: readonly string[]): Promise<Map<string, BuyerRow>> {
+    const map = new Map<string, BuyerRow>();
+    if (ids.length === 0) return map;
+    const { rows } = await this.db.query<BuyerRow>(
+      `SELECT id, national_establishment_no, legal_company_name, company_type,
+              registry_status, governorate, registered_address, registration_date::text,
+              last_verified_at
+         FROM buyers WHERE id = ANY($1::uuid[])`,
+      [[...new Set(ids)]],
+    );
+    for (const row of rows) map.set(row.id, row);
+    return map;
+  }
+
   async hasRelationship(supplierOrgId: string, buyerId: string): Promise<boolean> {
     const row = await this.db.queryOne(
       `SELECT 1 FROM supplier_buyer_relationships

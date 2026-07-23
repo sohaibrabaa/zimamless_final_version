@@ -1223,3 +1223,67 @@ loading flag resolves during the gap before the org exists. Waiting for rows
 rather than for loading to clear fixed it. Second time today a live-suite
 assertion looked like a product defect and was not; both were the test reading
 a real system through an assumption that only held against a mock.
+
+**Third pass — `GET /marketplace/eligible`, and INV-8 proved live.**
+
+`apps/web/test/live/floor.live.spec.tsx` asserts the invariant with the worst
+consequence in the product: **`minimumAcceptableAmount` never reaches a bank.**
+Not by inspecting the allow-list, the RLS grant, the logger redaction and the
+audit redaction — those are four enforcement points, and none of them is what a
+bank actually *receives*. The spec walks the whole response body recursively,
+over a real bank token, across the marketplace feed, each listing it offers,
+every transaction the bank can read and its own offers. A mock cannot leak
+something it was never given, so no mock-based test could ever have proved
+this.
+
+It also asserts the mirror: the **supplier still sees** the floor it set. A
+response that omitted the field from everyone would pass every leak test while
+breaking the screen where a supplier reviews its own figure.
+
+Two more shape mismatches that only a live render could find:
+
+  - the feed row keys off **`listingId`, not `id`**. The first draft assumed
+    `id`, and the React list rendered a column of `undefined` keys without
+    failing anything. The spec now asserts each rendered row is a real uuid, so
+    a list of blanks cannot pass again.
+  - `SessionProvider` requires a `locale` prop. The tests *ran* without it —
+    React does not care — and only `tsc` objected.
+
+Neither is a product defect. Both are the kind of quiet mismatch that lives
+happily behind a mock and shows up as an empty screen in a demo.
+
+---
+
+## 2026-07-23 (later) — a real defect the live harness caught: N+1 on GET /transactions
+
+Running the whole live suite at once (rather than a file at a time) turned up
+two failures that a single-file run had hidden, and they were not flaky tests.
+`GET /transactions?pageSize=100` was returning **500 roughly a quarter of the
+time** and taking ~9 seconds when it succeeded.
+
+ROOT CAUSE: the list was **2N+2 queries** — `invoiceOf` and `buyers.findById`
+per row inside a `Promise.all`. A 100-row page fired ~200 queries at a
+connection pool of 10 against the hosted Supabase pooler; under that burst the
+pooler intermittently dropped a connection, a `describe` threw, and `Promise.all`
+turned it into a 500. Confirmed load-dependent: pageSize=5 took ~2s, pageSize=100
+~9s, and the failure rate rose with page size.
+
+This is **pre-existing Phase 3 code**. Every unit test passed against it (they
+mock the database, so no pool, no pooler, no N+1 cost) and every integration
+test passed (they page at small sizes). Only a real screen pulling a real
+supplier's full list over a real pooler exposed it — which is the entire reason
+the live harness exists.
+
+FIX: batch the two lookups. `buyers.findByIds(ids[])` and
+`invoicesForTransactions(ids[])` each resolve the whole page in one
+`= ANY($1::uuid[])` query, and the summary is assembled in memory. The list is
+now **four queries flat**, whatever the page size.
+
+RESULT: 15/15 calls at pageSize=100 returned 200, max latency **2.7s, down from
+9s**. The two live tests that failed now pass; the full live suite is 27/27.
+
+NOT a second defect: a 500 appeared to reach the client without a matching
+server error log. That was the orphaned dev-server's stdout going nowhere after
+its file-watcher died in an EADDRINUSE restart loop — a test-environment
+artifact, cleared by a clean restart. `AllExceptionsFilter` logs every 500 at
+error with the full stack; that code is correct and unchanged.

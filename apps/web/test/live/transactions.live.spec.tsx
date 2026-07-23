@@ -120,7 +120,7 @@ describe("the session and transaction list against the live API", () => {
 
     render(
       <I18nProvider locale="en" dictionary={en as unknown as Dictionary}>
-        <SessionProvider>
+        <SessionProvider locale="en">
           <Probe />
         </SessionProvider>
       </I18nProvider>

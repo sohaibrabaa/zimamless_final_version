@@ -202,24 +202,49 @@ overlay and served, platform staff only, and the requirement is met.
 ## Deliberately not done
 
 **Live endpoint promotion — started, not finished.** It was 0 of ~90; it is now
-5, and the mechanism that was missing exists. `apps/web/test/live/` renders the
+8, and the mechanism that was missing exists. `apps/web/test/live/` renders the
 real component against the real API over a real Supabase JWT with no MSW
 installed, which is what the promotion rule has always required and what
-nothing satisfied before. Five Phase 8 endpoints are promoted on that evidence
-and every other entry stays `mock` — not assumed broken, simply not yet
-exercised through a screen.
+nothing satisfied before. Eight endpoints are promoted on that evidence and
+every other entry stays `mock` — not assumed broken, simply not yet exercised
+through a screen.
 
-The remaining 85 are the Phase 9 rehearsal gate, and the demo path
+The suite also carries **INV-8 live**, which is the highest-value thing in it.
+`minimumAcceptableAmount` never reaching a bank is enforced in four places — an
+API allow-list, a column-level RLS `REVOKE`, and two redaction lists — and none
+of those is what a bank actually *receives*. The spec walks the whole response
+body recursively over a real bank token across the marketplace feed, each
+listing, every readable transaction and its own offers, and separately asserts
+that the supplier still sees the figure it set. A mock cannot leak what it was
+never given, so no mock-based test could have proved this at all.
+
+The remaining 82 are the Phase 9 rehearsal gate, and the demo path
 (onboarding → invoice → risk → listing → offers → acceptance → contract →
 funding) is the order to take them in. Until then the integration suite and the
 demo still test two different systems for most of the product, which remains
 the largest demo risk.
 
-Building the harness surfaced one thing worth keeping: a Phase 8 test asserted
-`items[0].read === false` on the inbox, which quietly depended on nobody having
-ever opened a supplier notification. The live suite marks one read against the
-same hosted database, exactly as a person would, and the assertion failed. A
-test that breaks because the product was used is testing the wrong thing.
+Building the harness produced four findings, and the pattern in them is the
+point: **every one was an assumption that held against a mock and not against
+the real system.**
+
+1. A Phase 8 test asserted `items[0].read === false` on the inbox, quietly
+   depending on nobody having ever opened a supplier notification. The live
+   suite reads one, exactly as a person would, and it failed. A test that
+   breaks because the product was used is testing the wrong thing.
+2. A supplier appeared to receive `200` on another party's transaction. It was
+   page two of 89 — the test asked for 50.
+3. A transaction list rendered empty with no error, looking exactly like broken
+   scoping. The hook is *disabled* until the provider derives an active
+   organization, and a disabled resource is also not loading, so waiting on the
+   loading flag resolved during the gap.
+4. The marketplace feed keys off `listingId`, not `id`. The first draft
+   assumed `id` and React rendered a column of `undefined` keys without
+   complaint.
+
+Three false alarms and one real test defect — and the two shape mismatches
+(#4, plus `SessionProvider` needing a `locale` prop that only `tsc` objected
+to) are precisely what would have surfaced as an empty screen in a live demo.
 
 **`BUYER_PAYMENT_CONFIRMATION` (LT-14).** The buyer notification is catalogued
 in `docs/specs/NOTIFICATIONS.md` with its constraint — operational only, never

@@ -50,7 +50,7 @@ endpoint, and has no mock→live promotion to track.
 | GET …/{id}/listing-current * | 5 | — | mock | v3.1.0 · built. 404 when never listed. offerCount present for supplier/platform only · UI: v3.1.0 · listing-activation + offer comparison screens |
 | GET /listings/{id} | 5 | — | mock | built. Same role split as listing-current |
 | GET /listings/{id}/offers | 5 | — | mock | built. **role-split**: supplier gets every ACTIVE offer in full; a bank gets its OWN offer or an empty array — never a competitor, never a count (INV-11) · UI: role-split · offer comparison screen (supplier), own-offer check (bank) |
-| GET /marketplace/eligible | 5 | — | mock | built. Paginated. Only OPEN_FOR_OFFERS listings this bank was found eligible for; filtered by join, not post-fetch · UI: bank marketplace feed · real per-bank policy-filter eligibility (ZM-MKT-002) |
+| GET /marketplace/eligible | 5 | **2026-07-23** | **live** | built. Paginated. Only OPEN_FOR_OFFERS listings this bank was found eligible for; filtered by join, not post-fetch · UI: bank marketplace feed · real per-bank policy-filter eligibility (ZM-MKT-002) |
 | GET /marketplace/listings/{id} * | 5 | — | mock | v3.1.0 · built. **403** (not 404) when the bank was evaluated and excluded — it is entitled to know it was. No floor, no offerCount, no competitors · UI: v3.1.0 · bank underwriting view, incl. the Phase 4 risk components |
 | GET/POST /banks/policy-filters | 5 | — | mock | built. POST is BANK_ADMIN only; other bank roles may read · UI: policy-filter configuration screen |
 | PATCH /banks/policy-filters/{id} * | 5 | — | mock | v3.1.0 · built. Deactivation is `isActive:false`, never a delete — eligibility rows cite the filter that produced them · UI: v3.1.0 |

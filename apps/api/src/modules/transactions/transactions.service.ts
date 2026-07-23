@@ -8,7 +8,7 @@ import { TIME_PROVIDER, TimeProvider } from '../../common/time/time.provider';
 import { AuditService } from '../../common/audit/audit.service';
 import { ActorContext } from '../onboarding/onboarding.service';
 import { GovernmentService, SNAPSHOT_VALIDITY_DAYS } from '../government/government.service';
-import { BuyersService } from '../buyers/buyers.service';
+import { BuyersService, type BuyerRow } from '../buyers/buyers.service';
 import { DocumentsService } from '../documents/documents.service';
 import { computeFingerprint } from './fingerprint';
 import { DECLARATION_TEMPLATE_VERSIONS } from './declaration-catalogue';
@@ -192,15 +192,19 @@ export class TransactionsService {
    * spreading the row and deleting what must not travel, which is the
    * pattern that fails the moment someone adds a column.
    */
-  async describe(
+  /**
+   * The summary fields, from data already in hand.
+   *
+   * Split out so the list path can build every row's summary from two batched
+   * lookups instead of two queries per row. `describe` still calls it for the
+   * single-item case, where the extra round trips do not matter.
+   */
+  private summaryOf(
     row: TransactionRow,
-    audience: Audience,
-    options: { includeDetail?: boolean } = {},
-  ): Promise<Record<string, unknown>> {
-    const invoice = await this.invoiceOf(row.id);
-    const buyer = row.buyer_id ? await this.buyers.findById(row.buyer_id) : null;
-
-    const summary: Record<string, unknown> = {
+    invoice: InvoiceRow | null,
+    buyer: BuyerRow | null,
+  ): Record<string, unknown> {
+    return {
       id: row.id,
       referenceNumber: row.reference_number,
       state: row.state,
@@ -211,6 +215,17 @@ export class TransactionsService {
       dueDate: invoice ? invoice.due_date : null,
       createdAt: row.created_at.toISOString(),
     };
+  }
+
+  async describe(
+    row: TransactionRow,
+    audience: Audience,
+    options: { includeDetail?: boolean } = {},
+  ): Promise<Record<string, unknown>> {
+    const invoice = await this.invoiceOf(row.id);
+    const buyer = row.buyer_id ? await this.buyers.findById(row.buyer_id) : null;
+
+    const summary = this.summaryOf(row, invoice, buyer);
 
     if (!options.includeDetail) return summary;
 
@@ -308,11 +323,20 @@ export class TransactionsService {
       params,
     );
 
-    const audience: Audience =
-      ctx.organizationType === 'PLATFORM' ? 'PLATFORM' : ctx.organizationType === 'BANK' ? 'BANK' : 'SUPPLIER';
+    // Two batched lookups for the whole page, not two queries per row. This
+    // list was 2N+2 queries — a 100-row page fired ~200 of them at a pool of
+    // 10 against a hosted pooler, which is why it took ~9s and intermittently
+    // 500'd when the pooler dropped a connection mid-burst. It is now four
+    // queries whatever the page size, and the summary is assembled in memory.
+    const invoices = await this.invoicesForTransactions(rows.map((r) => r.id));
+    const buyers = await this.buyers.findByIds(
+      rows.map((r) => r.buyer_id).filter((id): id is string => id !== null),
+    );
 
     return {
-      items: await Promise.all(rows.map((row) => this.describe(row, audience))),
+      items: rows.map((row) =>
+        this.summaryOf(row, invoices.get(row.id) ?? null, row.buyer_id ? buyers.get(row.buyer_id) ?? null : null),
+      ),
       pagination: {
         page: filters.page,
         pageSize: filters.pageSize,
@@ -480,6 +504,28 @@ export class TransactionsService {
          FROM invoices WHERE transaction_id = $1`,
       [transactionId],
     );
+  }
+
+  /**
+   * The invoices for a set of transactions, keyed by transaction id, in one
+   * query. The batched twin of `invoiceOf`, for the list path — see
+   * `buyers.findByIds` for why this matters.
+   */
+  private async invoicesForTransactions(
+    transactionIds: readonly string[],
+  ): Promise<Map<string, InvoiceRow>> {
+    const map = new Map<string, InvoiceRow>();
+    if (transactionIds.length === 0) return map;
+    const { rows } = await this.db.query<InvoiceRow>(
+      `SELECT id, transaction_id, invoice_number, einvoice_identifier, issue_date::text, due_date::text,
+              currency, subtotal_amount::text, tax_amount::text, face_value::text,
+              paid_amount::text, outstanding_amount::text, payment_terms, goods_description,
+              purchase_order_number, delivery_note_number, fingerprint
+         FROM invoices WHERE transaction_id = ANY($1::uuid[])`,
+      [[...new Set(transactionIds)]],
+    );
+    for (const row of rows) map.set(row.transaction_id, row);
+    return map;
   }
 
   /**

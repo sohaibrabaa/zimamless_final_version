@@ -33,6 +33,8 @@ export const API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhos
 export const PERSONAS = {
   supplier: "owner@alnoor.zimmamless.test",
   bankOps: "ops@jnb.zimmamless.test",
+  /** BANK_ANALYST + BANK_OFFER_MAKER — the marketplace and offer roles. */
+  bankMaker: "maker@jnb.zimmamless.test",
   platformOps: "admin@platform.zimmamless.test",
   compliance: "compliance@platform.zimmamless.test",
 } as const;

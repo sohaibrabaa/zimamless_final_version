@@ -77,7 +77,7 @@ export const endpointStatus: EndpointStatusEntry[] = [
   { method: "GET", path: "/transactions/{id}/listing-current", phase: 5, status: "mock", notes: "v3.1.0 · supplier listing-activation screen + offer comparison screen" },
   { method: "GET", path: "/listings/{id}", phase: 5, status: "mock" },
   { method: "GET", path: "/listings/{id}/offers", phase: 5, status: "mock", notes: "role-split · offer comparison screen (supplier) and own-offer check (bank)" },
-  { method: "GET", path: "/marketplace/eligible", phase: 5, status: "mock", notes: "bank marketplace feed · real per-bank policy-filter eligibility (ZM-MKT-002)" },
+  { method: "GET", path: "/marketplace/eligible", phase: 5, status: "live", notes: "bank marketplace feed · real per-bank policy-filter eligibility (ZM-MKT-002). Promoted 2026-07-23 on test/live/marketplace.live.spec.tsx — rendered through useEligibleListings in the real SessionProvider; rows key off listingId (not id), no offerCount, no floor, myOffer carries no bankOrgId (INV-11)" },
   { method: "GET", path: "/marketplace/listings/{id}", phase: 5, status: "mock", notes: "v3.1.0 · bank underwriting view, incl. the Phase 4 risk components" },
   { method: "GET", path: "/banks/policy-filters", phase: 5, status: "mock", notes: "policy-filter configuration screen" },
   { method: "POST", path: "/banks/policy-filters", phase: 5, status: "mock" },
