@@ -67,3 +67,22 @@ export interface DraftCondition {
   description: string;
   isMandatory: boolean;
 }
+
+/**
+ * The offer-creation/revision request body, shared between the client hook
+ * (`useOffers.ts`) and the mock store (`lib/mocks/marketplace-store.ts`) so
+ * neither has to import the other's module — the store is mock-only
+ * infrastructure and the hook is real client code that must keep working
+ * once `/listings/{id}/offers/create` goes live.
+ */
+export interface OfferInputPayload {
+  transactionType: TransactionType;
+  recourseType: RecourseType;
+  grossFundingAmount: string;
+  bankDiscountAmount?: string;
+  bankFeesAmount?: string;
+  otherDeductionsAmount?: string;
+  expectedPayoutDate?: string;
+  validUntil: string;
+  conditions?: { conditionType?: ConditionType; title?: string; description?: string; isMandatory?: boolean }[];
+}

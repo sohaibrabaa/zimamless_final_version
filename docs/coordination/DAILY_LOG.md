@@ -504,3 +504,79 @@ NEEDS FROM A:
    band (floor sits around 29, inside `HIGH`) — noted in case anyone goes
    looking for a `CRITICAL` listing in the mock data for a screenshot before
    your real engine replaces it.
+
+## 2026-07-23 — Agent B (session 5, Phase 5)
+No Phase 5 kickoff document existed for B (only the phase's own master plan
+file, `phases/PHASE_5_MARKETPLACE_OFFERS.md`) — used as the scope reference,
+since its "Agent B tasks"/"Screens in scope" sections are unambiguous.
+Agent A had not started Phase 5 at the start of this session.
+
+DONE (all mock — all nine screens the phase file names for B):
+- Supplier listing-activation screen: fee shown with amount and the
+  "applies regardless of outcome" warning **before** confirmation;
+  deadlines shown only after activation, computed from the ZM-MKT-007
+  defaults — never supplier-chosen (ZM-MKT-008).
+- Bank marketplace feed + underwriting view, now backed by **real
+  per-bank policy-filter eligibility** (ZM-MKT-002) instead of Phase 4's
+  static two-listing stub — which is gone, along with its one invented
+  invoice identity.
+- Offer creation form wired to a real create endpoint: live client
+  preview of commission/listing fee/net (same pure formula the mock
+  "server" uses, so it can't disagree with what's persisted); below-floor
+  422 renders the generic message only, revealing no number
+  (ZM-MKT-012's design note) — proven by a store test asserting the
+  rejection's return value carries nothing but `{ok, error}`.
+- Approval queue: creator shown; the approve action is **hidden**, not
+  disabled, for the offer's own creator; server independently rejects
+  self-approval (ZM-ROL-002/ZM-OFR-016).
+- "My offers" (withdraw, no penalty pre-acceptance), policy-filter
+  configuration (create/activate/deactivate, D-12), and the supplier
+  **offer comparison screen** — net payout as the visual anchor, every
+  offer's transaction/recourse type with plain-language explanations,
+  **no default sort by amount, no "best" marking anywhere** (offers render
+  in submission order), live countdown to the selection deadline.
+- Bank offer-status view: `Offer` never carries another bank's data at the
+  type level, so nothing here could leak a competitor.
+- Rewrote `lib/mocks/marketplace-store.ts` from a static stub into a real
+  store: listings only exist because a genuinely `ELIGIBLE` transaction was
+  activated; eligibility persisted per bank with the rules applied
+  (ZM-MKT-003); full offer lifecycle (create/revise/withdraw/approve) with
+  immutable version history.
+
+VERIFIED: 154/154 web vitest (38 new — 9 offer-money, 10 policy-filters, 19
+marketplace-store; all 116 from Phase 4 still green), 254/254 API jest
+unchanged; typecheck, lint and `next build` clean in `web` and root-wide
+across all three workspaces; i18n parity **629 keys** (was 559). Manual
+smoke: `/bank/marketplace`, `/bank/offers`, `/bank/settings/policy-filters`,
+`/supplier/invoices` all 200 against the dev server.
+
+SWAPPED TO LIVE: none. 14 more endpoints (the full marketplace/offer/policy
+surface) join the mock board — 50 mocked, still zero live, five phases
+running on the same undeployed-API carry-over.
+
+CONTRACT GAPS FOUND: **Q-14**. `Offer` has no field naming the maker who
+created it, though the phase file requires the approval queue to show
+"creator" and block self-approval in the UI as well as the server. Not
+blocking — carried past the typed response on the two bank-scoped endpoints
+that need it. Reasoning in OPEN_QUESTIONS.md and completion report §5.
+
+NEEDS FROM A:
+1. **Nothing blocking.** `lib/mocks/marketplace-store.ts` is a stand-in
+   only. The properties worth preserving exactly: the floor rejection
+   carries zero numeric detail; `BankListingView` never contains
+   `minimumAcceptableAmount` or `offerCount`; self-approval independently
+   rejected server-side.
+2. **Q-14**: an `Offer` a bank reads about its own submission needs to name
+   who created it.
+3. Commission is a flat 1.5% demo rate with no tier lookup — your real
+   `CommissionTier` (ZM-FEE-011) can differ freely; nothing asserts the
+   demo rate as correct.
+4. Two of ZM-MKT-001's ten filter rows (sector; the two per-offer-type
+   filters) are configurable in the UI but evaluate no rule — no sector
+   field exists anywhere in the frozen contract, and transactionType/
+   recourseType are chosen per offer, not known at listing time. Worth
+   confirming your eligibility engine's intent here.
+5. The marketplace is empty on a fresh environment until a real invoice
+   reaches ELIGIBLE and is listed — correct (no invented listings) but
+   worth a seed helper if a checkpoint demo needs a populated feed
+   immediately.

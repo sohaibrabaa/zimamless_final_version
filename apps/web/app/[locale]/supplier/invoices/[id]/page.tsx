@@ -6,6 +6,7 @@ import { useParams } from "next/navigation";
 import { FinancingGate } from "@/components/onboarding/FinancingGate";
 import { VerificationPanel } from "@/components/invoices/VerificationPanel";
 import { RiskPanel } from "@/components/risk/RiskPanel";
+import { ListingActivationPanel } from "@/components/marketplace/ListingActivationPanel";
 import { Badge } from "@/components/ui/Badge";
 import { SkeletonText } from "@/components/ui/Skeleton";
 import { ErrorState } from "@/components/ui/StatePanels";
@@ -172,6 +173,15 @@ function TransactionDetail() {
           <h2 className="mb-2 text-sm font-semibold">{t("risk.sectionTitle")}</h2>
           <RiskPanel assessment={risk} />
         </section>
+      )}
+
+      {id && (transaction.state === "ELIGIBLE" || transaction.state === "OPEN_FOR_OFFERS") && (
+        <ListingActivationPanel
+          transactionId={id}
+          locale={locale}
+          eligible={transaction.state === "ELIGIBLE"}
+          onActivated={reload}
+        />
       )}
     </div>
   );

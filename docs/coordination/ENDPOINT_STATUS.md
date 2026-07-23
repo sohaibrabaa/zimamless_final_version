@@ -42,19 +42,19 @@ endpoint, and has no mock→live promotion to track.
 | GET …/{id}/verification | 3 | — | mock | verification panel · all 8 checks always recorded, passes included. `NOT_APPLICABLE` is not `PASS` |
 | GET …/{id}/risk | 4 | — | mock | TrustScoreGauge/ComponentBars/FactorList on the supplier transaction detail and the bank underwriting view |
 | GET/POST /admin/risk-models | 4 | — | mock | handler not implemented — no admin screen this session, not B's Phase 4 scope |
-| POST …/{id}/listing | 5 | — | mock | not implemented — real listing activation is Phase 5's session, not this head start |
-| GET …/{id}/listing-current * | 5 | — | mock | v3.1.0 |
+| POST …/{id}/listing | 5 | — | mock | supplier listing-activation screen, requires a real ELIGIBLE transaction |
+| GET …/{id}/listing-current * | 5 | — | mock | v3.1.0 · listing-activation + offer comparison screens |
 | GET /listings/{id} | 5 | — | mock | |
-| GET /listings/{id}/offers | 5 | — | mock | role-split |
-| GET /marketplace/eligible | 5 | — | mock | **Phase 4 kickoff head start** · bank marketplace feed · static 2-listing set, no real policy-filter eligibility yet |
-| GET /marketplace/listings/{id} * | 5 | — | mock | v3.1.0 · **Phase 4 kickoff head start** · bank underwriting view, incl. the Phase 4 risk components |
-| GET/POST /banks/policy-filters | 5 | — | mock | |
+| GET /listings/{id}/offers | 5 | — | mock | role-split · offer comparison screen (supplier), own-offer check (bank) |
+| GET /marketplace/eligible | 5 | — | mock | bank marketplace feed · real per-bank policy-filter eligibility (ZM-MKT-002) |
+| GET /marketplace/listings/{id} * | 5 | — | mock | v3.1.0 · bank underwriting view, incl. the Phase 4 risk components |
+| GET/POST /banks/policy-filters | 5 | — | mock | policy-filter configuration screen |
 | PATCH /banks/policy-filters/{id} * | 5 | — | mock | v3.1.0 |
-| POST /listings/{id}/offers/create | 5 | — | mock | |
-| GET /offers * | 5 | — | mock | v3.1.0 |
-| GET/PATCH /offers/{id} | 5 | — | mock | |
-| POST /offers/{id}/approve | 5 | — | mock | |
-| POST /offers/{id}/withdraw | 5 | — | mock | |
+| POST /listings/{id}/offers/create | 5 | — | mock | offer form · server-computed commission/listing fee, generic floor rejection (ZM-MKT-012) |
+| GET /offers * | 5 | — | mock | v3.1.0 · my offers + approval queue |
+| GET/PATCH /offers/{id} | 5 | — | mock | offer status detail · revision creates a new version, prior retained immutably |
+| POST /offers/{id}/approve | 5 | — | mock | approval queue · SELF_APPROVAL_FORBIDDEN enforced server-side |
+| POST /offers/{id}/withdraw | 5 | — | mock | my offers · pre-acceptance, no penalty |
 | POST /offers/{id}/accept | 6 | — | mock | DEMO-CRITICAL |
 | POST /listings/{id}/reject-all | 6 | — | mock | |
 | POST/GET …/{id}/contract | 6 | — | mock | |

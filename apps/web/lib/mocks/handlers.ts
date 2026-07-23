@@ -31,7 +31,24 @@ import {
   type MockTransaction,
 } from "./transaction-store";
 import { riskForTransaction } from "./risk-store";
-import { findListing, listEligibleListings } from "./marketplace-store";
+import {
+  activateListing,
+  approveOffer,
+  bankListingView,
+  createOffer,
+  currentListingForTransaction,
+  findListingRecord,
+  findOffer,
+  listEligibleListingsForBank,
+  listOffersForBank,
+  listOffersForListing,
+  reviseOffer,
+  supplierListingView,
+  withdrawOffer,
+} from "./marketplace-store";
+import { createFilter, listFilters, updateFilter } from "./policy-filter-store";
+import type { PolicyFilterRecord } from "@/lib/marketplace/policy-filters";
+import type { OfferInputPayload } from "@/lib/marketplace/offer-domain";
 
 // Fallback must match lib/api/client.ts exactly: the API owns port 3000
 // (the contract's servers block names it; the web dev server is the one on
@@ -73,6 +90,21 @@ function isPlatformPersona(request: Request): boolean {
   return mockUsers[personaFrom(request)].memberships.some(
     (m) => m.organizationType === "PLATFORM"
   );
+}
+
+/** The active membership for the calling persona's `X-Organization-Id`, if any. */
+function activeMembership(request: Request) {
+  const orgId = request.headers.get("X-Organization-Id");
+  return mockUsers[personaFrom(request)].memberships.find((m) => m.organizationId === orgId);
+}
+
+function isBankCaller(request: Request): boolean {
+  return activeMembership(request)?.organizationType === "BANK";
+}
+
+function currentActor(request: Request): { userId: string; userName: string } {
+  const me = mockUsers[personaFrom(request)];
+  return { userId: me.user!.id!, userName: me.user!.fullName! };
 }
 
 /** Mirrors the API's error envelope, correlation id included. */
@@ -721,20 +753,74 @@ export const handlers = [
   }),
 
   // -------------------------------------------------------------------
-  // PHASE 5 — MARKETPLACE (head start only: feed + underwriting view)
+  // PHASE 5 — MARKETPLACE + OFFERS
   // -------------------------------------------------------------------
   //
-  // Listing activation, policy-filter eligibility, offer creation/approval
-  // and the deadline engine are NOT implemented here — those are Agent A's
-  // and B's real Phase 5 work. This is deliberately a two-listing static
-  // feed so the marketplace screens have real content to render this
-  // session; see lib/mocks/marketplace-store.ts.
+  // Listings and offers are read live off the Phase 3 transaction store
+  // (via marketplace-store.ts) rather than a static fixture — activating a
+  // listing genuinely requires an ELIGIBLE transaction, and every screen
+  // below is driven by real store state, the same discipline Phase 2's and
+  // Phase 3's stores established for their own checkpoints. The deadline
+  // *jobs* (auto-close, expiry sweep) are Agent A's — nothing here advances
+  // a listing past OPEN_FOR_OFFERS on its own; `isOfferWindowOpen` only
+  // gates new writes once the deadline has passed.
+
+  mockOnly("POST", "/transactions/{id}/listing", `${API_BASE}/transactions/:id/listing`, ({ params }) => {
+    const result = activateListing(String(params.id));
+    if (result.ok) return HttpResponse.json(supplierListingView(result.listing), { status: 201 });
+    switch (result.error) {
+      case "NOT_FOUND":
+        return HttpResponse.json(errorBody("NOT_FOUND", "Transaction not found"), { status: 404 });
+      case "ALREADY_LISTED":
+        return HttpResponse.json(
+          errorBody("INVALID_STATE_TRANSITION", "This transaction already has an open listing."),
+          { status: 409 }
+        );
+      case "NOT_ELIGIBLE":
+      default:
+        // ZM-MKT-004: only an ELIGIBLE invoice may be listed.
+        return HttpResponse.json(
+          errorBody("INVALID_STATE_TRANSITION", "Only an ELIGIBLE invoice can be listed."),
+          { status: 409 }
+        );
+    }
+  }),
+
+  mockOnly(
+    "GET",
+    "/transactions/{id}/listing-current",
+    `${API_BASE}/transactions/:id/listing-current`,
+    ({ params }) => {
+      const listing = currentListingForTransaction(String(params.id));
+      return listing
+        ? HttpResponse.json(supplierListingView(listing))
+        : HttpResponse.json(errorBody("NOT_FOUND", "No listing exists for this transaction"), {
+            status: 404,
+          });
+    }
+  ),
+
+  mockOnly("GET", "/listings/{id}", `${API_BASE}/listings/:id`, ({ params }) => {
+    const listing = findListingRecord(String(params.id));
+    return listing
+      ? HttpResponse.json(supplierListingView(listing))
+      : HttpResponse.json(errorBody("NOT_FOUND", "Listing not found"), { status: 404 });
+  }),
+
+  // Role-split per the contract description: supplier sees every ACTIVE
+  // offer in full; a bank sees only its own current offer.
+  mockOnly("GET", "/listings/{id}/offers", `${API_BASE}/listings/:id/offers`, ({ params, request }) => {
+    const isBank = isBankCaller(request);
+    const orgId = request.headers.get("X-Organization-Id") ?? "";
+    return HttpResponse.json(listOffersForListing(String(params.id), orgId, isBank));
+  }),
 
   mockOnly("GET", "/marketplace/eligible", `${API_BASE}/marketplace/eligible`, ({ request }) => {
     const url = new URL(request.url);
     const page = Math.max(1, Math.trunc(+(url.searchParams.get("page") ?? 1)) || 1);
     const pageSize = Math.max(1, Math.trunc(+(url.searchParams.get("pageSize") ?? 20)) || 20);
-    const items = listEligibleListings();
+    const orgId = request.headers.get("X-Organization-Id") ?? "";
+    const items = listEligibleListingsForBank(orgId);
     const start = (page - 1) * pageSize;
     return HttpResponse.json({
       items: items.slice(start, start + pageSize),
@@ -751,14 +837,172 @@ export const handlers = [
     "GET",
     "/marketplace/listings/{id}",
     `${API_BASE}/marketplace/listings/:id`,
-    ({ params }) => {
-      const listing = findListing(String(params.id));
-      return listing
-        ? HttpResponse.json(listing)
-        : HttpResponse.json(errorBody("NOT_FOUND", "Listing not found"), { status: 404 });
+    ({ params, request }) => {
+      const orgId = request.headers.get("X-Organization-Id") ?? "";
+      const result = bankListingView(String(params.id), orgId);
+      if (result.ok) return HttpResponse.json(result.view);
+      if (result.error === "NOT_FOUND") {
+        return HttpResponse.json(errorBody("NOT_FOUND", "Listing not found"), { status: 404 });
+      }
+      return HttpResponse.json(
+        errorBody("FORBIDDEN", "This bank is not eligible for this listing."),
+        { status: 403 }
+      );
     }
   ),
+
+  // ---------------------------------------------------------------------
+  // Policy filters (ZM-MKT-001, D-12)
+  // ---------------------------------------------------------------------
+
+  mockOnly("GET", "/banks/policy-filters", `${API_BASE}/banks/policy-filters`, ({ request }) => {
+    const orgId = request.headers.get("X-Organization-Id") ?? "";
+    return HttpResponse.json(listFilters(orgId));
+  }),
+
+  mockOnly("POST", "/banks/policy-filters", `${API_BASE}/banks/policy-filters`, async ({ request }) => {
+    const orgId = request.headers.get("X-Organization-Id");
+    if (!orgId) {
+      return HttpResponse.json(
+        errorBody("ORGANIZATION_CONTEXT_REQUIRED", "X-Organization-Id is required."),
+        { status: 403 }
+      );
+    }
+    const body = (await request.json()) as Omit<PolicyFilterRecord, "id" | "bankOrganizationId">;
+    createFilter(orgId, body);
+    return new HttpResponse(null, { status: 201 });
+  }),
+
+  mockOnly(
+    "PATCH",
+    "/banks/policy-filters/{id}",
+    `${API_BASE}/banks/policy-filters/:id`,
+    async ({ params, request }) => {
+      const orgId = request.headers.get("X-Organization-Id") ?? "";
+      const body = (await request.json()) as Partial<PolicyFilterRecord>;
+      const updated = updateFilter(String(params.id), orgId, body);
+      return updated
+        ? new HttpResponse(null, { status: 200 })
+        : HttpResponse.json(errorBody("NOT_FOUND", "Policy filter not found"), { status: 404 });
+    }
+  ),
+
+  // ---------------------------------------------------------------------
+  // Offers (§11) — creation, revision, approval, withdrawal
+  // ---------------------------------------------------------------------
+
+  mockOnly(
+    "POST",
+    "/listings/{id}/offers/create",
+    `${API_BASE}/listings/:id/offers/create`,
+    async ({ params, request }) => {
+      const orgId = request.headers.get("X-Organization-Id") ?? "";
+      const { userId, userName } = currentActor(request);
+      const body = (await request.json()) as OfferInputPayload;
+      const result = createOffer(String(params.id), orgId, userId, userName, body);
+      if (result.ok) return HttpResponse.json(toOfferResponse(result.offer), { status: 201 });
+      return offerErrorResponse(result.error);
+    }
+  ),
+
+  mockOnly("GET", "/offers", `${API_BASE}/offers`, ({ request }) => {
+    const url = new URL(request.url);
+    const status = url.searchParams.get("status") ?? undefined;
+    const orgId = request.headers.get("X-Organization-Id") ?? "";
+    const items = listOffersForBank(orgId, status);
+    return HttpResponse.json({ items, pagination: { page: 1, pageSize: items.length || 1, total: items.length, totalPages: 1 } });
+  }),
+
+  mockOnly("GET", "/offers/{id}", `${API_BASE}/offers/:id`, ({ params }) => {
+    const offer = findOffer(String(params.id));
+    return offer
+      ? HttpResponse.json(toOfferResponse(offer))
+      : HttpResponse.json(errorBody("NOT_FOUND", "Offer not found"), { status: 404 });
+  }),
+
+  mockOnly("PATCH", "/offers/{id}", `${API_BASE}/offers/:id`, async ({ params, request }) => {
+    const orgId = request.headers.get("X-Organization-Id") ?? "";
+    const { userId, userName } = currentActor(request);
+    const body = (await request.json()) as OfferInputPayload;
+    const result = reviseOffer(String(params.id), orgId, userId, userName, body);
+    if (result.ok) return new HttpResponse(null, { status: 200 });
+    return offerErrorResponse(result.error);
+  }),
+
+  mockOnly("POST", "/offers/{id}/approve", `${API_BASE}/offers/:id/approve`, ({ params, request }) => {
+    const orgId = request.headers.get("X-Organization-Id") ?? "";
+    const { userId } = currentActor(request);
+    const result = approveOffer(String(params.id), orgId, userId);
+    if (result.ok) return new HttpResponse(null, { status: 200 });
+    if (result.error === "SELF_APPROVAL_FORBIDDEN") {
+      return HttpResponse.json(
+        errorBody("SELF_APPROVAL_FORBIDDEN", "An offer cannot be approved by the user who created it."),
+        { status: 403 }
+      );
+    }
+    return HttpResponse.json(errorBody("NOT_FOUND", "Offer not found"), { status: 404 });
+  }),
+
+  mockOnly("POST", "/offers/{id}/withdraw", `${API_BASE}/offers/:id/withdraw`, ({ params, request }) => {
+    const orgId = request.headers.get("X-Organization-Id") ?? "";
+    const result = withdrawOffer(String(params.id), orgId);
+    return result.ok
+      ? new HttpResponse(null, { status: 200 })
+      : HttpResponse.json(errorBody("NOT_FOUND", "Offer not found"), { status: 404 });
+  }),
 ];
+
+/**
+ * The contract's `Offer` schema has no field for the maker's identity, so
+ * the approval-queue's "creator shown" and the UI's own self-approval guard
+ * have nothing declared to read. Filed as **Q-14** — the same class of gap
+ * as Q-08/Q-12 (something a screen needs is missing from an otherwise
+ * complete shape). The mock carries `createdByUserId`/`createdByUserName`
+ * past the typed `Offer` response anyway (both endpoints here are bank-only,
+ * scoped to the offer's own bank, so nothing confidential leaks); the
+ * client widens the type locally to read them rather than the contract
+ * declaring a second endpoint.
+ */
+function toOfferResponse(offer: ReturnType<typeof findOffer>) {
+  return offer;
+}
+
+function offerErrorResponse(error: string) {
+  switch (error) {
+    case "NOT_FOUND":
+      return HttpResponse.json(errorBody("NOT_FOUND", "Listing or offer not found"), { status: 404 });
+    case "NOT_ELIGIBLE":
+      return HttpResponse.json(
+        errorBody("FORBIDDEN", "This bank is not eligible for this listing."),
+        { status: 403 }
+      );
+    case "WINDOW_CLOSED":
+      return HttpResponse.json(
+        errorBody("OFFER_WINDOW_CLOSED", "The offer submission window has closed."),
+        { status: 409 }
+      );
+    case "ALREADY_HAS_OFFER":
+      return HttpResponse.json(
+        errorBody("INVALID_STATE_TRANSITION", "This bank already has a current offer on this listing."),
+        { status: 409 }
+      );
+    case "INVALID_GROSS":
+      return HttpResponse.json(
+        errorBody("VALIDATION_FAILED", "grossFundingAmount cannot exceed the invoice's outstanding amount."),
+        { status: 422 }
+      );
+    case "BELOW_FLOOR":
+    default:
+      // ZM-MKT-012's design note: generic message, zero numeric detail.
+      return HttpResponse.json(
+        errorBody(
+          "OFFER_BELOW_SUPPLIER_REQUIREMENT",
+          "This offer does not currently meet the supplier's requirements."
+        ),
+        { status: 422 }
+      );
+  }
+}
 
 function toSummary(t: MockTransaction) {
   return {

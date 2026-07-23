@@ -13,11 +13,11 @@ import { useEligibleListings, type BankListingView } from "@/lib/marketplace/use
 import { bandLabelKey, bandTone } from "@/lib/risk/risk-presentation";
 
 /**
- * Bank marketplace feed — `GET /marketplace/eligible` (phase file B tasks,
- * Phase 5 head start per the Phase 4 kickoff). Policy-filter-driven
- * eligibility is Agent A's real Phase 5 work; this session's mock returns a
- * fixed, illustrative set rather than evaluating this bank's actual filters,
- * and is flagged as such in the completion report.
+ * Bank marketplace feed — `GET /marketplace/eligible` (phase file B tasks).
+ * The mock genuinely evaluates this bank's own policy filter (ZM-MKT-002)
+ * against each `ELIGIBLE` transaction a supplier has listed — see
+ * `lib/marketplace/policy-filters.ts` and `lib/mocks/marketplace-store.ts` —
+ * rather than returning a fixed illustrative set.
  *
  * The floor is not a column here, and never will be: `BankListingView`
  * excludes `minimumAcceptableAmount` by contract, so there is nothing to

@@ -694,7 +694,7 @@
   },
   "marketplace": {
     "feed": {
-      "intro": "Listings your bank is eligible to review. Full policy-filter matching lands with the rest of Phase 5 — this feed shows every open listing for now.",
+      "intro": "Listings your bank is eligible to review, evaluated against your active policy filter.",
       "empty": "No listings are open for offers right now.",
       "review": "Review",
       "column": {
@@ -714,12 +714,41 @@
       "establishmentNumber": "Establishment number",
       "registryStatus": "Registry status",
       "createOffer": "Create an offer",
+      "myOfferStatus": "Your offer on this listing: {status}",
       "doubleFinancingNotice": "The platform is the single point of control against the same invoice being financed twice, across every bank on the marketplace — confidentiality between banks does not weaken that control."
+    },
+    "listing": {
+      "sectionTitle": "Marketplace listing",
+      "intro": "Activating a listing opens it to eligible banks for offers. The listing fee is incurred at activation whether or not financing ultimately succeeds.",
+      "activate": "Activate listing",
+      "confirmTitle": "Confirm listing activation",
+      "feeLabel": "Listing fee",
+      "feeWarning": "This fee applies as soon as the listing is activated, regardless of whether financing succeeds.",
+      "confirmActivate": "Activate and pay the listing fee",
+      "offerDeadline": "Offer submission deadline",
+      "selectionDeadline": "Selection deadline",
+      "offerCount": "Offers received",
+      "compareOffers": "Compare offers",
+      "status": {
+        "OPEN_FOR_OFFERS": "Open for offers",
+        "OFFER_PERIOD_CLOSED": "Offer period closed",
+        "AWAITING_SELECTION": "Awaiting your selection",
+        "OFFER_SELECTED": "Offer selected",
+        "EXPIRED": "Expired",
+        "CANCELLED": "Cancelled"
+      }
     },
     "offer": {
       "title": "Create an offer",
       "backToListing": "Back to listing",
-      "skeletonNotice": "This form is a work in progress. Fields and catalogues are real; submitting an offer is not wired up yet and ships with the rest of Phase 5.",
+      "backToOffers": "Back to offers",
+      "notFound": "This offer could not be found.",
+      "statusTitle": "Offer status",
+      "alreadyOffered": "Your bank already has a current offer on this listing. Withdraw it from \"My offers\" before submitting a new one.",
+      "belowFloor": "This offer does not currently meet the supplier's requirements.",
+      "windowClosed": "The offer submission window for this listing has closed.",
+      "notEligible": "Your bank is not eligible for this listing.",
+      "validationFailed": "The gross funding amount cannot exceed the invoice's outstanding amount.",
       "transactionTypeLabel": "Transaction type",
       "transactionType": {
         "INVOICE_FINANCING": "Invoice financing",
@@ -750,8 +779,12 @@
       "bankDiscountAmount": "Bank discount",
       "bankFeesAmount": "Bank fees",
       "otherDeductionsAmount": "Other deductions",
+      "platformCommissionAmount": "Platform commission",
+      "listingFeeAmount": "Listing fee (unpaid portion)",
+      "netSupplierPayout": "Net supplier payout",
+      "netSupplierPayoutPreview": "Net supplier payout (preview)",
       "serverComputedTitle": "Platform commission and listing fee",
-      "serverComputedNote": "Computed by the platform when the offer is created, and always shown before the supplier sees this offer. Not entered here, and not estimated on this screen.",
+      "serverComputedNote": "Computed by the platform when the offer is created. The figures below are a live preview and are always reconciled to what the platform actually records.",
       "expectedPayoutDate": "Expected payout date",
       "validUntil": "Offer valid until",
       "conditionsTitle": "Conditions",
@@ -771,7 +804,58 @@
       "removeCondition": "Remove",
       "noConditions": "No conditions added.",
       "submit": "Submit offer",
-      "submitDisabledReason": "Offer submission is not wired up yet — it ships with the rest of Phase 5."
+      "status": {
+        "PENDING_INTERNAL_APPROVAL": "Pending internal approval",
+        "ACTIVE": "Active",
+        "SELECTED": "Selected",
+        "NOT_SELECTED": "Not selected",
+        "WITHDRAWN": "Withdrawn",
+        "EXPIRED": "Expired"
+      }
+    },
+    "offers": {
+      "myOffersTab": "My offers",
+      "approvalQueueTab": "Approval queue",
+      "myOffersEmpty": "Your bank has not submitted any offers yet.",
+      "approvalQueueEmpty": "Nothing is waiting for your approval.",
+      "column": {
+        "version": "Version",
+        "status": "Status",
+        "netSupplierPayout": "Net supplier payout",
+        "creator": "Created by"
+      },
+      "withdraw": "Withdraw",
+      "approve": "Approve",
+      "ownOfferNote": "You created this offer — a different approver must review it.",
+      "currentUser": "Signed in as {name}."
+    },
+    "policyFilters": {
+      "title": "Policy filters",
+      "intro": "Filters determine which marketplace listings your bank is shown (ZM-MKT-001/002). A listing must match an active filter to appear in your feed.",
+      "empty": "No policy filters configured yet — your bank will not see any listings until one is active.",
+      "active": "Active",
+      "inactive": "Inactive",
+      "activate": "Activate",
+      "deactivate": "Deactivate",
+      "newTitle": "New policy filter",
+      "name": "Filter name",
+      "minAmount": "Minimum invoice amount",
+      "maxAmount": "Maximum invoice amount",
+      "minTenorDays": "Minimum tenor (days)",
+      "maxTenorDays": "Maximum tenor (days)",
+      "minTrustScore": "Minimum Trust Score",
+      "maxRiskBand": "Maximum risk band",
+      "noRiskBandCeiling": "No ceiling",
+      "create": "Create filter"
+    },
+    "comparison": {
+      "title": "Compare offers",
+      "intro": "Every active offer on this listing, in the order it was submitted. Nothing here is ranked or recommended — the decision is yours.",
+      "backToInvoice": "Back to invoice",
+      "noListing": "This invoice has not been listed on the marketplace yet.",
+      "empty": "No offers have been submitted on this listing yet.",
+      "deadlinePassed": "Selection deadline passed",
+      "timeRemaining": "{hours}h {minutes}m to select"
     }
   }
 }

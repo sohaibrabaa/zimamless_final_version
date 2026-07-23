@@ -137,9 +137,15 @@ export default function BankListingDetailPage() {
       </p>
 
       <div className="mt-6">
-        <Link href={`/${locale}/bank/marketplace/${listing.listingId}/offer`}>
-          <Button type="button">{t("marketplace.detail.createOffer")}</Button>
-        </Link>
+        {listing.myOffer ? (
+          <p className="text-sm text-(--color-muted)">
+            {t("marketplace.detail.myOfferStatus", { status: t(`marketplace.offer.status.${listing.myOffer.status}`) })}
+          </p>
+        ) : (
+          <Link href={`/${locale}/bank/marketplace/${listing.listingId}/offer`}>
+            <Button type="button">{t("marketplace.detail.createOffer")}</Button>
+          </Link>
+        )}
       </div>
     </div>
   );
