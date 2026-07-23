@@ -1369,3 +1369,38 @@ OPERATIONAL NOTE FOR DEMO DAY: ZM-DEMO-OPEN's offer window follows the real
 platform deadline settings (~24h). Re-run `npm run scenario:demo -w db` on
 demo morning — the seed self-heals: a lapsed listing returns the transaction
 to ELIGIBLE and the script stages a fresh round with fresh approved offers.
+
+## 2026-07-24 (cont.) — honest trust scores, the funding leg live, and Arabic proven end to end
+
+THE UNDERWRITING VIEW WAS ALL-CRITICAL: every staged fixture scored 24 —
+the blocked ceiling — because SQL-staged fixtures had no ELECTRONIC_INVOICE
+document (hard blocker), and after fixing that, no *finalized* one (the hash
+is computed when the wizard reads the extraction; an unfinalized file fails
+integrity, correctly). The seed now uploads the real e-invoice PDF per
+fixture through the signed-URL flow and finalizes it with a real extraction
+read: OPEN/ELIGIBLE went 24/CRITICAL → 86/LOW. Third blocker was a lesson,
+not a bug: due +5 sits inside AS-08's 7-day minimum tenor. The maturity
+target is restaged as ZM-DEMO-MATURING (due +8, 86/LOW stored at staging);
+the old +5 chain stays as a second maturing receivable. The seed pre-warms
+each fixture's stored assessment, mirroring the real flow where the
+displayed score is the submission-era one.
+
+FUNDING LEG LIVE (funding.live.spec.tsx): a disposable chain walked through
+the API, then useMarkSent → useSettlement (FUNDING_RECEIVED, 3-dp gross),
+generateOtp (6 digits, one response), useFundingConfirmation — a wrong code
+surfaces OtpRejected with attemptsRemaining and nothing else; the right
+code lands FUNDED. The funded chain keeps its ledger and stays (INV-7).
+
+ARABIC, PROVEN NOT ASSUMED:
+- phase9-notifications.integration.spec (3/3): preferred_language='AR'
+  selects the seeded Arabic template — constraint wording intact
+  ("بانتظار تأكيد البنك", nothing accusing the buyer), version 1.0 recorded,
+  placeholders rendered; EN once flipped back; a missing template degrades
+  to the caller's literal text with status SENT, never suppression.
+- arabic.live.spec.tsx: the real inbox and case desk render under the AR
+  dictionary over live data — Arabic present, zero key-shaped leaks. Prose
+  quality and bidi remain the runbook's manual walkthrough; a regex can only
+  tell absent Arabic from present.
+
+Scoreboard: 19 endpoints live (was 8 this morning), live suite 12 files /
+38 tests, integration 9 suites green, unit 540, web 232.
