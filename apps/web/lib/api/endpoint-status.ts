@@ -97,10 +97,10 @@ export const endpointStatus: EndpointStatusEntry[] = [
   { method: "GET", path: "/transactions/{id}/conditions", phase: 6, status: "mock", notes: "conditions checklist" },
   { method: "POST", path: "/conditions/{id}/fulfil", phase: 6, status: "mock", notes: "conditions checklist · fulfil action" },
 
-  { method: "POST", path: "/transactions/{id}/funding/mark-sent", phase: 7, status: "mock" },
-  { method: "POST", path: "/transactions/{id}/funding/otp", phase: 7, status: "mock" },
-  { method: "POST", path: "/transactions/{id}/funding/confirm", phase: 7, status: "mock" },
-  { method: "GET", path: "/transactions/{id}/settlement", phase: 7, status: "mock" },
+  { method: "POST", path: "/transactions/{id}/funding/mark-sent", phase: 7, status: "live", notes: "Promoted 2026-07-24 on test/live/funding.live.spec.tsx — useMarkSent on a live-walked chain; the screen reloads the declared settlement rather than reading the undeclared response body" },
+  { method: "POST", path: "/transactions/{id}/funding/otp", phase: 7, status: "live", notes: "Promoted 2026-07-24 on test/live/funding.live.spec.tsx — generateOtp as the bank; 6-digit code exists only in the one response and the caller's variable" },
+  { method: "POST", path: "/transactions/{id}/funding/confirm", phase: 7, status: "live", notes: "Promoted 2026-07-24 on test/live/funding.live.spec.tsx — wrong code surfaces OtpRejected with attemptsRemaining and nothing else; the right code returns transactionState FUNDED (INV-10, supplier half)" },
+  { method: "GET", path: "/transactions/{id}/settlement", phase: 7, status: "live", notes: "Promoted 2026-07-24 on test/live/funding.live.spec.tsx — FUNDING_RECEIVED with 3-dp gross rendered through useSettlement" },
   { method: "POST", path: "/settlements/{id}/retry", phase: 7, status: "mock" },
 
   { method: "GET", path: "/transactions/{id}/payments", phase: 8, status: "live", notes: "Promoted 2026-07-23 on test/live/payments.live.spec.tsx — a real OVERDUE_UNCONFIRMED transaction rendered through PaymentTimeline in EN and AR. Derived balance (D-13); supplier payload has NO bankInternalNotes/evidence/reportedBy, asserted live" },

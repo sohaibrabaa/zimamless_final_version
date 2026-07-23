@@ -35,6 +35,8 @@ export const PERSONAS = {
   bankOps: "ops@jnb.zimmamless.test",
   /** BANK_ANALYST + BANK_OFFER_MAKER — the marketplace and offer roles. */
   bankMaker: "maker@jnb.zimmamless.test",
+  /** BANK_OFFER_APPROVER — approves offers and signs contracts for bank A. */
+  bankApprover: "approver@jnb.zimmamless.test",
   platformOps: "admin@platform.zimmamless.test",
   compliance: "compliance@platform.zimmamless.test",
 } as const;
