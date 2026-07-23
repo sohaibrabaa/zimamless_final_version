@@ -11,7 +11,9 @@
     "lint": "eslint \"src/**/*.ts\" \"test/**/*.ts\"",
     "typecheck": "tsc --noEmit",
     "test": "jest --config test/jest.unit.json",
-    "test:rls": "jest --config test/jest.integration.json --runInBand",
+    "test:integration": "jest --config test/jest.integration.json --runInBand",
+    "test:rls": "jest --config test/jest.integration.json --runInBand --testPathPattern rls-",
+    "test:journey": "jest --config test/jest.integration.json --runInBand --testPathPattern journey",
     "test:cov": "jest --config test/jest.unit.json --coverage",
     "openapi:emit": "nest build && node dist/openapi.js openapi.generated.json"
   },
@@ -37,6 +39,7 @@
     "@types/jest": "^29.5.14",
     "@types/node": "^22.10.2",
     "@types/pg": "^8.11.10",
+    "@types/supertest": "^7.2.1",
     "@typescript-eslint/eslint-plugin": "^8.18.1",
     "@typescript-eslint/parser": "^8.18.1",
     "eslint": "^8.57.1",
