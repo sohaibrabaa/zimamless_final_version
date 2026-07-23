@@ -222,8 +222,29 @@ transaction nets to **exactly zero**.
   lint, unit and integration suites green on both workspaces.
 - Phase 7 endpoints promoted to live in the frontend and exercised by the UI.
 - Completion report at `docs/completion/PHASE_7.md`, and a `DAILY_LOG.md` entry.
+- **All work committed and pushed to `main`**, with `main` and `origin/main` in
+  sync and the working tree clean. See §9.
 
-## 9. How to work
+## 9. Git workflow — read this before your first commit
+
+**Work directly on `main`. Do not create branches.**
+
+The repository was deliberately consolidated to a single branch: the phase
+branches (`a/phase*`, `b/phase*`, `integration/consolidate`) existed only to
+keep two agents out of each other's way, and every one of them has been merged
+and deleted, locally and on the remote. With one agent there is nothing to
+isolate. `main` is the only branch, and it should stay that way.
+
+- **Commit as you complete each increment**, not once at the end of the phase.
+  A phase-sized commit is unreviewable and unbisectable.
+- **Push after each commit** so `main` and `origin/main` never drift.
+- Commit messages explain *why*, not just what. If you changed a test, say why
+  the old one was wrong.
+- Never commit with failing tests. If you must checkpoint mid-repair, say so
+  explicitly in the message.
+- Do not commit secrets, `.env`, or generated artefacts.
+
+## 10. How to work
 
 - Build in verifiable increments; run the suites as you go rather than at the
   end. The integration suite runs ~8 minutes against the hosted pooler — run it
