@@ -59,6 +59,10 @@ export class RespondDto {
   documentIds?: string[];
 }
 
+// FINAL_REVIEW is deliberately absent: it is a reserved state with no entry
+// transition (see application-state.ts). Accepting it here would let a
+// reviewer place an application in a state the machine cannot leave the way
+// they expect.
 const DECISIONS = ['APPROVED', 'APPROVED_CONDITIONAL', 'INFORMATION_REQUIRED', 'REJECTED'] as const;
 
 export class DecideDto {

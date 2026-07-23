@@ -16,6 +16,7 @@ import {
   organizationStatusFor,
   requireTransition,
 } from './application-state';
+import { CONSENT_TYPES, CONSENT_VERSION, REVIEWER_REASON_CODES } from './decision-catalogue';
 
 /**
  * Supplier onboarding: bootstrap, application lifecycle, government
@@ -46,6 +47,16 @@ export interface ActorContext {
 }
 
 const REVIEWER_ROLES = ['PLATFORM_SUPPLIER_REVIEWER', 'PLATFORM_SUPER_ADMIN', 'PLATFORM_OPS_ADMIN'];
+
+/**
+ * States in which the supplier may still edit their submission material
+ * (consents, bank account). A decided application is a record, not a form —
+ * writing to it would change what the decision was made on.
+ */
+const SUPPLIER_EDITABLE_STATUSES: ReadonlySet<ApplicationStatus> = new Set([
+  'DRAFT',
+  'INFORMATION_REQUIRED',
+]);
 
 @Injectable()
 export class OnboardingService {
@@ -83,9 +94,18 @@ export class OnboardingService {
     const establishmentNo = input.nationalEstablishmentNumber.trim();
 
     return this.db.transaction(async (client) => {
-      // Already bootstrapped? Return what exists.
-      const existing = await client.query<{ organization_id: string; application_id: string }>(
-        `SELECT o.id AS organization_id, a.id AS application_id
+      // Already bootstrapped? Return what exists — but only when the caller
+      // is asking about the SAME establishment. Echoing the first org's ids
+      // for a *different* establishment number would silently ignore the
+      // caller's input, which is worse than refusing: they would proceed
+      // believing the second business was registered.
+      const existing = await client.query<{
+        organization_id: string;
+        application_id: string;
+        national_establishment_no: string | null;
+      }>(
+        `SELECT o.id AS organization_id, a.id AS application_id,
+                o.national_establishment_no
            FROM organization_memberships m
            JOIN organizations o ON o.id = m.organization_id
            LEFT JOIN supplier_applications a ON a.organization_id = o.id
@@ -95,6 +115,13 @@ export class OnboardingService {
         [userId],
       );
       if (existing.rows.length > 0 && existing.rows[0].application_id) {
+        if (existing.rows[0].national_establishment_no !== establishmentNo) {
+          throw AppException.conflict(
+            ErrorCode.CONFLICT,
+            'This account already registered a different establishment. One supplier organization per account in V3.',
+            { registeredEstablishmentNumber: existing.rows[0].national_establishment_no },
+          );
+        }
         return {
           organizationId: existing.rows[0].organization_id,
           applicationId: existing.rows[0].application_id,
@@ -193,9 +220,10 @@ export class OnboardingService {
 
   /** Application plus SLA state and government-derived fields. */
   async describe(row: ApplicationRow): Promise<Record<string, unknown>> {
-    const [slaState, fields] = await Promise.all([
+    const [slaState, fields, requests] = await Promise.all([
       this.sla.stateOf(row.id),
       this.government.effectiveFields('ORGANIZATION', row.organization_id),
+      this.government.listRequestsForSubject('ORGANIZATION', row.organization_id),
     ]);
 
     // Government-derived fields are exposed with their provenance so Agent
@@ -223,6 +251,18 @@ export class OnboardingService {
       decidedAt: row.decided_at?.toISOString() ?? null,
       decisionReasonCode: row.decision_reason_code,
       governmentData,
+      // Q-08 resolution: the per-source panel needs to say WHICH source
+      // answered and which stayed silent — `sourceAvailable` per request is
+      // the field hard rule 7 tells clients to branch on. Additive inside an
+      // object the overlay already extends, same pattern as slaPausedReason.
+      governmentRequests: requests.map((r) => ({
+        id: r.id,
+        source: r.source,
+        status: r.status,
+        sourceAvailable: r.source_available,
+        retrievedAt: r.responded_at?.toISOString() ?? null,
+        validUntil: r.valid_until?.toISOString() ?? null,
+      })),
     };
   }
 
@@ -352,6 +392,27 @@ export class OnboardingService {
 
   async submit(id: string, ctx: ActorContext): Promise<Record<string, unknown>> {
     const application = await this.requireVisibleApplication(id, ctx);
+
+    // All four essential consents must be granted before review can start
+    // (ZM-SON-012). The latest record per type wins — a consent granted and
+    // later re-recorded as refused counts as refused.
+    const { rows: latest } = await this.db.query<{ consent_type: string; granted: boolean }>(
+      `SELECT DISTINCT ON (consent_type) consent_type, granted
+         FROM consent_records
+        WHERE organization_id = $1
+        ORDER BY consent_type, granted_at DESC`,
+      [application.organization_id],
+    );
+    const grantedTypes = new Set(latest.filter((r) => r.granted).map((r) => r.consent_type));
+    const missing = [...CONSENT_TYPES].filter((t) => !grantedTypes.has(t));
+    if (missing.length > 0) {
+      throw new AppException(
+        ErrorCode.CONSENTS_REQUIRED,
+        'All essential consents must be granted before submission.',
+        HttpStatus.UNPROCESSABLE_ENTITY,
+        { missing },
+      );
+    }
 
     await this.db.transaction(async (client) => {
       await this.transition(client, application, 'SUBMITTED', ctx.userId);
@@ -485,12 +546,58 @@ export class OnboardingService {
     return this.describe(refreshed);
   }
 
+  /** 409 unless the supplier may still edit the application (item: state gating). */
+  private requireEditable(application: ApplicationRow): void {
+    if (!SUPPLIER_EDITABLE_STATUSES.has(application.status)) {
+      throw new AppException(
+        ErrorCode.INVALID_STATE_TRANSITION,
+        'This application can no longer be edited in its current state.',
+        HttpStatus.CONFLICT,
+        { status: application.status },
+      );
+    }
+  }
+
+  /**
+   * The contract-legal recovery path from GOVERNMENT_SERVICE_UNAVAILABLE.
+   *
+   * The contract has no retry endpoint, so recovery hangs off an existing
+   * one: a successful POST /government/lookup for an establishment number
+   * whose application is paused on an outage re-runs automated verification
+   * (which re-pauses if the source is still down — retryGovernment already
+   * refuses anything not in the outage state, and re-entering it is a legal
+   * transition). Activity-triggered, never scheduled: ZM-GOV-006.
+   *
+   * Silent when there is nothing to resume — the lookup that triggered this
+   * has its own response, and a caller probing another org's establishment
+   * number learns nothing from a no-op.
+   */
+  async resumeIfWaiting(establishmentNumber: string, ctx: ActorContext): Promise<void> {
+    const row = await this.db.queryOne<ApplicationRow>(
+      `SELECT a.id, a.organization_id, a.status, a.submitted_at, a.decided_at,
+              a.decision_reason_code, a.decision_notes
+         FROM supplier_applications a
+         JOIN organizations o ON o.id = a.organization_id
+        WHERE o.national_establishment_no = $1
+          AND a.status = 'GOVERNMENT_SERVICE_UNAVAILABLE'
+        LIMIT 1`,
+      [establishmentNumber.trim()],
+    );
+    if (!row) return;
+    // Same visibility rule as everywhere else: a supplier resumes only its
+    // own application; platform staff may resume any.
+    if (!this.isReviewer(ctx) && row.organization_id !== ctx.organizationId) return;
+
+    await this.retryGovernment(row.id, ctx);
+  }
+
   async addBankAccount(
     id: string,
     ctx: ActorContext,
     input: { iban: string; bankName: string; accountHolderName: string; evidenceDocumentId?: string },
   ): Promise<void> {
     const application = await this.requireVisibleApplication(id, ctx);
+    this.requireEditable(application);
     const iban = input.iban.replace(/\s+/g, '').toUpperCase();
     if (!/^JO\d{2}[A-Z0-9]{4}\d{22}$/.test(iban)) {
       throw AppException.validation('The IBAN is not a valid Jordanian IBAN.', { field: 'iban' });
@@ -517,6 +624,26 @@ export class OnboardingService {
     consents: { consentType: string; consentVersion: string; granted: boolean }[],
   ): Promise<void> {
     const application = await this.requireVisibleApplication(id, ctx);
+    this.requireEditable(application);
+
+    // Q-09 resolution: the consent vocabulary is a validated whitelist, not
+    // whatever string the client sent. An unknown type stored silently would
+    // read as a granted consent nobody can name the text of.
+    for (const consent of consents) {
+      if (!CONSENT_TYPES.has(consent.consentType)) {
+        throw AppException.validation(
+          `Unknown consent type. Expected one of: ${[...CONSENT_TYPES].join(', ')}.`,
+          { field: 'consentType', value: consent.consentType },
+        );
+      }
+      if (consent.consentVersion !== CONSENT_VERSION) {
+        throw AppException.validation(`Unknown consent version. Current version is ${CONSENT_VERSION}.`, {
+          field: 'consentVersion',
+          value: consent.consentVersion,
+        });
+      }
+    }
+
     await this.db.transaction(async (client) => {
       for (const consent of consents) {
         // The hash pins which text was agreed to. Storing only a version
@@ -571,8 +698,18 @@ export class OnboardingService {
   async respond(
     id: string,
     ctx: ActorContext,
-    input: { informationRequestId: string; response: string },
+    input: { informationRequestId: string; response: string; documentIds?: string[] },
   ): Promise<void> {
+    // Documents arrive in Phase 3. Refusing loudly beats the alternative —
+    // accepting and dropping them would silently discard supplier evidence,
+    // and the supplier would believe the reviewer saw it.
+    if (input.documentIds && input.documentIds.length > 0) {
+      throw AppException.validation(
+        'Document attachments are not available yet — they arrive with the documents feature. Send the response text only.',
+        { field: 'documentIds' },
+      );
+    }
+
     const application = await this.requireVisibleApplication(id, ctx);
 
     await this.db.transaction(async (client) => {
@@ -634,6 +771,18 @@ export class OnboardingService {
       throw AppException.validation('A rejection requires a structured reasonCode.', {
         field: 'reasonCode',
       });
+    }
+
+    // Q-06 resolution: reviewer-supplied codes come from the shared
+    // catalogue. Free strings are how the two halves drifted apart in Phase
+    // 2 without either noticing; automated codes are excluded because a
+    // reviewer asserting a registry fact by hand would bypass the check
+    // that proves it.
+    if (input.reasonCode && !REVIEWER_REASON_CODES.has(input.reasonCode)) {
+      throw AppException.validation(
+        'Unknown reasonCode. Reviewer decisions use the shared reason-code catalogue.',
+        { field: 'reasonCode', value: input.reasonCode },
+      );
     }
 
     await this.db.transaction(async (client) => {

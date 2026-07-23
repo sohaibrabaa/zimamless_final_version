@@ -106,6 +106,13 @@ const TRANSITIONS: Readonly<Record<ApplicationStatus, readonly TransitionRule[]>
     { to: 'REJECTED', clock: 'STOP', reason: 'DECISION_REJECTED' },
   ],
 
+  // RESERVED — currently unreachable by design, not by accident. The exits
+  // are defined but nothing transitions INTO this state: DecideDto does not
+  // accept it and no automated rule produces it. It exists for a later
+  // phase's two-step review (analyst → final approver). If you are adding
+  // that phase, add the entry transition and a DecideDto value; if you are
+  // reading this wondering why FINAL_REVIEW never appears in data — this is
+  // why.
   FINAL_REVIEW: [
     { to: 'APPROVED', clock: 'STOP', reason: 'DECISION_APPROVED' },
     { to: 'APPROVED_CONDITIONAL', clock: 'STOP', reason: 'DECISION_APPROVED_CONDITIONAL' },

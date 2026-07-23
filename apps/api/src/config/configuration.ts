@@ -74,6 +74,9 @@ export class AppConfig {
 
 class ConfigError extends Error {}
 
+/** Published in this repository — usable in development only, by construction. */
+const DEV_ENCRYPTION_KEY = 'zimmamless-development-only-key';
+
 function required(key: string): string {
   const value = process.env[key];
   if (!value || value.trim() === '') {
@@ -119,16 +122,19 @@ export function loadConfiguration(): AppConfig {
   // that default to production would make every encrypted column readable
   // by anyone who has read the repository. Production must supply its own.
   const encryptionKey = optional('ENCRYPTION_KEY', '');
-  if (nodeEnv === 'production' && encryptionKey === '') {
+  // Empty AND equal-to-the-fallback are both refused: the fallback string is
+  // published in this repository, so setting it explicitly in production is
+  // the same hole as setting nothing.
+  if (nodeEnv === 'production' && (encryptionKey === '' || encryptionKey === DEV_ENCRYPTION_KEY)) {
     throw new ConfigError(
-      'ENCRYPTION_KEY is required when NODE_ENV=production — supplier IBANs are stored ' +
-        'encrypted and the development fallback key must never protect real data.',
+      'ENCRYPTION_KEY is required when NODE_ENV=production and must not be the published ' +
+        'development fallback — supplier IBANs are stored encrypted under it.',
     );
   }
 
   return new AppConfig({
     nodeEnv,
-    encryptionKey: encryptionKey || 'zimmamless-development-only-key',
+    encryptionKey: encryptionKey || DEV_ENCRYPTION_KEY,
     port: intOf('PORT', 3000),
     // The contract's servers block is http://localhost:3000/v1.
     globalPrefix: optional('API_GLOBAL_PREFIX', 'v1'),

@@ -108,22 +108,24 @@ ON CONFLICT (id) DO NOTHING;
 -- ---------------------------------------------------------------------
 -- 3. Consents for S1, so the consent history screen is not empty.
 -- ---------------------------------------------------------------------
+-- The canonical consent vocabulary (Q-09 resolution): the four types the
+-- wizard sends and the API validates, all at version "1.0". The earlier
+-- seed's PLATFORM_TERMS / GOVERNMENT_DATA_ACCESS rows are superseded — new
+-- ids, so this stays idempotent alongside databases that carry the old rows.
 INSERT INTO consent_records (id, organization_id, user_id, consent_type, consent_version, consent_text_hash, granted, granted_at)
-SELECT '0e203000-0000-4000-8000-000000000001',
+SELECT v.id::uuid,
        '0e000000-0000-4000-8000-000000000002',
-       u.id, 'PLATFORM_TERMS', 'v1.0',
-       encode(digest('PLATFORM_TERMS:v1.0', 'sha256'), 'hex'),
-       true, timestamptz '2026-07-15 08:55:00+03'
-  FROM users u WHERE u.email = 'owner@alnoor.zimmamless.test'
-ON CONFLICT (id) DO NOTHING;
-
-INSERT INTO consent_records (id, organization_id, user_id, consent_type, consent_version, consent_text_hash, granted, granted_at)
-SELECT '0e203000-0000-4000-8000-000000000002',
-       '0e000000-0000-4000-8000-000000000002',
-       u.id, 'GOVERNMENT_DATA_ACCESS', 'v1.0',
-       encode(digest('GOVERNMENT_DATA_ACCESS:v1.0', 'sha256'), 'hex'),
-       true, timestamptz '2026-07-15 08:56:00+03'
-  FROM users u WHERE u.email = 'owner@alnoor.zimmamless.test'
+       u.id, v.consent_type, '1.0',
+       encode(digest(v.consent_type || ':1.0', 'sha256'), 'hex'),
+       true, v.granted_at::timestamptz
+  FROM users u,
+       (VALUES
+         ('0e203000-0000-4000-8000-000000000011', 'GOVERNMENT_LOOKUP_AUTHORIZATION', '2026-07-15 08:55:00+03'),
+         ('0e203000-0000-4000-8000-000000000012', 'BANK_DISCLOSURE_AUTHORIZATION',  '2026-07-15 08:55:30+03'),
+         ('0e203000-0000-4000-8000-000000000013', 'TERMS_OF_SERVICE',               '2026-07-15 08:56:00+03'),
+         ('0e203000-0000-4000-8000-000000000014', 'PRIVACY_POLICY',                 '2026-07-15 08:56:30+03')
+       ) AS v(id, consent_type, granted_at)
+ WHERE u.email = 'owner@alnoor.zimmamless.test'
 ON CONFLICT (id) DO NOTHING;
 
 -- ---------------------------------------------------------------------
@@ -138,6 +140,23 @@ ON CONFLICT (id) DO NOTHING;
 -- ---------------------------------------------------------------------
 UPDATE organizations SET legal_name = 'Jordan Valley Foods'
  WHERE national_establishment_no = '20000103' AND legal_name LIKE 'Establishment %';
+
+-- S3's organization id: Agent B's mock store uses
+-- 0e000000-0000-4000-8000-000000000007 for Jordan Valley Foods. On a FRESH
+-- database this insert makes that id real, so mock and live agree from the
+-- start. On the hosted dev database S3 already exists with a random id from
+-- the live register runs — re-pointing it is not possible without cascading
+-- every FK, so there (and only there) the mock id stays mock-local. The
+-- fixture ids clients may hard-code remain the two applications above.
+INSERT INTO organizations
+  (id, organization_type, legal_name, status, national_establishment_no,
+   commercial_registration_no, tax_number, contact_email, platform_terms_version)
+SELECT '0e000000-0000-4000-8000-000000000007', 'SUPPLIER', 'Jordan Valley Foods',
+       'ONBOARDING', '20000103', 'CR-20000103', 'TAX-20000103',
+       'contact@jordanvalley.zimmamless.test', 'v1.0'
+ WHERE NOT EXISTS (
+   SELECT 1 FROM organizations WHERE national_establishment_no = '20000103'
+ );
 UPDATE organizations SET legal_name = 'Hani Auto Parts Establishment'
  WHERE national_establishment_no = '20000104' AND legal_name LIKE 'Establishment %';
 

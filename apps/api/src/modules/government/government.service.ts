@@ -320,6 +320,39 @@ export class GovernmentService {
     return out;
   }
 
+  /**
+   * The latest request per source for a subject (Q-08): what the
+   * application detail's per-source panel renders. Latest only — a re-query
+   * supersedes its predecessor for display, while every row stays in the
+   * table for audit.
+   */
+  async listRequestsForSubject(
+    subjectType: SubjectType,
+    subjectId: string,
+  ): Promise<(GovernmentRequestRow & { valid_until: Date | null })[]> {
+    const { rows } = await this.db.query<GovernmentRequestRow & { valid_until: Date | null }>(
+      `SELECT DISTINCT ON (r.source)
+              r.id, r.source, r.lookup_key, r.subject_type, r.subject_id, r.status,
+              r.source_available, r.requested_at, r.responded_at, r.error_code,
+              r.adapter_version, s.valid_until
+         FROM government_verification_requests r
+         LEFT JOIN government_data_snapshots s ON s.request_id = r.id
+        WHERE r.subject_type = $1 AND r.subject_id = $2
+        ORDER BY r.source, r.requested_at DESC`,
+      [subjectType, subjectId],
+    );
+    return rows;
+  }
+
+  /** The establishment number an organization is registered under, for ownership checks. */
+  async establishmentNumberOf(organizationId: string): Promise<string | null> {
+    const row = await this.db.queryOne<{ national_establishment_no: string | null }>(
+      `SELECT national_establishment_no FROM organizations WHERE id = $1`,
+      [organizationId],
+    );
+    return row?.national_establishment_no ?? null;
+  }
+
   async getRequest(id: string): Promise<GovernmentRequestRow | null> {
     return this.db.queryOne<GovernmentRequestRow>(
       `SELECT id, source, lookup_key, subject_type, subject_id, status,
