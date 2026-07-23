@@ -61,7 +61,10 @@ describe('transitions the machine refuses', () => {
   });
 
   it('is a whitelist, so an unknown pairing is refused rather than allowed', () => {
-    expect(canTransition('FUNDED', 'PAID')).toBe(false);
+    // Was FUNDED → PAID until Phase 8 made that a real edge. Replaced with a
+    // pairing that is genuinely nonsense rather than weakening the assertion.
+    expect(canTransition('FUNDED', 'DRAFT')).toBe(false);
+    expect(canTransition('PAID', 'FUNDED')).toBe(false);
   });
 
   it('moves between OFFER_ACCEPTED and CONDITIONS_PENDING in both directions', () => {
@@ -86,8 +89,87 @@ describe('transitions the machine refuses', () => {
     expect(canTransition('CONTRACTED', 'OFFER_ACCEPTED')).toBe(false);
   });
 
-  it('declares nothing beyond CONTRACTED, because Phase 7 has not built it', () => {
+  it('still does not declare READY_FOR_DISBURSEMENT, which nothing sets', () => {
+    // The enum carries it and it is a plausible staging state, but no code in
+    // any phase performs it. A declared transition nothing can take is a lie
+    // about the system's shape.
     expect(canTransition('CONTRACTED', 'READY_FOR_DISBURSEMENT')).toBe(false);
+  });
+
+  // ------------------------------------------------------------------
+  // Phase 8 — ZM-PMT-008..011
+  // ------------------------------------------------------------------
+
+  describe('the overdue discipline', () => {
+    it('CANNOT move a funded transaction straight to OVERDUE', () => {
+      // The single most important edge in this phase, asserted as an absence.
+      // A due date passing is not evidence that a buyer failed to pay; only a
+      // bank can say that. If this ever returns true, the platform has begun
+      // accusing suppliers of default on the strength of a calendar.
+      expect(canTransition('FUNDED', 'OVERDUE')).toBe(false);
+      expect(canTransition('PARTIALLY_PAID', 'OVERDUE_UNCONFIRMED')).toBe(true);
+    });
+
+    it('routes a passed due date to OVERDUE_UNCONFIRMED', () => {
+      expect(canTransition('FUNDED', 'OVERDUE_UNCONFIRMED')).toBe(true);
+    });
+
+    it('lets only a confirmation leave OVERDUE_UNCONFIRMED, in any of three directions', () => {
+      // The bank may report that the buyer paid after all, paid partly, or
+      // genuinely defaulted. All three are confirmations; none is assumed.
+      expect(canTransition('OVERDUE_UNCONFIRMED', 'PAID')).toBe(true);
+      expect(canTransition('OVERDUE_UNCONFIRMED', 'PARTIALLY_PAID')).toBe(true);
+      expect(canTransition('OVERDUE_UNCONFIRMED', 'OVERDUE')).toBe(true);
+    });
+
+    it('allows late payment of a confirmed overdue', () => {
+      // Buyers settle after the due date all the time; making that
+      // unrepresentable would force a false closure.
+      expect(canTransition('OVERDUE', 'PAID')).toBe(true);
+      expect(canTransition('OVERDUE', 'PARTIALLY_PAID')).toBe(true);
+    });
+
+    it('reaches recourse only from a CONFIRMED overdue', () => {
+      // Recourse is a claim against the supplier. Starting one from an
+      // unconfirmed overdue would act on the assumption the state exists to
+      // avoid making.
+      expect(canTransition('OVERDUE', 'RECOURSE_ACTIVE')).toBe(true);
+      expect(canTransition('OVERDUE_UNCONFIRMED', 'RECOURSE_ACTIVE')).toBe(false);
+      expect(canTransition('FUNDED', 'RECOURSE_ACTIVE')).toBe(false);
+    });
+  });
+
+  describe('disputes and closure', () => {
+    it('can be disputed from every post-funding state', () => {
+      for (const state of [
+        'FUNDED',
+        'PARTIALLY_PAID',
+        'PAID',
+        'OVERDUE_UNCONFIRMED',
+        'OVERDUE',
+        'RECOURSE_ACTIVE',
+      ] as const) {
+        expect(canTransition(state, 'DISPUTED')).toBe(true);
+      }
+    });
+
+    it('returns a resolved dispute to a state the resolver names', () => {
+      expect(canTransition('DISPUTED', 'OVERDUE')).toBe(true);
+      expect(canTransition('DISPUTED', 'FUNDED')).toBe(true);
+      expect(canTransition('DISPUTED', 'CLOSED')).toBe(true);
+    });
+
+    it('makes CLOSED terminal — nothing leaves it, and nothing is deleted (INV-7)', () => {
+      for (const state of ['FUNDED', 'PAID', 'OVERDUE', 'DISPUTED', 'DRAFT'] as const) {
+        expect(canTransition('CLOSED', state)).toBe(false);
+      }
+    });
+
+    it('closes a fraud-reviewed transaction rather than removing it', () => {
+      expect(canTransition('FRAUD_REVIEW', 'CLOSED')).toBe(true);
+      // And a cleared review returns a funded transaction to FUNDED.
+      expect(canTransition('FRAUD_REVIEW', 'FUNDED')).toBe(true);
+    });
   });
 
   it('requireTransition throws with both states named', () => {

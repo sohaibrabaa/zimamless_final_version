@@ -14,6 +14,7 @@ import { OtpService } from './modules/funding/otp.service';
 import { FundingService } from './modules/funding/funding.service';
 import { FundingDeadlinesService } from './modules/funding/funding-deadlines.service';
 import { SchedulerService } from './jobs/scheduler.service';
+import { MaturityService } from './modules/payments/maturity.service';
 import { FundingController } from './modules/funding/funding.controller';
 import { SettlementService } from './modules/funding/settlement.service';
 import {
@@ -191,6 +192,9 @@ export const APP_CONFIG = 'APP_CONFIG';
     // The sweeps were written idempotent from the start but nothing invoked
     // them; the scheduler is what makes a deadline actually pass (AS-02, AS-04).
     SchedulerService,
+
+    // --- Phase 8: post-funding, cases, notifications -------------------
+    MaturityService,
     // Bound to a symbol, never named by domain code, so swapping in a real
     // payout rail is a one-line change here (ZM-FND-013/014).
     DummySettlementProvider,

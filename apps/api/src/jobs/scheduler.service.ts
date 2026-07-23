@@ -2,6 +2,7 @@ import { Injectable, Logger, OnApplicationBootstrap, OnApplicationShutdown } fro
 import { AppConfig } from '../config/configuration';
 import { ListingDeadlinesService } from '../modules/marketplace/listing-deadlines.service';
 import { FundingDeadlinesService } from '../modules/funding/funding-deadlines.service';
+import { MaturityService } from '../modules/payments/maturity.service';
 
 /**
  * The thing that actually runs the sweeps.
@@ -51,6 +52,7 @@ export class SchedulerService implements OnApplicationBootstrap, OnApplicationSh
     private readonly config: AppConfig,
     private readonly listings: ListingDeadlinesService,
     private readonly funding: FundingDeadlinesService,
+    private readonly maturity: MaturityService,
   ) {}
 
   onApplicationBootstrap(): void {
@@ -84,6 +86,7 @@ export class SchedulerService implements OnApplicationBootstrap, OnApplicationSh
     try {
       await this.run('listing deadlines', () => this.listings.sweep());
       await this.run('funding confirmations', () => this.funding.sweep());
+      await this.run('invoice maturity', () => this.maturity.sweep());
     } finally {
       this.running = false;
     }

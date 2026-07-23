@@ -94,9 +94,84 @@ const TRANSITIONS: ReadonlyMap<TransactionState, ReadonlySet<TransactionState>> 
     // available, and FundingService checks both before performing it.
     new Set<TransactionState>(['FUNDED']),
   ],
-  // FUNDED onwards (payments, overdue, recourse, closure) is Phase 8's.
-  ['FUNDED', new Set<TransactionState>([])],
-  ['FRAUD_REVIEW', new Set<TransactionState>(['ELIGIBLE', 'REJECTED'])],
+  // ------------------------------------------------------------------
+  // Phase 8 — the lifecycle after money moves
+  // ------------------------------------------------------------------
+  [
+    'FUNDED',
+    // OVERDUE is deliberately absent. A funded transaction whose due date
+    // passes goes to OVERDUE_UNCONFIRMED and nowhere else: the platform does
+    // not know whether the buyer paid, only the bank does, and asserting
+    // default on the strength of a calendar date is an accusation with no
+    // evidence behind it (ZM-PMT-008..011). The edge simply does not exist,
+    // so no future code can take it by accident.
+    new Set<TransactionState>([
+      'PARTIALLY_PAID',
+      'PAID',
+      'OVERDUE_UNCONFIRMED',
+      'DISPUTED',
+      'FRAUD_REVIEW',
+    ]),
+  ],
+  [
+    'OVERDUE_UNCONFIRMED',
+    // Only a bank's confirmation moves this on, and it may confirm any of the
+    // three: the buyer paid after all, paid partly, or genuinely defaulted.
+    new Set<TransactionState>(['PAID', 'PARTIALLY_PAID', 'OVERDUE', 'DISPUTED', 'FRAUD_REVIEW']),
+  ],
+  [
+    'PARTIALLY_PAID',
+    // A partial payment does not stop the clock: a partly-paid transaction can
+    // still pass its due date, and it still needs a bank's word on the rest.
+    new Set<TransactionState>([
+      'PAID',
+      'OVERDUE_UNCONFIRMED',
+      'OVERDUE',
+      'DISPUTED',
+      'FRAUD_REVIEW',
+      'CLOSED',
+    ]),
+  ],
+  ['PAID', new Set<TransactionState>(['CLOSED', 'DISPUTED'])],
+  [
+    'OVERDUE',
+    // A confirmed overdue can still be paid late — a buyer settling after the
+    // due date is common and must not be unrepresentable.
+    new Set<TransactionState>(['RECOURSE_ACTIVE', 'PAID', 'PARTIALLY_PAID', 'DISPUTED', 'CLOSED']),
+  ],
+  [
+    'RECOURSE_ACTIVE',
+    // Recourse ends settled (→ CLOSED with RECOURSE_SETTLED), disputed, or
+    // written off. PAID is reachable because the buyer may pay the bank
+    // directly while recourse is running, which resolves it without the
+    // supplier repaying anything.
+    new Set<TransactionState>(['CLOSED', 'DISPUTED', 'PAID']),
+  ],
+  [
+    'DISPUTED',
+    // A dispute suspends the transaction rather than replacing its history.
+    // Resolution returns it to where it was, which is why so many states are
+    // reachable from here — the resolver decides which, it is not inferred.
+    new Set<TransactionState>([
+      'FUNDED',
+      'PARTIALLY_PAID',
+      'PAID',
+      'OVERDUE_UNCONFIRMED',
+      'OVERDUE',
+      'RECOURSE_ACTIVE',
+      'CLOSED',
+    ]),
+  ],
+  [
+    'FRAUD_REVIEW',
+    // ELIGIBLE and REJECTED are the pre-funding outcomes (Phase 3). Phase 8
+    // adds the post-funding ones: a funded transaction under fraud review that
+    // clears returns to FUNDED, and one that does not is closed with a
+    // reason rather than deleted (INV-7).
+    new Set<TransactionState>(['ELIGIBLE', 'REJECTED', 'FUNDED', 'CLOSED']),
+  ],
+  // CLOSED is terminal. Nothing leaves it, and nothing is deleted from it.
+  ['CLOSED', new Set<TransactionState>([])],
 ]);
 
 /** States in which the supplier may still edit the submission. */
