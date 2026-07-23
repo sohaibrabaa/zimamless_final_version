@@ -1,4 +1,4 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable } from '@nestjs/common';
 import { randomUUID } from 'node:crypto';
 import { PoolClient } from 'pg';
 import { DatabaseService } from '../../database/database.service';
@@ -66,8 +66,6 @@ export class LedgerImbalance extends Error {
 
 @Injectable()
 export class LedgerService {
-  private readonly logger = new Logger(LedgerService.name);
-
   constructor(private readonly db: DatabaseService) {}
 
   /**

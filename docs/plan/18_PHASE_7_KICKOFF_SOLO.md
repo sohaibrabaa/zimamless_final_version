@@ -112,11 +112,12 @@ SETTLEMENT_CLEARING · RECOURSE_CLEARING
   defect — it means the books claim money stopped somewhere it did not.
 - Nothing may present a clearing balance as platform funds.
 
-**Scaffolding already exists** (uncommitted, unverified — treat as a starting
-point, not gospel): `src/modules/ledger/ledger.accounts.ts`,
-`ledger.service.ts`, `settlement-postings.ts`. They encode the three journals:
-funding-received → distribution → payout-completed. Review them critically,
-finish them, and test them; discard them if you have a better shape.
+**Scaffolding already exists** on `main` (commit `e81b923`) — it typechecks but
+is unwired and untested, so treat it as a starting point, not gospel:
+`src/modules/ledger/ledger.accounts.ts`, `ledger.service.ts`,
+`settlement-postings.ts`. They encode the three journals: funding-received →
+distribution → payout-completed. Review them critically, finish them, and test
+them; discard them if you have a better shape.
 
 ## 4. Scope — backend
 

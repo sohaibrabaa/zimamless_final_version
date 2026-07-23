@@ -9,6 +9,7 @@ import { AllExceptionsFilter } from './common/errors/all-exceptions.filter';
 import { AuditService } from './common/audit/audit.service';
 import { AuditInterceptor } from './common/audit/audit.interceptor';
 import { IdempotencyInterceptor } from './common/idempotency/idempotency.interceptor';
+import { LedgerService } from './modules/ledger/ledger.service';
 import { TIME_PROVIDER, SystemTimeProvider } from './common/time/time.provider';
 import { AuthGuard } from './modules/auth/auth.guard';
 import { AuthService } from './modules/auth/auth.service';
@@ -164,6 +165,13 @@ export const APP_CONFIG = 'APP_CONFIG';
     AcceptanceService,
     ContractsService,
     ConditionsService,
+
+    // --- Phase 7: funding, settlement, ledger --------------------------
+    // The ledger is registered first because everything else in this phase
+    // posts to it. It holds no state of its own — `post()` takes the caller's
+    // PoolClient so a journal commits with the settlement or commission row it
+    // describes, never separately.
+    LedgerService,
     // The provider is bound to a symbol, not to its class, so ZM-CON-009's
     // "insertable without core domain changes" is a one-line swap here and
     // nothing else. Nothing outside this file names DummySignatureProvider.
