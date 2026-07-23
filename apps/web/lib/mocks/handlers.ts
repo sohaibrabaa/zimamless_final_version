@@ -30,6 +30,8 @@ import {
   verificationFor,
   type MockTransaction,
 } from "./transaction-store";
+import { riskForTransaction } from "./risk-store";
+import { findListing, listEligibleListings } from "./marketplace-store";
 
 // Fallback must match lib/api/client.ts exactly: the API owns port 3000
 // (the contract's servers block names it; the web dev server is the one on
@@ -697,6 +699,65 @@ export const handlers = [
           status: 404,
         });
   }),
+
+  // -------------------------------------------------------------------
+  // PHASE 4 — RISK, TRUST SCORE
+  // -------------------------------------------------------------------
+
+  // The five components and dataAvailabilityPct are computed by
+  // lib/risk/risk-engine.ts, not hard-coded here — the INV-9 property (a
+  // sourceAvailability change moves only dataAvailabilityPct) has to survive
+  // through this handler as well as through the pure function, or a screen
+  // built against this endpoint could still show the bug the engine itself
+  // is proven not to have.
+  mockOnly("GET", "/transactions/{id}/risk", `${API_BASE}/transactions/:id/risk`, ({ params }) => {
+    const risk = riskForTransaction(String(params.id));
+    return risk
+      ? HttpResponse.json(risk)
+      : HttpResponse.json(
+          errorBody("NOT_FOUND", "No risk assessment for that transaction yet."),
+          { status: 404 }
+        );
+  }),
+
+  // -------------------------------------------------------------------
+  // PHASE 5 — MARKETPLACE (head start only: feed + underwriting view)
+  // -------------------------------------------------------------------
+  //
+  // Listing activation, policy-filter eligibility, offer creation/approval
+  // and the deadline engine are NOT implemented here — those are Agent A's
+  // and B's real Phase 5 work. This is deliberately a two-listing static
+  // feed so the marketplace screens have real content to render this
+  // session; see lib/mocks/marketplace-store.ts.
+
+  mockOnly("GET", "/marketplace/eligible", `${API_BASE}/marketplace/eligible`, ({ request }) => {
+    const url = new URL(request.url);
+    const page = Math.max(1, Math.trunc(+(url.searchParams.get("page") ?? 1)) || 1);
+    const pageSize = Math.max(1, Math.trunc(+(url.searchParams.get("pageSize") ?? 20)) || 20);
+    const items = listEligibleListings();
+    const start = (page - 1) * pageSize;
+    return HttpResponse.json({
+      items: items.slice(start, start + pageSize),
+      pagination: {
+        page,
+        pageSize,
+        total: items.length,
+        totalPages: Math.max(1, Math.ceil(items.length / pageSize)),
+      },
+    });
+  }),
+
+  mockOnly(
+    "GET",
+    "/marketplace/listings/{id}",
+    `${API_BASE}/marketplace/listings/:id`,
+    ({ params }) => {
+      const listing = findListing(String(params.id));
+      return listing
+        ? HttpResponse.json(listing)
+        : HttpResponse.json(errorBody("NOT_FOUND", "Listing not found"), { status: 404 });
+    }
+  ),
 ];
 
 function toSummary(t: MockTransaction) {

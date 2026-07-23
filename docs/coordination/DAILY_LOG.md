@@ -426,3 +426,81 @@ CROSS-HALF RECONCILIATION:
 VERIFICATION: 254 API tests (was 245, +9 new in `transactions-guards.spec.ts`: Q-13 catalogue, Q-12 documents[]), 91 web tests (fixture/checkType rewrites, no net count change), 95 ML tests unchanged, lint/typecheck all workspaces, i18n parity 455 keys (was 453 — 2 new: documents.download, documents.downloadUnavailable), `next build`, frozen-schema drift check, conformance gate — all green. Phase 3 journey integration suite (`npm run test:journey`) run live against the hosted database, hosted Supabase Storage and the real ML service — 28/28 passing, including the new cross-supplier duplicate test. `db:verify` 15/15.
 
 STILL OPEN: deployment (Q-01..Q-04 unaffected, still open). Unchanged, still the project's #1 risk — three phases have now completed without it, and Phase 4 adds a second service (ML/risk inference) to deploy.
+
+## 2026-07-23 — Agent B (session 4, Phase 4 + Phase 5 head start)
+Branched from `origin/main` per the kickoff's Step 0. Agent A had not started
+Phase 4 at the start of this session (no daily-log entry, no `ML_DESIGN.md`)
+— expected, since B's Phase 4 scope is light and mock-driven from day one.
+
+DONE (mock — `phases/PHASE_4_RISK_ML.md`, Agent B tasks; all five items):
+- `TrustScoreGauge`, `ComponentBars`, `FactorList`, composed into one
+  `RiskPanel` so the disclaimer/model-version/fallback block is never
+  forgotten by a future consumer.
+- **`dataAvailabilityPct` is structurally incapable of a warning tone** —
+  `dataAvailabilityNeutralTone()` has no code path returning anything but
+  `"neutral"`, which a CI test asserts directly rather than just documenting.
+  Shown as its own row (a Badge, never a bar) below a divider in
+  `ComponentBars`, with an explanatory tooltip.
+- Disclaimer sourced from i18n on every score display, both languages —
+  deliberately not from `assessment.disclaimer`, whose locale the contract
+  doesn't guarantee (see completion report §4 for why this isn't a filed
+  question).
+- **INV-9 fully covered client-side**: identical inputs differing only in
+  `sourceAvailability` produce byte-identical components and composite score
+  across every single-source-down permutation and the all-down case, at both
+  the pure-engine level and the mock-store assembly level that the endpoint
+  handler actually calls.
+
+Remaining B capacity spent on the Phase 5 head start the kickoff named
+("marketplace feed, offer form skeletons"):
+- Bank marketplace feed (`GET /marketplace/eligible`) and underwriting view
+  (`GET /marketplace/listings/{id}`) — real screens, but a **static
+  two-listing stub**, not your real policy-filter eligibility engine, which
+  doesn't exist yet. The underwriting view is the risk components' first
+  real consuming screen.
+- Offer form skeleton: every field the phase file names, real catalogues
+  (transaction/recourse/condition types with plain-language explanations),
+  **submission deliberately not wired to a mock endpoint**. Commission and
+  listing fee are named but show no number — inventing an estimate would
+  have been the same invented-value defect the Phase 1/2/3 audits each
+  caught in a different form, one field earlier.
+- NOT attempted: listing activation, policy filters, approval queue, "my
+  offers", offer comparison. Real Phase 5 work, not this head start.
+
+VERIFIED: 116/116 vitest (25 new — 20 risk-engine, 5 risk-store; the 91 from
+Phase 3 all still green); typecheck, lint and `next build` clean in `web` and
+root-wide across all three workspaces; i18n parity **559 keys** (was 455).
+
+SWAPPED TO LIVE: none. 5 more endpoints join the mock board (2 risk, 3
+marketplace) — 36 mocked, still zero live, four phases running on the same
+undeployed-API carry-over.
+
+CONTRACT GAPS FOUND: none filed. Two candidates considered and both resolved
+without escalation — the disclaimer's locale is unambiguously the client's
+job regardless of what the API sends (unlike Q-03/Q-05, there's no ruling for
+a product owner to make), and the risk factor/reason-code vocabulary is
+response-only display text with no validation consequence on a mismatch
+(unlike Q-06/Q-13, a mismatch here is cosmetic, not a 422). Reasoning in §4-5
+of `docs/completion/PHASE_4_AGENT_B.md`.
+
+NEEDS FROM A:
+1. **Nothing blocking.** The demo risk engine (`lib/risk/risk-engine.ts`) is
+   a stand-in only — none of its formulas need to survive contact with your
+   real one. The one property worth preserving exactly is the separation
+   itself: `dataAvailabilityPct` must be computable from a wholly different
+   input than the five components, with no shared code path, which is what
+   ZM-RSK-005/006/008 actually require.
+2. A translation table for risk factors/reason codes already exists
+   (`messages/{en,ar}.json` → `risk.factor.*`, `risk.reasonCode.*`) if
+   reusing the keys is useful — not a request to match them, since
+   `FactorList` renders anything unrecognised as-is.
+3. **The marketplace/underwriting stub uses one invented invoice identity**,
+   `INV-2026-0004`, flagged the same way Phase 3's `MOCK-` numbers were:
+   nothing in `EINVOICE_QR.md` §7 assigns a fourth listing-ready invoice.
+   The whole `lib/mocks/marketplace-store.ts` file is disposable once your
+   real listing/eligibility endpoints land — it was never meant to model
+   your engine.
+4. The demo engine's fixed baselines mean it cannot produce a `CRITICAL`
+   band (floor sits around 29, inside `HIGH`) — noted in case anyone goes
+   looking for a `CRITICAL` listing in the mock data for a screenshot before
+   your real engine replaces it.

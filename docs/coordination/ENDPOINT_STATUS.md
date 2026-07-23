@@ -40,14 +40,14 @@ endpoint, and has no mock→live promotion to track.
 | POST …/{id}/declarations | 3 | — | mock | wizard step 5 · 201. All eight must be true; a false one is **422** with `details.notAffirmed[]` naming which · **template version provisional, see Q-13** |
 | POST …/{id}/submit | 3 | — | mock | wizard step 6 · **200**, not 201. 409 `DUPLICATE_INVOICE` with `details.reviewReference` → blocked screen (ZM-VER-001, Q-11 resolved by that key) |
 | GET …/{id}/verification | 3 | — | mock | verification panel · all 8 checks always recorded, passes included. `NOT_APPLICABLE` is not `PASS` |
-| GET …/{id}/risk | 4 | — | mock | |
-| GET/POST /admin/risk-models | 4 | — | mock | |
-| POST …/{id}/listing | 5 | — | mock | |
+| GET …/{id}/risk | 4 | — | mock | TrustScoreGauge/ComponentBars/FactorList on the supplier transaction detail and the bank underwriting view |
+| GET/POST /admin/risk-models | 4 | — | mock | handler not implemented — no admin screen this session, not B's Phase 4 scope |
+| POST …/{id}/listing | 5 | — | mock | not implemented — real listing activation is Phase 5's session, not this head start |
 | GET …/{id}/listing-current * | 5 | — | mock | v3.1.0 |
 | GET /listings/{id} | 5 | — | mock | |
 | GET /listings/{id}/offers | 5 | — | mock | role-split |
-| GET /marketplace/eligible | 5 | — | mock | |
-| GET /marketplace/listings/{id} * | 5 | — | mock | v3.1.0 |
+| GET /marketplace/eligible | 5 | — | mock | **Phase 4 kickoff head start** · bank marketplace feed · static 2-listing set, no real policy-filter eligibility yet |
+| GET /marketplace/listings/{id} * | 5 | — | mock | v3.1.0 · **Phase 4 kickoff head start** · bank underwriting view, incl. the Phase 4 risk components |
 | GET/POST /banks/policy-filters | 5 | — | mock | |
 | PATCH /banks/policy-filters/{id} * | 5 | — | mock | v3.1.0 |
 | POST /listings/{id}/offers/create | 5 | — | mock | |
