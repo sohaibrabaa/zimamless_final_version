@@ -627,5 +627,300 @@
       "CANCELLED": "Cancelled",
       "UNKNOWN": "Status not available"
     }
+  },
+  "risk": {
+    "sectionTitle": "Trust Score",
+    "compositeScoreLabel": "Composite score",
+    "outOf100": "out of 100",
+    "band": {
+      "LOW": "Low risk",
+      "MEDIUM": "Medium risk",
+      "HIGH": "High risk",
+      "CRITICAL": "Critical risk",
+      "UNKNOWN": "Not available"
+    },
+    "components": {
+      "title": "Component indicators"
+    },
+    "component": {
+      "supplierVerification": "Supplier verification",
+      "dataConfidence": "Data confidence",
+      "buyerProfile": "Buyer profile",
+      "invoiceScore": "Invoice score",
+      "platformBehavior": "Platform behavior"
+    },
+    "dataAvailability": {
+      "label": "Data availability",
+      "tooltip": "Shows how much of the government data used for this score was actually retrieved. A lower figure never lowers the score itself — a source that did not answer is treated as unknown, not as a negative finding."
+    },
+    "factors": {
+      "none": "No factors were recorded for this score.",
+      "positiveTitle": "Positive factors",
+      "positiveBadge": "Positive",
+      "riskTitle": "Risk factors",
+      "riskBadge": "Risk",
+      "reasonCodesTitle": "Reason codes"
+    },
+    "factor": {
+      "positive": {
+        "buyerActive": "The buyer's registry record is active.",
+        "verificationPassed": "The invoice passed every automated check.",
+        "cleanHistory": "No adverse conduct history on this platform."
+      },
+      "risk": {
+        "buyerLiquidation": "The buyer is under liquidation.",
+        "verificationReview": "The invoice's automated checks need review.",
+        "shortTenor": "The invoice matures in under 7 days.",
+        "priorDuplicate": "A prior submission from this supplier collided with an existing fingerprint."
+      }
+    },
+    "reasonCode": {
+      "PARTIAL_GOVERNMENT_DATA": "Partial government data",
+      "BUYER_UNDER_LIQUIDATION": "Buyer under liquidation",
+      "VERIFICATION_NEEDS_REVIEW": "Verification needs review",
+      "STANDARD_PROFILE": "Standard profile"
+    },
+    "modelVersion": "Model version {version}",
+    "calculatedAt": "Calculated {date}",
+    "mode": {
+      "ml": "Machine-learning model",
+      "rulesOnly": "Rules-only (degraded mode)"
+    },
+    "fallbackNotice": "This score was produced by the deterministic rules engine only — the machine-learning service was unavailable ({reason}). The eligibility and fraud rules that this score can never override were still fully applied.",
+    "fallbackReasonUnknown": "reason not reported",
+    "disclaimer": "This score is decision support only. It is not a guarantee, a credit rating, or a substitute for your own credit decision.",
+    "syntheticDataNotice": "This model is trained on clearly labelled synthetic data for this build. Treat scores as illustrative, not as a reflection of real payment history.",
+    "notAvailable": "A Trust Score has not been calculated for this transaction yet."
+  },
+  "marketplace": {
+    "feed": {
+      "intro": "Listings your bank is eligible to review, evaluated against your active policy filter.",
+      "empty": "No listings are open for offers right now.",
+      "review": "Review",
+      "column": {
+        "supplier": "Supplier",
+        "buyer": "Buyer",
+        "faceValue": "Face value",
+        "riskBand": "Risk band",
+        "deadline": "Offer deadline"
+      }
+    },
+    "detail": {
+      "backToFeed": "Back to marketplace",
+      "title": "Listing",
+      "notFound": "This listing could not be found.",
+      "supplierSection": "Supplier",
+      "legalName": "Legal name",
+      "establishmentNumber": "Establishment number",
+      "registryStatus": "Registry status",
+      "createOffer": "Create an offer",
+      "myOfferStatus": "Your offer on this listing: {status}",
+      "doubleFinancingNotice": "The platform is the single point of control against the same invoice being financed twice, across every bank on the marketplace — confidentiality between banks does not weaken that control."
+    },
+    "listing": {
+      "sectionTitle": "Marketplace listing",
+      "intro": "Activating a listing opens it to eligible banks for offers. The listing fee is incurred at activation whether or not financing ultimately succeeds.",
+      "activate": "Activate listing",
+      "confirmTitle": "Confirm listing activation",
+      "feeLabel": "Listing fee",
+      "feeWarning": "This fee applies as soon as the listing is activated, regardless of whether financing succeeds.",
+      "confirmActivate": "Activate and pay the listing fee",
+      "offerDeadline": "Offer submission deadline",
+      "selectionDeadline": "Selection deadline",
+      "offerCount": "Offers received",
+      "compareOffers": "Compare offers",
+      "status": {
+        "OPEN_FOR_OFFERS": "Open for offers",
+        "OFFER_PERIOD_CLOSED": "Offer period closed",
+        "AWAITING_SELECTION": "Awaiting your selection",
+        "OFFER_SELECTED": "Offer selected",
+        "EXPIRED": "Expired",
+        "CANCELLED": "Cancelled"
+      }
+    },
+    "offer": {
+      "title": "Create an offer",
+      "backToListing": "Back to listing",
+      "backToOffers": "Back to offers",
+      "notFound": "This offer could not be found.",
+      "statusTitle": "Offer status",
+      "alreadyOffered": "Your bank already has a current offer on this listing. Withdraw it from \"My offers\" before submitting a new one.",
+      "belowFloor": "This offer does not currently meet the supplier's requirements.",
+      "windowClosed": "The offer submission window for this listing has closed.",
+      "notEligible": "Your bank is not eligible for this listing.",
+      "validationFailed": "The gross funding amount cannot exceed the invoice's outstanding amount.",
+      "transactionTypeLabel": "Transaction type",
+      "transactionType": {
+        "INVOICE_FINANCING": "Invoice financing",
+        "RECEIVABLE_PURCHASE": "Receivable purchase",
+        "RECEIVABLE_ASSIGNMENT": "Receivable assignment",
+        "OTHER": "Other"
+      },
+      "transactionTypeExplain": {
+        "INVOICE_FINANCING": "The bank advances funds against the invoice; the supplier remains responsible for it under the terms of the offer.",
+        "RECEIVABLE_PURCHASE": "The bank buys the receivable outright.",
+        "RECEIVABLE_ASSIGNMENT": "The right to collect the receivable is formally assigned to the bank.",
+        "OTHER": "A structure not covered by the standard categories — described in the offer's conditions."
+      },
+      "recourseTypeLabel": "Recourse type",
+      "recourseType": {
+        "FULL_RECOURSE": "Full recourse",
+        "LIMITED_RECOURSE": "Limited recourse",
+        "NON_RECOURSE": "Non-recourse",
+        "OTHER": "Other"
+      },
+      "recourseTypeExplain": {
+        "FULL_RECOURSE": "If the buyer does not pay, the supplier is fully responsible for repaying the bank.",
+        "LIMITED_RECOURSE": "The supplier's responsibility if the buyer does not pay is capped or conditional.",
+        "NON_RECOURSE": "The bank bears the risk of buyer non-payment; the supplier has no repayment obligation.",
+        "OTHER": "A recourse structure not covered by the standard categories — described in the offer's conditions."
+      },
+      "grossFundingAmount": "Gross funding amount",
+      "bankDiscountAmount": "Bank discount",
+      "bankFeesAmount": "Bank fees",
+      "otherDeductionsAmount": "Other deductions",
+      "platformCommissionAmount": "Platform commission",
+      "listingFeeAmount": "Listing fee (unpaid portion)",
+      "netSupplierPayout": "Net supplier payout",
+      "netSupplierPayoutPreview": "Net supplier payout (preview)",
+      "serverComputedTitle": "Platform commission and listing fee",
+      "serverComputedNote": "Computed by the platform when the offer is created. The figures below are a live preview and are always reconciled to what the platform actually records.",
+      "expectedPayoutDate": "Expected payout date",
+      "validUntil": "Offer valid until",
+      "conditionsTitle": "Conditions",
+      "addCondition": "Add a condition",
+      "conditionTypeLabel": "Condition type",
+      "conditionType": {
+        "REQUIRED_GUARANTEE": "Required guarantee",
+        "REQUIRED_DOCUMENT": "Required document",
+        "RECOURSE_TERM": "Recourse term",
+        "FUNDING_TIMELINE": "Funding timeline",
+        "CONTRACTUAL_CONDITION": "Contractual condition",
+        "OTHER": "Other"
+      },
+      "conditionTitle": "Title",
+      "conditionDescription": "Description",
+      "conditionMandatory": "Mandatory",
+      "removeCondition": "Remove",
+      "noConditions": "No conditions added.",
+      "submit": "Submit offer",
+      "status": {
+        "PENDING_INTERNAL_APPROVAL": "Pending internal approval",
+        "ACTIVE": "Active",
+        "SELECTED": "Selected",
+        "NOT_SELECTED": "Not selected",
+        "WITHDRAWN": "Withdrawn",
+        "EXPIRED": "Expired"
+      },
+      "notSelectedExplain": "The supplier accepted a different offer. No information about the winning bank or any other offer is shared.",
+      "viewContract": "View contract"
+    },
+    "offers": {
+      "myOffersTab": "My offers",
+      "approvalQueueTab": "Approval queue",
+      "myOffersEmpty": "Your bank has not submitted any offers yet.",
+      "approvalQueueEmpty": "Nothing is waiting for your approval.",
+      "column": {
+        "version": "Version",
+        "status": "Status",
+        "netSupplierPayout": "Net supplier payout",
+        "creator": "Created by"
+      },
+      "withdraw": "Withdraw",
+      "approve": "Approve",
+      "ownOfferNote": "You created this offer — a different approver must review it.",
+      "currentUser": "Signed in as {name}."
+    },
+    "policyFilters": {
+      "title": "Policy filters",
+      "intro": "Filters determine which marketplace listings your bank is shown (ZM-MKT-001/002). A listing must match an active filter to appear in your feed.",
+      "empty": "No policy filters configured yet — your bank will not see any listings until one is active.",
+      "active": "Active",
+      "inactive": "Inactive",
+      "activate": "Activate",
+      "deactivate": "Deactivate",
+      "newTitle": "New policy filter",
+      "name": "Filter name",
+      "minAmount": "Minimum invoice amount",
+      "maxAmount": "Maximum invoice amount",
+      "minTenorDays": "Minimum tenor (days)",
+      "maxTenorDays": "Maximum tenor (days)",
+      "minTrustScore": "Minimum Trust Score",
+      "maxRiskBand": "Maximum risk band",
+      "noRiskBandCeiling": "No ceiling",
+      "create": "Create filter"
+    },
+    "comparison": {
+      "title": "Compare offers",
+      "intro": "Every active offer on this listing, in the order it was submitted. Nothing here is ranked or recommended — the decision is yours.",
+      "backToInvoice": "Back to invoice",
+      "noListing": "This invoice has not been listed on the marketplace yet.",
+      "empty": "No offers have been submitted on this listing yet.",
+      "deadlinePassed": "Selection deadline passed",
+      "timeRemaining": "{hours}h {minutes}m to select"
+    },
+    "acceptance": {
+      "accept": "Accept this offer",
+      "confirmTitle": "Confirm acceptance",
+      "irreversibleWarning": "Accepting is atomic and irreversible. Once confirmed, this offer is locked in and every other offer on this listing is automatically declined.",
+      "confirmAccept": "Accept and lock in this offer",
+      "successTitle": "Offer accepted",
+      "successIntro": "This offer is now locked in. The invoice cannot be relisted or claimed by any other financing.",
+      "viewConditions": "View conditions",
+      "rejectAll": "Reject all offers",
+      "rejectAllConfirmTitle": "Reject all offers?",
+      "rejectAllExplain": "Every offer on this listing will be declined and the invoice returns to eligible, free to be relisted. This cannot be undone.",
+      "rejectAllConfirm": "Reject all offers",
+      "allRejected": "All offers on this listing were rejected. The invoice has returned to eligible."
+    },
+    "timeline": {
+      "title": "Progress",
+      "step": {
+        "OFFER_ACCEPTED": "Offer accepted",
+        "CONDITIONS_PENDING": "Conditions pending",
+        "CONTRACTED": "Contract fully signed"
+      },
+      "viewConditions": "View conditions checklist",
+      "viewContract": "View contract"
+    },
+    "conditions": {
+      "title": "Conditions",
+      "intro": "Every condition attached to the accepted offer. Mandatory conditions must be fulfilled before a contract can be generated.",
+      "empty": "This offer carried no conditions.",
+      "notesLabel": "Notes",
+      "markFulfilled": "Mark fulfilled",
+      "status": {
+        "PENDING": "Pending",
+        "FULFILLED": "Fulfilled",
+        "WAIVED": "Waived",
+        "FAILED": "Failed"
+      }
+    },
+    "contract": {
+      "title": "Contract",
+      "notGenerated": "No contract has been generated for this transaction yet.",
+      "generate": "Generate contract",
+      "notReady": "This transaction is not yet ready for a contract.",
+      "checkFailure": {
+        "CONDITIONS_UNFULFILLED": "Every mandatory condition must be fulfilled or waived first.",
+        "DECLARATIONS_NOT_RECONFIRMED": "The supplier's declarations could not be reconfirmed.",
+        "BANK_ACCOUNT_UNVERIFIED": "The supplier's disbursement bank account is not yet verified."
+      },
+      "status": {
+        "PENDING_SIGNATURES": "Pending signatures",
+        "FULLY_SIGNED": "Fully signed"
+      },
+      "templateVersion": "Template version {version}",
+      "canonicalLanguageNote": "The English text governs in the event of any discrepancy between languages.",
+      "termsSection": "Terms",
+      "signaturesSection": "Signatures",
+      "supplierSignature": "Supplier",
+      "bankSignature": "Bank",
+      "signed": "Signed",
+      "pending": "Pending",
+      "signAction": "Sign this contract",
+      "notSignatory": "Only an authorized signatory for your organization can sign this contract.",
+      "listEmpty": "No transactions have reached a contract yet."
+    }
   }
 }

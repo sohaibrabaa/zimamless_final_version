@@ -5,6 +5,9 @@ import { useState } from "react";
 import { useParams } from "next/navigation";
 import { FinancingGate } from "@/components/onboarding/FinancingGate";
 import { VerificationPanel } from "@/components/invoices/VerificationPanel";
+import { RiskPanel } from "@/components/risk/RiskPanel";
+import { ListingActivationPanel } from "@/components/marketplace/ListingActivationPanel";
+import { PostAcceptanceTimeline } from "@/components/marketplace/PostAcceptanceTimeline";
 import { Badge } from "@/components/ui/Badge";
 import { SkeletonText } from "@/components/ui/Skeleton";
 import { ErrorState } from "@/components/ui/StatePanels";
@@ -22,6 +25,7 @@ import {
   transactionStateTone,
 } from "@/lib/invoices/transaction-status";
 import { buyerStatusLabelKey, buyerStatusTone } from "@/lib/invoices/buyer-rules";
+import { useRiskAssessment } from "@/lib/risk/useRiskAssessment";
 
 export default function Page() {
   return (
@@ -39,6 +43,10 @@ function TransactionDetail() {
 
   const { data: transaction, loading, error, reload } = useTransaction(id);
   const { data: verification, loading: verificationLoading } = useVerificationRun(
+    id,
+    hasVerificationRun(transaction?.state)
+  );
+  const { data: risk, loading: riskLoading } = useRiskAssessment(
     id,
     hasVerificationRun(transaction?.state)
   );
@@ -150,6 +158,35 @@ function TransactionDetail() {
         <section className="mt-4">
           <VerificationPanel run={verification} loading={verificationLoading} />
         </section>
+      )}
+
+      {/*
+        Requirements §9 scopes the Trust Score to bank underwriting (ZM-RSK-012
+        names the audience as "an eligible bank"), but nothing forbids the
+        supplier seeing their own — and a supplier watching their own score
+        exist is a reasonable transparency default given §9.1's plain-language
+        disclaimer already governs every display. Loading state only, never a
+        hard error: a transaction that has not been scored yet is normal, not
+        broken.
+      */}
+      {hasVerificationRun(transaction.state) && !riskLoading && risk && (
+        <section className="mt-4">
+          <h2 className="mb-2 text-sm font-semibold">{t("risk.sectionTitle")}</h2>
+          <RiskPanel assessment={risk} />
+        </section>
+      )}
+
+      {id && (transaction.state === "ELIGIBLE" || transaction.state === "OPEN_FOR_OFFERS") && (
+        <ListingActivationPanel
+          transactionId={id}
+          locale={locale}
+          eligible={transaction.state === "ELIGIBLE"}
+          onActivated={reload}
+        />
+      )}
+
+      {id && transaction.state && (
+        <PostAcceptanceTimeline state={transaction.state} locale={locale} transactionId={id} />
       )}
     </div>
   );

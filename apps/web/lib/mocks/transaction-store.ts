@@ -613,6 +613,21 @@ export function verificationFor(id: string): VerificationRun | undefined {
   return findTransaction(id)?.verification;
 }
 
+/**
+ * Phase 5's marketplace store is the only caller: listing activation moves
+ * an `ELIGIBLE` transaction to `OPEN_FOR_OFFERS`, and the listing-outcome
+ * table (§10.5) moves it back to `ELIGIBLE` when the listing closes with no
+ * accepted offer. Kept as a narrow setter rather than exporting the mutable
+ * array itself, matching this store's existing pattern of function-scoped
+ * mutation.
+ */
+export function setTransactionState(id: string, state: TransactionState): MockTransaction | undefined {
+  const transaction = findTransaction(id);
+  if (!transaction) return undefined;
+  transaction.state = state;
+  return transaction;
+}
+
 /** Test/dev affordance: empty the store without a page reload. */
 export function resetTransactionMocks() {
   transactions = [];
