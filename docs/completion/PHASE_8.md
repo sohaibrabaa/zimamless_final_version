@@ -193,18 +193,33 @@ promoted to live, the mock is what the demo shows, and a fixture that silently
 switches off a feature is worse than no fixture — the code looks built and
 never appears.
 
-`ZM-NOT-007` is now declared **partially met**: the manual-call record has
-storage and audit, and no route can create it, because the frozen contract
-declares no notification paths and the overlay declares only list and read.
-Raised as **Q-17** rather than worked around.
+`ZM-NOT-007` was declared **partially met** — the manual-call record had
+storage and audit and no route could create it — and raised as **Q-17** rather
+than worked around. The product owner ruled Option 1 the same day
+(**D-16**), so `POST /notifications/{id}/manual-call` is now in the v3.1.0
+overlay and served, platform staff only, and the requirement is met.
 
 ## Deliberately not done
 
-**Live endpoint promotion.** Still 0 of ~90. The Phase 8 endpoints are proved
-live by the integration suite, but no screen has been driven against the real
-API by hand, and the promotion rule requires a same-day smoke test on the
-consuming screen. This is the Phase 9 rehearsal gate and remains the largest
-demo risk.
+**Live endpoint promotion — started, not finished.** It was 0 of ~90; it is now
+5, and the mechanism that was missing exists. `apps/web/test/live/` renders the
+real component against the real API over a real Supabase JWT with no MSW
+installed, which is what the promotion rule has always required and what
+nothing satisfied before. Five Phase 8 endpoints are promoted on that evidence
+and every other entry stays `mock` — not assumed broken, simply not yet
+exercised through a screen.
+
+The remaining 85 are the Phase 9 rehearsal gate, and the demo path
+(onboarding → invoice → risk → listing → offers → acceptance → contract →
+funding) is the order to take them in. Until then the integration suite and the
+demo still test two different systems for most of the product, which remains
+the largest demo risk.
+
+Building the harness surfaced one thing worth keeping: a Phase 8 test asserted
+`items[0].read === false` on the inbox, which quietly depended on nobody having
+ever opened a supplier notification. The live suite marks one read against the
+same hosted database, exactly as a person would, and the assertion failed. A
+test that breaks because the product was used is testing the wrong thing.
 
 **`BUYER_PAYMENT_CONFIRMATION` (LT-14).** The buyer notification is catalogued
 in `docs/specs/NOTIFICATIONS.md` with its constraint — operational only, never

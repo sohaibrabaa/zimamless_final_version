@@ -2,7 +2,9 @@
 
 Mirror of `apps/web/lib/api/endpoint-status.ts`. **Announced live** is set when the endpoint is deployed and proved by an integration test; the **B status** column flips to `live` only after a same-day smoke test on the consuming screen. Demo-path endpoints must all be `live` before the Phase 9 rehearsal.
 
-The column names date from the retired two-agent split; one engineer now owns both sides. The two-step promotion survives that change deliberately — the second step tests something the first cannot, which is why every row still reads `mock`.
+The column names date from the retired two-agent split; one engineer now owns both sides. The two-step promotion survives that change deliberately — the second step tests something the first cannot.
+
+**What satisfies step two:** `apps/web/test/live/` (`npm run test:live` from `apps/web`) renders the real component against the real API over a real Supabase JWT, with no MSW installed. A row flips to `live` when a spec there covers it, and the note says which. Rows still reading `mock` are mocked because nothing has exercised them that way yet — never because they are assumed to work.
 
 Legend: `mock` = MSW mock · `live` = real API, smoke-passed · `n/a` = not yet generated.
 
@@ -75,11 +77,12 @@ endpoint, and has no mock→live promotion to track.
 | POST …/{id}/disputes · resolve * | 8 | **2026-07-23** | mock | Opening pauses the maturity job **entirely** — no reminders, no state changes. `resolutionNotes` is mandatory: the platform does not adjudicate (ZM-REC-012/014). Resolving returns the transaction to its pre-dispute state |
 | POST /offers/{id}/withdrawal-case · decide * | 8 | **2026-07-23** | mock | Penalty **recorded, never deducted** (LT-12) — zero ledger entries. `applicable:null` in the policy means a human decides. decide is platform-only and takes `penaltyApplicable` verbatim; an eligible relisting raises a **REQUESTED** relisting request, not an approved one (ZM-REC-018) |
 | POST …/{id}/fraud-review · decide * | 8 | **2026-07-23** | mock | Opening freezes and concludes **nothing**; compliance is notified. `GET /fraud-cases/{id}` **404s for a bank or supplier**. decide is compliance-only and is the only confirmed status in the system (ZM-FRD-004) |
-| GET /cases * | 8 | **2026-07-23** | mock | v3.1.0 · Fraud cases are **excluded from the query** for a bank or supplier, not redacted. Summary carries type/status/amount/date and never a counterparty free-text field |
-| GET /admin/relisting-requests * | 8 | **2026-07-23** | mock | v3.1.0 · Platform only — a bank reading it would see which receivables are about to return to the market before they are listed. The seven ZM-REC-018 checks report `null` when unrecorded rather than being omitted: "checked and failed" and "not yet checked" mean opposite things to a reviewer. No screen consumes it yet; the review desk and `POST …/approve` are Phase 9 |
+| GET /cases * | 8 | **2026-07-23** | **live** | v3.1.0 · Fraud cases are **excluded from the query** for a bank or supplier, not redacted. Summary carries type/status/amount/date and never a counterparty free-text field |
+| GET /admin/relisting-requests * | 8 | **2026-07-23** | **live** | v3.1.0 · Platform only — a bank reading it would see which receivables are about to return to the market before they are listed. The seven ZM-REC-018 checks report `null` when unrecorded rather than being omitted: "checked and failed" and "not yet checked" mean opposite things to a reviewer. No screen consumes it yet; the review desk and `POST …/approve` are Phase 9 |
 | POST …/{id}/relist-request * | 8 | — | mock | v3.1.0 |
 | POST …/{id}/cancel * | 8 | — | mock | v3.1.0 |
-| GET /notifications · POST read * | 8 | **2026-07-23** | mock | v3.1.0 · Scoped to `recipient_user_id` alone — a notification is addressed to a person, not an org. No `destination` or gateway reference returned. read sets DELIVERED, the only delivery the platform can honestly observe |
+| GET /notifications · POST read * | 8 | **2026-07-23** | **live** | v3.1.0 · Scoped to `recipient_user_id` alone — a notification is addressed to a person, not an org. No `destination` or gateway reference returned. read sets DELIVERED, the only delivery the platform can honestly observe |
+| POST /notifications/{id}/manual-call * | 8 | **2026-07-23** | mock | **D-16 (Q-17)** · additive: ZM-NOT-007 had storage (/) and no route to write it. Platform staff incl. compliance. Deliberately NOT folded into /read — a recipient opening their inbox and an operator attesting to a phone call are different claims by different people. Blank notes refused; the previous notes are kept in the audit entry (INV-7). No screen consumes it yet |
 | GET/PATCH /admin/settings | 9 | — | mock | |
 | GET/POST /admin/commission-tiers | 9 | — | mock | |
 | GET /admin/audit-logs | 9 | — | mock | |

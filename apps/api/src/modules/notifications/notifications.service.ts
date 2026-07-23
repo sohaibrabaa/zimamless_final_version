@@ -232,14 +232,14 @@ export class NotificationsService {
    * that a human did, with their notes, through the same pipeline and the same
    * evidence fields as everything else.
    *
-   * **This method has no HTTP route, and cannot have one without a ruling.**
-   * The frozen contract declares no notification paths and the v3.1.0 overlay
-   * declares only `GET /notifications` and `POST /notifications/{id}/read`, so
-   * ZM-NOT-007's manual-call record has storage but no input. Raised as Q-17;
-   * kept rather than deleted because the schema clearly intends the capability
-   * and the columns are already there. Do not wire it to `read` — a recipient
+   * Reached by `POST /notifications/{id}/manual-call`, which is **additive**:
+   * neither the frozen contract nor the v3.1.0 overlay declares a path for it,
+   * because both declare storage for the manual-call record (ZM-NOT-007) and
+   * no way to write it. Raised as Q-17 and ruled Option 1 by the product owner
+   * on 2026-07-23. It is deliberately not folded into `read` — a recipient
    * opening their inbox and an operator attesting to a phone conversation are
-   * different claims by different people.
+   * different claims by different people, and one route would let the first
+   * write the second.
    *
    * Audited with the previous notes in `previousValue`, and that is not
    * boilerplate. `manual_call_notes` is a single column, so a second operator

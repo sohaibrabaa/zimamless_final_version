@@ -7,7 +7,6 @@ import { AppModule } from '../src/app.module';
 import { AppConfig } from '../src/config/configuration';
 import { SystemTimeProvider } from '../src/common/time/time.provider';
 import { MaturityService } from '../src/modules/payments/maturity.service';
-import { NotificationsService } from '../src/modules/notifications/notifications.service';
 
 /**
  * Phase 8 integration checkpoint — the lifecycle after money moves.
@@ -1020,7 +1019,22 @@ describeIfDb('Phase 8 — post-funding lifecycle', () => {
       expect(Array.isArray(res.body.items)).toBe(true);
       expect(res.body.items.length).toBeGreaterThan(0);
       expect(typeof res.body.unreadCount).toBe('number');
-      expect(res.body.items[0].read).toBe(false);
+
+      // Asserts the *shape*, not that the newest message happens to be
+      // unread. The previous version checked `items[0].read === false`, which
+      // quietly depended on nothing in the world having opened a supplier
+      // notification — and `apps/web/test/live` now marks one read against
+      // this same hosted database, exactly as a person would. A test that
+      // fails because the product was used is testing the wrong thing.
+      for (const item of res.body.items as { read: unknown }[]) {
+        expect(typeof item.read).toBe('boolean');
+      }
+
+      // The messages this fixture generated are present and belong to it.
+      const mine = (res.body.items as { transactionId: string | null }[]).filter(
+        (i) => i.transactionId === main.transactionId,
+      );
+      expect(mine.length).toBeGreaterThan(0);
     }, 60_000);
 
     it('never returns the destination or the gateway reference', async () => {
@@ -1194,23 +1208,42 @@ describeIfDb('Phase 8 — post-funding lifecycle', () => {
       notificationId = rows[0].id;
     }, 60_000);
 
-    it('records the first call, with the operator and DELIVERED', async () => {
-      const row = await app.get(NotificationsService).recordManualCall(
-        notificationId,
-        { userId: opsUserId, organizationId: orgs.platformOps, organizationType: 'PLATFORM', roles: ['PLATFORM_OPS_ADMIN'] },
-        'Spoke to the finance manager; buyer paid on the 3rd.',
+    it('records the first call over HTTP, with the operator and DELIVERED', async () => {
+      const res = await api('platformOps', 'post', `/notifications/${notificationId}/manual-call`, {
+        notes: 'Spoke to the finance manager; buyer paid on the 3rd.',
+      });
+      expect(res.status).toBe(200);
+
+      const { rows } = await db.query<{ status: string; manual_call_by: string; delivered_at: Date }>(
+        `SELECT status, manual_call_by, delivered_at FROM notifications WHERE id = $1`,
+        [notificationId],
       );
-      expect(row.status).toBe('DELIVERED');
-      expect(row.manual_call_by).toBe(opsUserId);
-      expect(row.delivered_at).not.toBeNull();
+      expect(rows[0].status).toBe('DELIVERED');
+      expect(rows[0].manual_call_by).toBe(opsUserId);
+      expect(rows[0].delivered_at).not.toBeNull();
+    }, 60_000);
+
+    it('refuses a blank outcome — a record that says nothing is worse than none', async () => {
+      const res = await api('platformOps', 'post', `/notifications/${notificationId}/manual-call`, {
+        notes: '',
+      });
+      expect(res.status).toBe(400);
+    }, 60_000);
+
+    it('refuses a bank and a supplier recording a call', async () => {
+      for (const persona of ['bankOps', 'supplier'] as const) {
+        const res = await api(persona, 'post', `/notifications/${notificationId}/manual-call`, {
+          notes: 'Not mine to record.',
+        });
+        expect([403, 404]).toContain(res.status);
+      }
     }, 60_000);
 
     it('keeps the first operator’s notes in the audit trail when a second call overwrites them', async () => {
-      await app.get(NotificationsService).recordManualCall(
-        notificationId,
-        { userId: complianceUserId, organizationId: orgs.compliance, organizationType: 'PLATFORM', roles: ['PLATFORM_COMPLIANCE'] },
-        'Called back; the finance manager retracted the earlier statement.',
-      );
+      const res = await api('compliance', 'post', `/notifications/${notificationId}/manual-call`, {
+        notes: 'Called back; the finance manager retracted the earlier statement.',
+      });
+      expect(res.status).toBe(200);
 
       const { rows } = await db.query<{ previous_value: { manualCallNotes: string } | null }>(
         `SELECT previous_value FROM audit_logs

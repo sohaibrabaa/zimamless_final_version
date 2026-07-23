@@ -3748,6 +3748,58 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/notifications/{id}/manual-call": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Record a call an operator actually made (platform staff only)
+         * @description ZM-NOT-007 requires the manual call record with its recording user and outcome. `notifications.manual_call_notes` and `manual_call_by` exist in the frozen schema and nothing could write them. Deliberately separate from `/read`: a recipient opening their inbox and an operator attesting to a phone conversation are different claims by different people. The previous notes are retained in the audit entry — the column holds one value, so overwriting a colleague's account of a conversation with no trace would be a hard delete of evidence (INV-7).
+         */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    id: components["parameters"]["PathId"];
+                };
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": {
+                        notes: string;
+                    };
+                };
+            };
+            responses: {
+                /** @description Recorded */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+                /** @description No MANUAL_CALL notification with that id */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {

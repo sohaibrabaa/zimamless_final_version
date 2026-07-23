@@ -211,4 +211,4 @@ Options considered:
 Recommendation: **Option 1**.
 Interim behaviour: `NotificationsService.recordManualCall()` is retained, audited, and marked in its doc comment as having no route pending this ruling. It takes the previous notes in `previousValue` on the audit entry, because `manual_call_notes` is a single column and a second operator recording a later call would otherwise overwrite the first one's account of the conversation with no trace — a hard delete of evidence in a system that forbids them (INV-7). No caller exists, so nothing writes it today.
 Needed by: Phase 9 if a manual-call demo step is wanted; otherwise the requirement stays partially met and is declared as such in `docs/specs/NOTIFICATIONS.md`.
-Status: OPEN
+Status: RULED (see DECISIONS.md D-16 — Option 1 approved 2026-07-23; POST /notifications/{id}/manual-call added to the v3.1.0 overlay and served)

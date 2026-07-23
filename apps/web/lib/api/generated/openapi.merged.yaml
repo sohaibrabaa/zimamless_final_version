@@ -2012,6 +2012,33 @@ paths:
       responses:
         '200':
           description: Marked read
+  /notifications/{id}/manual-call:
+    post:
+      tags:
+        - Notifications
+      summary: Record a call an operator actually made (platform staff only)
+      description: |
+        ZM-NOT-007 requires the manual call record with its recording user and outcome. `notifications.manual_call_notes` and `manual_call_by` exist in the frozen schema and nothing could write them. Deliberately separate from `/read`: a recipient opening their inbox and an operator attesting to a phone conversation are different claims by different people. The previous notes are retained in the audit entry — the column holds one value, so overwriting a colleague's account of a conversation with no trace would be a hard delete of evidence (INV-7).
+      parameters:
+        - $ref: '#/components/parameters/PathId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - notes
+              properties:
+                notes:
+                  type: string
+                  minLength: 1
+                  maxLength: 4000
+      responses:
+        '200':
+          description: Recorded
+        '404':
+          description: No MANUAL_CALL notification with that id
 components:
   securitySchemes:
     bearerAuth:

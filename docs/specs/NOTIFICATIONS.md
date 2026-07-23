@@ -38,15 +38,24 @@ All four sit behind the `NOTIFICATION_CHANNELS` symbol. Nothing in the domain
 names a concrete adapter, so swapping a dummy for a real gateway is a one-line
 change in `app.module.ts`.
 
-**`MANUAL_CALL` is stuck at `QUEUED`, and this is a known gap, not an
-oversight.** `ZM-NOT-007` requires the manual call record with its recording
-user and outcome; `notifications.manual_call_notes` and `manual_call_by` exist
-in the frozen schema and `NotificationsService.recordManualCall()` writes them,
-audited. What is missing is a route: the frozen contract declares no
-notification paths at all and the v3.1.0 overlay declares only
-`GET /notifications` and `POST /notifications/{id}/read`. So the requirement is
-met in storage and unreachable through the API. Raised as **Q-17**; ZM-NOT-007
-is declared **partially met** until it is ruled on.
+**`MANUAL_CALL` leaves `QUEUED` only when a human says so**, through
+`POST /notifications/{id}/manual-call` — added additively under **D-16** after
+Q-17 found that `ZM-NOT-007` had storage (`manual_call_notes`, `manual_call_by`)
+and no route to write it. Platform staff only, including compliance: an officer
+telephoning a supplier during a fraud review is exactly the call this record
+exists for.
+
+It is deliberately **not** folded into `/read`. A recipient opening their inbox
+and an operator attesting to a phone conversation are different claims by
+different people, and one route would let the first write the second. A blank
+outcome is refused: a record asserting that a conversation happened while
+saying nothing about it is worse than no record, and would satisfy the column
+while defeating the requirement.
+
+The previous notes are kept in the audit entry's `previousValue`. The column
+holds one value, so a second operator's call overwrites a colleague's account
+of a conversation that happened offline and cannot be reconstructed — a hard
+delete of evidence in a system that forbids them (INV-7).
 
 ---
 

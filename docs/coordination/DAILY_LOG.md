@@ -1157,3 +1157,48 @@ OUTSTANDING: unchanged. Live promotion is still 0 of ~90 and remains the
   largest demo risk; `POST /admin/relisting-requests/{id}/approve` and
   `POST /transactions/{id}/relist-request` stay unserved, with the other five
   Phase 9 paths.
+
+---
+
+## 2026-07-23 (later still) — first live endpoint promotions, and D-16
+
+**PROMOTED TO LIVE — 5 of ~90, the first since Phase 1.** Not by assertion:
+`apps/web/test/live/` renders the real component against the real API over a
+real Supabase JWT with no MSW installed (`npm run test:live` from `apps/web`,
+16 tests). Separate config because it needs the API up, the seed applied and
+network access; the default suite stays hermetic.
+
+  - `GET /notifications` · `POST /notifications/{id}/read` — inbox rendered,
+    envelope asserted field by field, unread filtering proved server-side, and
+    another user's notification refused with 404 rather than 403.
+  - `GET /transactions/{id}/payments` — a real `OVERDUE_UNCONFIRMED`
+    transaction from the seed rendered through `PaymentTimeline` in EN **and**
+    AR, asserting the words that reach the DOM. That duplicates the
+    bundle-reading unit test deliberately: a key that exists and is never
+    rendered passes that one and fails this one.
+  - `GET /cases` — fraud exclusion asserted against real bank and supplier
+    tokens, at the server, not the client filter.
+  - `GET /admin/relisting-requests` — platform only; refusal asserted for both
+    a bank and a supplier.
+
+LIVE (new): **`POST /notifications/{id}/manual-call`** — additive under
+  **D-16**, ruled today against Q-17. ZM-NOT-007 had storage
+  (`manual_call_notes`, `manual_call_by`) and no route to write it. Platform
+  staff including compliance — an officer telephoning a supplier during a fraud
+  review is exactly this record. Deliberately not folded into `/read`: a
+  recipient opening their inbox and an operator attesting to a phone call are
+  different claims by different people. Blank notes are refused. Overlay and
+  generated client updated; conformance 76/83, no drift. No screen consumes it
+  yet, so it stays `mock` on the board.
+
+CHANGED (test, worth knowing): the Phase 8 inbox test asserted
+  `items[0].read === false`, which silently depended on nobody ever having
+  opened a supplier notification. The live suite now marks one read against the
+  same hosted database, exactly as a person would. A test that fails because
+  the product was used is testing the wrong thing; it now asserts the shape and
+  that the fixture's own messages are present.
+
+OUTSTANDING: 85 of ~90 endpoints still `mock` — not assumed broken, just not
+  yet exercised through a screen. The demo path (onboarding → invoice → risk →
+  listing → offers → acceptance → contract → funding) is the priority order for
+  the next promotion pass.

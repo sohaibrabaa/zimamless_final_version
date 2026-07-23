@@ -1,4 +1,5 @@
 import {
+  Body,
   Controller,
   DefaultValuePipe,
   Get,
@@ -13,7 +14,8 @@ import {
 } from '@nestjs/common';
 import { ApiOperation, ApiQuery, ApiResponse, ApiTags } from '@nestjs/swagger';
 import { describeNotification, NotificationsService } from './notifications.service';
-import { CurrentContext, CurrentUser } from '../auth/decorators';
+import { CurrentContext, CurrentUser, RequireRoles } from '../auth/decorators';
+import { RecordManualCallDto } from './dto';
 import { MembershipRow, PlatformUser } from '../auth/auth.service';
 import { ActorContext } from '../onboarding/onboarding.service';
 import { AppException } from '../../common/errors/app.exception';
@@ -78,6 +80,43 @@ export class NotificationsController {
   ): Promise<Record<string, unknown>> {
     return describeNotification(
       await this.notifications.markRead(id, contextOf(user, membership)),
+    );
+  }
+
+  @Post(':id/manual-call')
+  @HttpCode(HttpStatus.OK)
+  // Compliance is included deliberately: an officer telephoning a supplier
+  // during a fraud review is exactly the call this record exists for, and
+  // leaving it out would push that conversation into a case note where the
+  // delivery evidence does not reach.
+  @RequireRoles(
+    'PLATFORM_OPS_ADMIN',
+    'PLATFORM_SUPER_ADMIN',
+    'PLATFORM_SUPPORT',
+    'PLATFORM_COMPLIANCE',
+  )
+  @ApiOperation({
+    summary: 'Record a call an operator actually made (ZM-NOT-007)',
+    description:
+      'Additive: the frozen contract and the v3.1.0 overlay both declare storage for the ' +
+      'manual-call record and no way to write it (Q-17, ruled 2026-07-23). The platform cannot ' +
+      'place calls, so this does not pretend to — it records that a human did, with their ' +
+      'notes, through the same evidence fields as every other channel. Deliberately separate ' +
+      'from `read`: a recipient opening their inbox and an operator attesting to a phone ' +
+      'conversation are different claims by different people. The previous notes are kept in ' +
+      'the audit entry, because the column holds one value and overwriting a colleague’s ' +
+      'account of a conversation with no trace would be a hard delete of evidence (INV-7).',
+  })
+  @ApiResponse({ status: 200, description: 'Recorded' })
+  @ApiResponse({ status: 404, description: 'No MANUAL_CALL notification with that id' })
+  async recordManualCall(
+    @CurrentUser() user: PlatformUser,
+    @CurrentContext() membership: MembershipRow,
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() body: RecordManualCallDto,
+  ): Promise<Record<string, unknown>> {
+    return describeNotification(
+      await this.notifications.recordManualCall(id, contextOf(user, membership), body.notes),
     );
   }
 }

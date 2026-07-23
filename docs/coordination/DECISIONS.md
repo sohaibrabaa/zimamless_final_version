@@ -39,3 +39,8 @@ Subject: Minor inconsistencies (OTP default status, Money regex allowing negativ
 Ruling: Acknowledged; no schema/API change. Settings keys added in migration 0002. Frontend branches on error `code`, not HTTP status, for OTP failures.
 
 ---
+
+## 2026-07-23 — RULING D-16 (Q-17)
+Subject: `ZM-NOT-007` requires a manual call record with its recording user and outcome; `notifications.manual_call_notes`/`manual_call_by` exist in the frozen schema, `MANUAL_CALL` is a channel enum member, and no path in `03_API_CONTRACT.yaml` or the v3.1.0 overlay can write them. The requirement had storage and no input.
+Ruling: **APPROVED — Option 1 of Q-17.** Additive `POST /notifications/{id}/manual-call` taking `{ notes }`, restricted to platform staff. Deliberately **not** folded into `POST /notifications/{id}/read`: a recipient opening their inbox and an operator attesting to a phone conversation are different claims by different people, and one route would let the first write the second.
+Consequence: `docs/amendments/API_v3.1.0_OVERLAY.yaml` gains the path; `NotificationsService.recordManualCall()` (already built and audited) becomes reachable. The previous notes are retained in the audit entry's `previousValue` — the column holds one value, so a second operator's call would otherwise overwrite a colleague's account of a conversation with no trace, which is a hard delete of evidence (INV-7). `docs/specs/NOTIFICATIONS.md` moves ZM-NOT-007 from *partially met* to met.
