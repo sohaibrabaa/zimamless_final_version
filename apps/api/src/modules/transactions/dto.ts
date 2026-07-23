@@ -14,6 +14,7 @@ import {
 } from 'class-validator';
 import { Type } from 'class-transformer';
 import { BuyerContactInputDto } from '../buyers/dto';
+import { MONEY_MESSAGE, MONEY_PATTERN } from '../../common/money/money';
 
 /**
  * The contract's Money pattern, applied at the edge.
@@ -22,9 +23,12 @@ import { BuyerContactInputDto } from '../buyers/dto';
  * what would be a 500 into the contract's 422 with a named field. Money is a
  * 3-dp string on every wire in this system; a JSON number is a contract
  * violation by the producer, not something to coerce.
+ *
+ * The expression itself lives beside `Money` now rather than here, because
+ * Phase 5 needed the same one and a second copy is how the validator at the
+ * edge and the parser in the service start disagreeing.
  */
-const MONEY = /^-?\d+\.\d{3}$/;
-const MONEY_MESSAGE = 'must be a decimal string with exactly 3 decimal places, e.g. "1250.000"';
+const MONEY = MONEY_PATTERN;
 
 export class InvoiceItemDto {
   @ApiProperty() @IsString() @MinLength(1) description!: string;

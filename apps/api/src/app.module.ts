@@ -33,6 +33,27 @@ import { StorageService } from './modules/documents/storage.service';
 import { MlClientService } from './modules/documents/ml-client.service';
 import { TransactionsController } from './modules/transactions/transactions.controller';
 import { TransactionsService } from './modules/transactions/transactions.service';
+import { AdminRiskModelsController, RiskController } from './modules/risk/risk.controller';
+import { RiskService } from './modules/risk/risk.service';
+import { RiskModelsService } from './modules/risk/risk-models.service';
+import { RiskModelClientService } from './modules/risk/risk-model-client.service';
+import { MarketplaceController, OffersController } from './modules/marketplace/marketplace.controller';
+import { ListingsService } from './modules/marketplace/listings.service';
+import { OffersService } from './modules/marketplace/offers.service';
+import { PolicyFiltersService } from './modules/marketplace/policy-filters.service';
+import { CommissionService } from './modules/marketplace/commission.service';
+import { ListingDeadlinesService } from './modules/marketplace/listing-deadlines.service';
+import {
+  AcceptanceController,
+  ContractsController,
+} from './modules/contracts/contracts.controller';
+import { AcceptanceService } from './modules/contracts/acceptance.service';
+import { ContractsService } from './modules/contracts/contracts.service';
+import { ConditionsService } from './modules/contracts/conditions.service';
+import {
+  DummySignatureProvider,
+  SIGNATURE_PROVIDER,
+} from './modules/contracts/signature.provider';
 
 export const APP_CONFIG = 'APP_CONFIG';
 
@@ -60,6 +81,13 @@ export const APP_CONFIG = 'APP_CONFIG';
     BuyersController,
     DocumentsController,
     TransactionsController,
+    RiskController,
+    AdminRiskModelsController,
+    MarketplaceController,
+    OffersController,
+    // --- Phase 6 ---
+    AcceptanceController,
+    ContractsController,
   ],
   providers: [
     {
@@ -122,6 +150,24 @@ export const APP_CONFIG = 'APP_CONFIG';
     MlClientService,
     DocumentsService,
     TransactionsService,
+    RiskModelsService,
+    RiskModelClientService,
+    RiskService,
+    CommissionService,
+    ListingsService,
+    OffersService,
+    PolicyFiltersService,
+    ListingDeadlinesService,
+
+    // --- Phase 6: selection, contracts, signatures ----------------------
+    AcceptanceService,
+    ContractsService,
+    ConditionsService,
+    // The provider is bound to a symbol, not to its class, so ZM-CON-009's
+    // "insertable without core domain changes" is a one-line swap here and
+    // nothing else. Nothing outside this file names DummySignatureProvider.
+    DummySignatureProvider,
+    { provide: SIGNATURE_PROVIDER, useExisting: DummySignatureProvider },
 
     { provide: APP_GUARD, useClass: AuthGuard },
     { provide: APP_INTERCEPTOR, useClass: AuditInterceptor },

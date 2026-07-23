@@ -25,7 +25,13 @@ export function proxy(request: NextRequest) {
 }
 
 export const config = {
+  // Excludes anything under _next/, api/, and any request for a static file
+  // (a path segment containing a dot) — the `public/` directory is served at
+  // the root with no locale segment, so prefixing it would 404 or, worse,
+  // redirect it. That silently broke `/mockServiceWorker.js`: MSW's browser
+  // fetches it at the root, this proxy redirected it to `/en/…`, and browsers
+  // refuse to register a service worker whose script arrived via a redirect.
   matcher: [
-    "/((?!_next/static|_next/image|api|favicon.ico|sitemap.xml|robots.txt).*)",
+    "/((?!_next/static|_next/image|api|favicon.ico|sitemap.xml|robots.txt|.*\\..*).*)",
   ],
 };

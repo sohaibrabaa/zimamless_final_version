@@ -44,13 +44,50 @@ describe('transitions the machine refuses', () => {
     expect(canTransition('CANCELLED', 'DRAFT')).toBe(false);
   });
 
-  it('does not yet allow listing — that is Phase 5 to add', () => {
-    // Declaring the transition now would assert a move no code can perform.
-    expect(canTransition('ELIGIBLE', 'OPEN_FOR_OFFERS')).toBe(false);
+  it('allows listing now that Phase 5 can perform it', () => {
+    // Phase 3 asserted this was false, deliberately: declaring a transition
+    // no code could perform would have been a claim about behaviour that did
+    // not exist. Phase 5 added listing activation, so the assertion flips
+    // rather than being deleted — the pair reads as a record of when the
+    // capability arrived.
+    expect(canTransition('ELIGIBLE', 'OPEN_FOR_OFFERS')).toBe(true);
+  });
+
+  it('returns a lapsed listing to ELIGIBLE rather than to a terminal state', () => {
+    // A missed selection deadline must not destroy the receivable's value —
+    // the supplier can relist.
+    expect(canTransition('OPEN_FOR_OFFERS', 'ELIGIBLE')).toBe(true);
+    expect(canTransition('OPEN_FOR_OFFERS', 'OFFER_ACCEPTED')).toBe(true);
   });
 
   it('is a whitelist, so an unknown pairing is refused rather than allowed', () => {
     expect(canTransition('FUNDED', 'PAID')).toBe(false);
+  });
+
+  it('moves between OFFER_ACCEPTED and CONDITIONS_PENDING in both directions', () => {
+    // The state is derived from whether a mandatory condition is unresolved,
+    // so it has to be able to move back when the last one is fulfilled — and
+    // forward again if a bank records something late.
+    expect(canTransition('OFFER_ACCEPTED', 'CONDITIONS_PENDING')).toBe(true);
+    expect(canTransition('CONDITIONS_PENDING', 'OFFER_ACCEPTED')).toBe(true);
+  });
+
+  it('reaches CONTRACTED from either accepted state', () => {
+    // Directly when the accepted offer carried no mandatory conditions at all.
+    expect(canTransition('OFFER_ACCEPTED', 'CONTRACTED')).toBe(true);
+    expect(canTransition('CONDITIONS_PENDING', 'CONTRACTED')).toBe(true);
+  });
+
+  it('cannot go back to the marketplace once an offer is accepted', () => {
+    // Acceptance is irreversible (INV-1/INV-4). Unwinding it is a withdrawal
+    // case in Phase 8, not a state change.
+    expect(canTransition('OFFER_ACCEPTED', 'OPEN_FOR_OFFERS')).toBe(false);
+    expect(canTransition('OFFER_ACCEPTED', 'ELIGIBLE')).toBe(false);
+    expect(canTransition('CONTRACTED', 'OFFER_ACCEPTED')).toBe(false);
+  });
+
+  it('declares nothing beyond CONTRACTED, because Phase 7 has not built it', () => {
+    expect(canTransition('CONTRACTED', 'READY_FOR_DISBURSEMENT')).toBe(false);
   });
 
   it('requireTransition throws with both states named', () => {

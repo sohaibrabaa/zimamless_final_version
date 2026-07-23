@@ -627,5 +627,300 @@
       "CANCELLED": "ملغاة",
       "UNKNOWN": "الحالة غير متوفرة"
     }
+  },
+  "risk": {
+    "sectionTitle": "درجة الثقة",
+    "compositeScoreLabel": "الدرجة الإجمالية",
+    "outOf100": "من 100",
+    "band": {
+      "LOW": "مخاطر منخفضة",
+      "MEDIUM": "مخاطر متوسطة",
+      "HIGH": "مخاطر مرتفعة",
+      "CRITICAL": "مخاطر حرجة",
+      "UNKNOWN": "غير متوفرة"
+    },
+    "components": {
+      "title": "مؤشرات المكونات"
+    },
+    "component": {
+      "supplierVerification": "التحقق من المورّد",
+      "dataConfidence": "موثوقية البيانات",
+      "buyerProfile": "ملف المشتري",
+      "invoiceScore": "درجة الفاتورة",
+      "platformBehavior": "سلوك المنصة"
+    },
+    "dataAvailability": {
+      "label": "توفر البيانات",
+      "tooltip": "يُظهر مقدار البيانات الحكومية المستخدمة لهذه الدرجة والتي تم استرجاعها فعلاً. انخفاض هذا الرقم لا يخفض الدرجة نفسها أبداً — يُعامل المصدر الذي لم يُجب بوصفه غير معروف، لا بوصفه نتيجة سلبية."
+    },
+    "factors": {
+      "none": "لم تُسجَّل عوامل لهذه الدرجة.",
+      "positiveTitle": "العوامل الإيجابية",
+      "positiveBadge": "إيجابي",
+      "riskTitle": "عوامل المخاطر",
+      "riskBadge": "مخاطرة",
+      "reasonCodesTitle": "رموز الأسباب"
+    },
+    "factor": {
+      "positive": {
+        "buyerActive": "سجل المشتري التجاري نشط.",
+        "verificationPassed": "اجتازت الفاتورة جميع الفحوصات الآلية.",
+        "cleanHistory": "لا يوجد سجل سلوك سلبي على هذه المنصة."
+      },
+      "risk": {
+        "buyerLiquidation": "المشتري تحت التصفية.",
+        "verificationReview": "فحوصات الفاتورة الآلية تحتاج مراجعة.",
+        "shortTenor": "تستحق الفاتورة خلال أقل من 7 أيام.",
+        "priorDuplicate": "تعارض طلب سابق من هذا المورّد مع بصمة موجودة."
+      }
+    },
+    "reasonCode": {
+      "PARTIAL_GOVERNMENT_DATA": "بيانات حكومية جزئية",
+      "BUYER_UNDER_LIQUIDATION": "المشتري تحت التصفية",
+      "VERIFICATION_NEEDS_REVIEW": "التحقق يحتاج مراجعة",
+      "STANDARD_PROFILE": "ملف قياسي"
+    },
+    "modelVersion": "إصدار النموذج {version}",
+    "calculatedAt": "احتُسبت في {date}",
+    "mode": {
+      "ml": "نموذج التعلم الآلي",
+      "rulesOnly": "القواعد فقط (وضع مخفّض)"
+    },
+    "fallbackNotice": "أُنتجت هذه الدرجة عبر محرك القواعد الحتمية فقط — لم تكن خدمة التعلم الآلي متاحة ({reason}). قواعد الأهلية والاحتيال التي لا يمكن لهذه الدرجة تجاوزها ظلّت مطبَّقة بالكامل.",
+    "fallbackReasonUnknown": "السبب غير مُبلَّغ عنه",
+    "disclaimer": "هذه الدرجة دعم لاتخاذ القرار فقط. وهي ليست ضماناً ولا تصنيفاً ائتمانياً ولا بديلاً عن قرارك الائتماني الخاص.",
+    "syntheticDataNotice": "هذا النموذج مدرَّب على بيانات اصطناعية موسومة بوضوح لهذا الإصدار. تعامل مع الدرجات على أنها توضيحية، لا انعكاساً لسجل دفع حقيقي.",
+    "notAvailable": "لم تُحتسب درجة ثقة لهذه المعاملة بعد."
+  },
+  "marketplace": {
+    "feed": {
+      "intro": "العروض المؤهل بنكك لمراجعتها، مطابقةً لمرشح السياسة الفعّال لديك.",
+      "empty": "لا توجد عروض مفتوحة لتقديم العروض حالياً.",
+      "review": "مراجعة",
+      "column": {
+        "supplier": "المورّد",
+        "buyer": "المشتري",
+        "faceValue": "القيمة الاسمية",
+        "riskBand": "فئة المخاطر",
+        "deadline": "موعد إغلاق العروض"
+      }
+    },
+    "detail": {
+      "backToFeed": "العودة إلى السوق",
+      "title": "العرض",
+      "notFound": "تعذّر العثور على هذا العرض.",
+      "supplierSection": "المورّد",
+      "legalName": "الاسم القانوني",
+      "establishmentNumber": "رقم المنشأة",
+      "registryStatus": "حالة السجل",
+      "createOffer": "تقديم عرض",
+      "myOfferStatus": "حالة عرض بنككم على هذا الإدراج: {status}",
+      "doubleFinancingNotice": "المنصة هي نقطة التحكم الوحيدة لمنع تمويل الفاتورة نفسها مرتين عبر جميع البنوك في السوق — سرّية العروض بين البنوك لا تُضعف هذا الضبط."
+    },
+    "listing": {
+      "sectionTitle": "إدراج السوق",
+      "intro": "تفعيل الإدراج يفتحه أمام البنوك المؤهلة لتقديم العروض. تُستحق رسوم الإدراج عند التفعيل سواء نجح التمويل أم لا.",
+      "activate": "تفعيل الإدراج",
+      "confirmTitle": "تأكيد تفعيل الإدراج",
+      "feeLabel": "رسوم الإدراج",
+      "feeWarning": "تُستحق هذه الرسوم فور تفعيل الإدراج، بصرف النظر عن نجاح التمويل من عدمه.",
+      "confirmActivate": "تفعيل ودفع رسوم الإدراج",
+      "offerDeadline": "الموعد النهائي لتقديم العروض",
+      "selectionDeadline": "الموعد النهائي للاختيار",
+      "offerCount": "عدد العروض المستلمة",
+      "compareOffers": "مقارنة العروض",
+      "status": {
+        "OPEN_FOR_OFFERS": "مفتوح لتقديم العروض",
+        "OFFER_PERIOD_CLOSED": "أُغلقت فترة تقديم العروض",
+        "AWAITING_SELECTION": "بانتظار اختياركم",
+        "OFFER_SELECTED": "تم اختيار عرض",
+        "EXPIRED": "منتهي الصلاحية",
+        "CANCELLED": "ملغى"
+      }
+    },
+    "offer": {
+      "title": "تقديم عرض",
+      "backToListing": "العودة إلى العرض",
+      "backToOffers": "العودة إلى العروض",
+      "notFound": "تعذّر العثور على هذا العرض.",
+      "statusTitle": "حالة العرض",
+      "alreadyOffered": "لدى بنككم بالفعل عرض حالي على هذا الإدراج. اسحبوه من \"عروضي\" قبل تقديم عرض جديد.",
+      "belowFloor": "هذا العرض لا يستوفي حالياً متطلبات المورّد.",
+      "windowClosed": "أُغلقت نافذة تقديم العروض لهذا الإدراج.",
+      "notEligible": "بنككم غير مؤهل لهذا الإدراج.",
+      "validationFailed": "لا يجوز أن يتجاوز مبلغ التمويل الإجمالي المبلغ المستحق على الفاتورة.",
+      "transactionTypeLabel": "نوع المعاملة",
+      "transactionType": {
+        "INVOICE_FINANCING": "تمويل الفاتورة",
+        "RECEIVABLE_PURCHASE": "شراء الذمة المدينة",
+        "RECEIVABLE_ASSIGNMENT": "التنازل عن الذمة المدينة",
+        "OTHER": "أخرى"
+      },
+      "transactionTypeExplain": {
+        "INVOICE_FINANCING": "يقدّم البنك تمويلاً مقابل الفاتورة؛ ويبقى المورّد مسؤولاً عنها وفق شروط العرض.",
+        "RECEIVABLE_PURCHASE": "يشتري البنك الذمة المدينة بالكامل.",
+        "RECEIVABLE_ASSIGNMENT": "يُحال حق تحصيل الذمة المدينة رسمياً إلى البنك.",
+        "OTHER": "هيكل غير مشمول بالفئات القياسية — يُوصف في شروط العرض."
+      },
+      "recourseTypeLabel": "نوع حق الرجوع",
+      "recourseType": {
+        "FULL_RECOURSE": "حق رجوع كامل",
+        "LIMITED_RECOURSE": "حق رجوع محدود",
+        "NON_RECOURSE": "بدون حق رجوع",
+        "OTHER": "أخرى"
+      },
+      "recourseTypeExplain": {
+        "FULL_RECOURSE": "إذا لم يدفع المشتري، يتحمّل المورّد المسؤولية الكاملة عن سداد البنك.",
+        "LIMITED_RECOURSE": "مسؤولية المورّد في حال عدم دفع المشتري محدودة أو مشروطة.",
+        "NON_RECOURSE": "يتحمّل البنك مخاطر عدم دفع المشتري؛ ولا يتحمّل المورّد أي التزام بالسداد.",
+        "OTHER": "هيكل حق رجوع غير مشمول بالفئات القياسية — يُوصف في شروط العرض."
+      },
+      "grossFundingAmount": "مبلغ التمويل الإجمالي",
+      "bankDiscountAmount": "خصم البنك",
+      "bankFeesAmount": "رسوم البنك",
+      "otherDeductionsAmount": "استقطاعات أخرى",
+      "platformCommissionAmount": "عمولة المنصة",
+      "listingFeeAmount": "رسوم الإدراج (الجزء غير المسدد)",
+      "netSupplierPayout": "صافي المبلغ المستحق للمورّد",
+      "netSupplierPayoutPreview": "صافي المبلغ المستحق للمورّد (معاينة)",
+      "serverComputedTitle": "عمولة المنصة ورسوم الإدراج",
+      "serverComputedNote": "تُحتسب من قبل المنصة عند إنشاء العرض. الأرقام أدناه معاينة حيّة، وتُطابَق دائماً مع ما تسجّله المنصة فعلياً.",
+      "expectedPayoutDate": "تاريخ الصرف المتوقع",
+      "validUntil": "صلاحية العرض حتى",
+      "conditionsTitle": "الشروط",
+      "addCondition": "إضافة شرط",
+      "conditionTypeLabel": "نوع الشرط",
+      "conditionType": {
+        "REQUIRED_GUARANTEE": "ضمان مطلوب",
+        "REQUIRED_DOCUMENT": "مستند مطلوب",
+        "RECOURSE_TERM": "بند حق الرجوع",
+        "FUNDING_TIMELINE": "الجدول الزمني للتمويل",
+        "CONTRACTUAL_CONDITION": "شرط تعاقدي",
+        "OTHER": "أخرى"
+      },
+      "conditionTitle": "العنوان",
+      "conditionDescription": "الوصف",
+      "conditionMandatory": "إلزامي",
+      "removeCondition": "إزالة",
+      "noConditions": "لم تُضف أي شروط.",
+      "submit": "إرسال العرض",
+      "status": {
+        "PENDING_INTERNAL_APPROVAL": "بانتظار الاعتماد الداخلي",
+        "ACTIVE": "نشط",
+        "SELECTED": "مُختار",
+        "NOT_SELECTED": "غير مُختار",
+        "WITHDRAWN": "مسحوب",
+        "EXPIRED": "منتهي الصلاحية"
+      },
+      "notSelectedExplain": "قبل المورّد عرضاً آخر. لا تُشارَك أي معلومة عن البنك الفائز أو أي عرض آخر.",
+      "viewContract": "عرض العقد"
+    },
+    "offers": {
+      "myOffersTab": "عروضي",
+      "approvalQueueTab": "قائمة الاعتماد",
+      "myOffersEmpty": "لم يقدّم بنككم أي عروض بعد.",
+      "approvalQueueEmpty": "لا يوجد ما ينتظر اعتمادكم.",
+      "column": {
+        "version": "الإصدار",
+        "status": "الحالة",
+        "netSupplierPayout": "صافي المبلغ المستحق للمورّد",
+        "creator": "أنشأه"
+      },
+      "withdraw": "سحب",
+      "approve": "اعتماد",
+      "ownOfferNote": "أنشأتم هذا العرض — يجب أن يراجعه معتمِد آخر.",
+      "currentUser": "تم تسجيل الدخول باسم {name}."
+    },
+    "policyFilters": {
+      "title": "مرشحات السياسة",
+      "intro": "تحدّد المرشحات إدراجات السوق التي يُعرَض بنككم عليها (ZM-MKT-001/002). يجب أن يطابق الإدراج مرشحاً فعّالاً ليظهر في قائمتكم.",
+      "empty": "لم تُهيَّأ أي مرشحات سياسة بعد — لن يرى بنككم أي إدراجات حتى يُفعَّل أحدها.",
+      "active": "فعّال",
+      "inactive": "غير فعّال",
+      "activate": "تفعيل",
+      "deactivate": "إلغاء التفعيل",
+      "newTitle": "مرشح سياسة جديد",
+      "name": "اسم المرشح",
+      "minAmount": "الحد الأدنى لمبلغ الفاتورة",
+      "maxAmount": "الحد الأقصى لمبلغ الفاتورة",
+      "minTenorDays": "الحد الأدنى لأجل الاستحقاق (أيام)",
+      "maxTenorDays": "الحد الأقصى لأجل الاستحقاق (أيام)",
+      "minTrustScore": "الحد الأدنى لدرجة الثقة",
+      "maxRiskBand": "الحد الأقصى لفئة المخاطر",
+      "noRiskBandCeiling": "بلا حد أقصى",
+      "create": "إنشاء مرشح"
+    },
+    "comparison": {
+      "title": "مقارنة العروض",
+      "intro": "كل عرض نشط على هذا الإدراج، بترتيب تقديمه. لا شيء هنا مُرتَّب أو مُوصى به — القرار قراركم.",
+      "backToInvoice": "العودة إلى الفاتورة",
+      "noListing": "لم تُدرَج هذه الفاتورة في السوق بعد.",
+      "empty": "لم تُقدَّم أي عروض على هذا الإدراج بعد.",
+      "deadlinePassed": "انقضى الموعد النهائي للاختيار",
+      "timeRemaining": "{hours} س {minutes} د للاختيار"
+    },
+    "acceptance": {
+      "accept": "قبول هذا العرض",
+      "confirmTitle": "تأكيد القبول",
+      "irreversibleWarning": "القبول إجراء فوري ونهائي لا رجعة فيه. بمجرد التأكيد، يُغلق هذا العرض ويُرفض تلقائياً كل عرض آخر على هذا الإدراج.",
+      "confirmAccept": "قبول وتثبيت هذا العرض",
+      "successTitle": "تم قبول العرض",
+      "successIntro": "تم تثبيت هذا العرض الآن. لا يمكن إعادة إدراج الفاتورة أو المطالبة بها من أي تمويل آخر.",
+      "viewConditions": "عرض الشروط",
+      "rejectAll": "رفض جميع العروض",
+      "rejectAllConfirmTitle": "رفض جميع العروض؟",
+      "rejectAllExplain": "سيُرفض كل عرض على هذا الإدراج وتعود الفاتورة مؤهلة، حرة لإعادة الإدراج. لا يمكن التراجع عن هذا.",
+      "rejectAllConfirm": "رفض جميع العروض",
+      "allRejected": "رُفضت جميع العروض على هذا الإدراج. عادت الفاتورة إلى حالة مؤهلة."
+    },
+    "timeline": {
+      "title": "التقدّم",
+      "step": {
+        "OFFER_ACCEPTED": "تم قبول العرض",
+        "CONDITIONS_PENDING": "الشروط قيد الإنجاز",
+        "CONTRACTED": "العقد موقّع بالكامل"
+      },
+      "viewConditions": "عرض قائمة الشروط",
+      "viewContract": "عرض العقد"
+    },
+    "conditions": {
+      "title": "الشروط",
+      "intro": "كل شرط مرتبط بالعرض المقبول. يجب إنجاز الشروط الإلزامية أو التنازل عنها قبل إمكانية إنشاء العقد.",
+      "empty": "لم يحمل هذا العرض أي شروط.",
+      "notesLabel": "ملاحظات",
+      "markFulfilled": "وضع علامة كمُنجَز",
+      "status": {
+        "PENDING": "قيد الانتظار",
+        "FULFILLED": "مُنجَز",
+        "WAIVED": "متنازَل عنه",
+        "FAILED": "فشل"
+      }
+    },
+    "contract": {
+      "title": "العقد",
+      "notGenerated": "لم يُنشَأ عقد لهذه المعاملة بعد.",
+      "generate": "إنشاء العقد",
+      "notReady": "هذه المعاملة ليست جاهزة بعد للعقد.",
+      "checkFailure": {
+        "CONDITIONS_UNFULFILLED": "يجب إنجاز كل شرط إلزامي أو التنازل عنه أولاً.",
+        "DECLARATIONS_NOT_RECONFIRMED": "تعذّر إعادة تأكيد إقرارات المورّد.",
+        "BANK_ACCOUNT_UNVERIFIED": "لم يُتحقَّق بعد من حساب الصرف المصرفي للمورّد."
+      },
+      "status": {
+        "PENDING_SIGNATURES": "بانتظار التوقيعات",
+        "FULLY_SIGNED": "موقّع بالكامل"
+      },
+      "templateVersion": "إصدار القالب {version}",
+      "canonicalLanguageNote": "يسود النص الإنجليزي في حال وجود أي تعارض بين اللغتين.",
+      "termsSection": "الشروط",
+      "signaturesSection": "التوقيعات",
+      "supplierSignature": "المورّد",
+      "bankSignature": "البنك",
+      "signed": "موقّع",
+      "pending": "بانتظار",
+      "signAction": "توقيع هذا العقد",
+      "notSignatory": "فقط الموقّع المخوَّل عن منظمتكم يمكنه توقيع هذا العقد.",
+      "listEmpty": "لم تصل أي معاملة إلى مرحلة العقد بعد."
+    }
   }
 }

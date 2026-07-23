@@ -426,3 +426,521 @@ CROSS-HALF RECONCILIATION:
 VERIFICATION: 254 API tests (was 245, +9 new in `transactions-guards.spec.ts`: Q-13 catalogue, Q-12 documents[]), 91 web tests (fixture/checkType rewrites, no net count change), 95 ML tests unchanged, lint/typecheck all workspaces, i18n parity 455 keys (was 453 — 2 new: documents.download, documents.downloadUnavailable), `next build`, frozen-schema drift check, conformance gate — all green. Phase 3 journey integration suite (`npm run test:journey`) run live against the hosted database, hosted Supabase Storage and the real ML service — 28/28 passing, including the new cross-supplier duplicate test. `db:verify` 15/15.
 
 STILL OPEN: deployment (Q-01..Q-04 unaffected, still open). Unchanged, still the project's #1 risk — three phases have now completed without it, and Phase 4 adds a second service (ML/risk inference) to deploy.
+
+## 2026-07-23 — Agent A (session 4, Phase 4)
+Branched `a/phase4` from `main` at `76d10bf`, clean tree per the kickoff's
+Step 0. All of B's `NEEDS FROM A` items were already closed by the
+unification session — nothing outstanding was found.
+
+DONE (`phases/PHASE_4_RISK_ML.md`, Agent A tasks — all 13 items):
+Trust Score end to end. `GET /transactions/{id}/risk` returns a composite
+0–100, an AS-05 band, the five ZM-RSK-004 components, `dataAvailabilityPct`
+on a separate track, positive/risk/reason codes, model version, `mlUsed`, and
+a bilingual disclaimer. `GET`/`POST /admin/risk-models` manage versions.
+**`/services/ml` now has a real, executable training and inference pipeline**
+(ZM-RSK-014): deterministic seeded synthetic data, a logistic regression
+trained by `tools/train_risk_model.py`, recorded metrics, and per-prediction
+explainability. `docs/specs/ML_DESIGN.md` documents all of it, limitations
+first.
+
+CHANGED (shared surfaces — read this section):
+  - **A ZM-RSK-013 hole in my own Phase 1 work, now closed.** Migration 0003
+    left `risk_model_versions` world-readable, so any authenticated bank user
+    could read the scoring weights straight from the Supabase client and
+    reconstruct exactly what the API withholds. Migration `0006` revokes
+    `weights` and `training_metrics`; `db:verify` now checks both (17 checks,
+    was 15). Nothing of yours changes.
+  - **Migration `0006_phase4_risk.sql`** also inserts the baseline active
+    model version. It is a migration rather than a seed because a hosted
+    database with no seed must still be able to score.
+  - Nothing renamed. The eight `checkType` strings are untouched.
+
+SEED: none. The model artifact
+(`services/ml/app/risk/model_artifact.json`) is committed and byte-stable —
+`py -m tools.train_risk_model --check` retrains and asserts it reproduces
+exactly, the same discipline as the e-invoice PDFs.
+
+BLOCKED ON: **the deploy**, unchanged and now four phases old. Phase 4 adds a
+SECOND service to deploy — the ML service must be up for the model to be
+used. `render.yaml` is committed; §2 of the runbook needs a hosting account I
+do not have.
+
+NEEDS FROM A → answered for you already; NOTE FOR B — seven things for the
+risk components:
+  1. **A component score may be `null`.** A component whose every signal was
+     unavailable scores null, never 0 — zero would be a judgement we have no
+     basis for. Render "not scored", not an empty bar at zero. Defensive
+     today (every component has at least one always-known signal), but it is
+     a real shape and I would rather you branch on it than discover it.
+  2. **`dataAvailabilityPct` is a NUMBER, not a string**, and is separate
+     from the score by construction. Style it neutrally — never a warning
+     colour, never a downward arrow. A supplier whose registry was down has
+     done nothing wrong, and this is the field that says so.
+  3. **Reason codes are a catalogue** with four families by prefix:
+     `BLOCK_` (hard blocker), `RISK_` (adverse — lowers a component),
+     `POS_` (positive), and **`INFO_` (never moves the score)**. Please do
+     not render `INFO_` codes in a risk-coloured list; they describe gaps in
+     what WE could see, not facts about the supplier. Source of truth:
+     `apps/api/src/modules/risk/reason-codes.ts`. Copy the codes, the strings
+     are yours in both locales.
+  4. **`mlFallbackReason` appears only when `mlUsed` is false**, and is
+     always non-empty in that case. Surface it. A degraded score a banker
+     cannot tell is degraded is the exact failure ZM-RSK-017 exists to stop —
+     and it is not hypothetical, see VERIFICATION below.
+  5. **`INFO_SYNTHETIC_TRAINING_DATA` is on every score** — your hook for the
+     ZM-RSK-016 synthetic-data limitation notice.
+  6. **The disclaimer arrives already localized** from the user's
+     `preferred_language`; render it verbatim on every score display. You do
+     not need to key it.
+  7. **Banks get no weights, coefficients, or raw probability** — the payload
+     is an allow-list and there is a test asserting the serialized bank body
+     contains none of them. Do not build a screen expecting them.
+
+VERIFICATION: 293 API unit tests (was 254), **96 live integration tests**
+(was 84 — including the Phase 4 checkpoint's two drills), 122 ML tests (was
+95), `db:verify` 17/17, frozen-schema drift check, conformance gate 31/82
+with no drift, model artifact reproducibility, e-invoice byte-stability, lint
+and typecheck across all workspaces — all green.
+
+The ML fallback proved itself during development rather than in a test I
+wrote for it: the journey suite failed with `mlUsed: false` because the ML
+process was still serving a build from before `/risk/score` existed. A real
+score came out, and the degradation was visible enough to stop the suite. A
+silent fallback would have shipped.
+
+FLAGGED AGAIN FOR THE PRODUCT OWNER — **Q-03 (Arabic digit set)**, per the
+Phase 4 kickoff. Still OPEN, still needed before Phase 6 Arabic templates. It
+is slightly more pressing now: Phase 4 ships the **first Arabic prose the API
+itself emits** (the Trust Score disclaimer), so the question is no longer
+confined to `apps/web`.
+
+## 2026-07-23 — Agent A (session 5, Phase 5)
+Branched `a/phase5` from `a/phase4`. The confidential marketplace is live end
+to end against the hosted database.
+
+DONE (`phases/PHASE_5_MARKETPLACE_OFFERS.md`, Agent A tasks — all 11 items):
+Listing activation with the fee obligation and a balanced ledger journal;
+policy-filtered eligibility recorded **for every bank, eligible or not**, with
+the rules that produced each decision; maker/approver offers with all money
+computed server-side; the deadline sweep; the three v3.1.0 endpoints
+(D-06/07/08) and the D-12 `PATCH`. Twelve endpoints, taking the conformance
+gate to **44/82 with no drift** (was 31/82).
+
+CHANGED (shared surfaces — read this section):
+  - **Migration `0007_phase5_commission_tiers.sql`** — three active tiers
+    (1.5% / 1.25% / 1.0%, half-open bands, top tier open-ended). A migration
+    rather than a seed because ZM-FEE-011 prices every offer from the active
+    tier: a migrated database with no dev seed could not price an offer at
+    all. Additive only — three rows, no column, constraint, policy or
+    response-shape change.
+  - **`transactions/dto.ts` and `money.ts`** now share `MONEY_PATTERN` /
+    `MONEY_MESSAGE` instead of each restating the 3-dp regex. Same accepted
+    strings, same messages; nothing you send changes.
+  - Nothing renamed. No response shape you already consume was altered.
+
+SEED: `npm run db:scenario:phase5` — the checkpoint fixture. Note it is a
+**script that calls the API**, not SQL, and that is deliberate: a listing is
+not a row (fee obligation, ledger journal, per-bank eligibility with
+`rules_applied`, notifications, state change) and neither is an offer (tier
+commission, listing-fee component, server-recomputed net under a database
+CHECK). Hand-written SQL would give you a listing that looks right on screen
+and was never priced, evaluated or audited. It is idempotent and has
+`--status` and `--purge`. It leaves both offers in
+`PENDING_INTERNAL_APPROVAL` on purpose — approving them would consume the
+checkpoint's best moment.
+
+BLOCKED ON: **the deploy**, unchanged and now five phases old, and per the
+product owner now a deliberate deferral rather than an impediment: verify
+locally, deploy when the account exists. Worth stating plainly so nobody
+reads the checkmarks as "it is up".
+
+NOTE FOR B — six things about the marketplace, all of which will bite if
+assumed otherwise:
+
+  1. **The floor does not exist in your bank-side data.** Not null, not
+     redacted — absent. `describeForBank` is built additively from an empty
+     object, and there is a test that byte-scans every bank-facing response
+     for a sentinel floor value. If your underwriting view has a field for
+     it, delete the field.
+  2. **`offerCount` is supplier and platform only.** A bank must not learn
+     how many competitors exist, including by counting array length — the
+     bank's `/listings/{id}/offers` returns its own offer or nothing.
+  3. **`netSupplierPayout` is the server's number.** You may send yours and
+     the server will compare; a mismatch is a 422 that names the
+     disagreement, not a silent correction. Preview live in the form, always
+     reconcile to the response.
+  4. **Do not send `platformCommissionAmount` or `listingFeeAmount`.** They
+     are not in `OfferInputDto`, and `forbidNonWhitelisted` means sending
+     them is a 400 naming the property rather than a silent ignore. That is
+     the friendlier failure: a bank computing its own commission has a
+     misunderstanding worth surfacing.
+  5. **The below-floor 422 carries no numbers, ever.** `OFFER_BELOW_SUPPLIER_
+     REQUIREMENT` with a generic message. Do not add "you were X short" —
+     there is no X: `meetsFloor` returns a bare boolean so the shortfall is
+     never computed anywhere in the process.
+  6. **The submission window is decided by listing *status*, not by
+     comparing the clock.** After the sweep closes it, create/revise/withdraw
+     all 409. Render the countdown from `offerSubmissionDeadline`, but let
+     the server decide.
+
+VERIFICATION: 328 API unit tests (was 293), **128 live integration tests**
+(was 96), 122 ML tests, `db:verify` 17/17, conformance 44/82 with no drift,
+lint and typecheck across all workspaces — all green. The checkpoint scenario
+was created and then re-run to confirm idempotency; both offers came back
+with nets matching the arithmetic predicted in the script's comment to the
+millifils, which independently confirms the tier lookup and listing-fee
+injection.
+
+TWO TESTS I HAD TO FIX BECAUSE THEY WERE WRONG, not because Phase 5 broke
+them — both worth knowing about:
+  - My INV-12 self-approval test passed **for the wrong reason**. It used a
+    plain maker, who is stopped by the route guard with `INSUFFICIENT_ROLE`
+    before the self-approval check ever runs. The invariant was untested and
+    green. Now driven by a BANK_ADMIN (who holds both capabilities) plus a
+    separate test against the `chk_maker_approver_differ` database
+    constraint, so neither layer can pass on the other's behalf.
+  - `rls-phase3` asserted a bank sees **zero** transactions. Phase 5 made
+    that false *correctly* — a bank now sees a transaction it was found
+    eligible for. Narrowed to the claim it was always about.
+
+FLAGGED AGAIN — **Q-03 (Arabic digit set)**. Now genuinely pressing: Phase 6
+ships Arabic contract templates, which is prose with numbers in it on a
+document a supplier signs.
+
+## 2026-07-23 — Agent A (session 6, Phase 6)
+Selection and contracts. This phase holds the code the brief calls the
+highest-risk in the system, and most of what follows is about how that claim
+was tested rather than how it was written.
+
+DONE (`phases/PHASE_6_SELECTION_CONTRACTS.md`, Agent A tasks — all 12 items):
+Atomic offer acceptance exactly per brief §5, in one transaction with a real
+row lock; the INV-4 immutability trigger; reject-all; the contract template
+engine with four seeded templates (EN + AR, per type + fallback); the
+ZM-CON-006 pre-contract checks; contract generation with a stored HTML
+document and a hash; the dummy `SignatureProvider` with separate sign and
+verify; conditions with derived `CONDITIONS_PENDING`. Seven endpoints.
+
+CHANGED (shared surfaces — read this section):
+  - **Migration `0008_phase6_contracts.sql`** — the INV-4 trigger on
+    `receivable_transactions`, the AS-01 `offer_acceptance_roles` setting,
+    and four contract templates. Additive only; no column, constraint,
+    policy or response shape altered. `db:verify` is now 20 checks (was 17).
+  - **The `documents` storage bucket now accepts `text/html`** — for
+    server-generated contract documents only. The *user upload* allow-list is
+    unchanged and deliberately still excludes it: a supplier-uploaded HTML
+    file lands in a bucket whose download URLs go to other organizations'
+    browsers. Nothing you upload changes.
+  - **`transaction-state.ts`** gained OFFER_ACCEPTED / CONDITIONS_PENDING /
+    CONTRACTED transitions. Nothing existing was removed.
+  - Nothing renamed.
+
+SEED: none new. `npm run db:scenario:phase5` still produces the listing with
+two approvable offers, which is now also the starting point for the Phase 6
+demo — approve them, then accept.
+
+BLOCKED ON: **the deploy**, unchanged, six phases old, deliberately deferred.
+
+TWO THINGS I BROKE OR FOUND IN MY OWN EARLIER WORK:
+
+  1. **The seed has been creating duplicate bank organizations since Phase 1,
+     and the hosted database now holds three copies of each bank.**
+     `db/tools/seed.mjs` used `ON CONFLICT DO NOTHING` with a lookup
+     fallback — but `uq_org_national_no` is a PARTIAL index covering
+     suppliers only, so banks had nothing to conflict with, the insert always
+     returned a row, and the fallback was never reached for exactly the org
+     types that needed it. The seed is fixed (it looks before inserting). The
+     **existing duplicates are still there** and need a remap-and-delete
+     pass — they carry memberships, so it is a data migration, not a seed
+     re-run. Practical consequence for both of us: `memberships[0]` from
+     `/auth/me` is ordering-dependent and can name a duplicate. If you pin an
+     organization id anywhere, pin the canonical `0e000000-…` one.
+  2. Three schema assumptions I wrote before reading, all caught by the live
+     suite: `invoices` has no `status` column (cancellation is on the
+     transaction's state); `invoice_declarations` is one row of booleans per
+     transaction, not a row per key; `supplier_bank_accounts` stores
+     `iban_enc bytea`, not plaintext.
+
+NOTE FOR B — seven things about acceptance and contracts:
+
+  1. **`/accept` returns the SNAPSHOT, not the offer**, and it is a **200**,
+     not a 201. It takes **no request body** — every commercial term is
+     already fixed on the offer, and a body would invite a client to restate
+     a figure that can then disagree.
+  2. **A replayed accept returns the original snapshot with 200**, not an
+     error. Safe to retry on a dropped connection; the modal does not need to
+     guard against a double-click producing a scary message.
+  3. **Acceptance is irreversible and the database enforces it.** There is no
+     unlock. Say so in the confirmation modal in those words — the phase file
+     asks for "atomic and irreversible" and it is literally true, down to a
+     trigger that refuses to clear the lock.
+  4. **A second accept on the same transaction is 409
+     `TRANSACTION_ALREADY_LOCKED`.** Render it as "another offer was accepted"
+     rather than as a failure the user can retry.
+  5. **Contract generation can fail with a LIST.** 422, with
+     `details.findings` as an array of `{code, message}`. Render all of them
+     as a checklist — that shape is deliberate, so the supplier is not
+     drip-fed one blocker at a time.
+  6. **`documentHash` is over the exact bytes the API stored.** If you render
+     the contract yourself from `termsSnapshot` instead of displaying the
+     stored document, the hash on screen stops meaning anything. Serve what
+     the API produced.
+  7. **A signature is only real once `status === 'VERIFIED'`.** `SIGNED` is
+     an intermediate the dummy provider passes through in milliseconds and a
+     real provider will sit in for minutes. Drive the UI off VERIFIED, and
+     `FULLY_SIGNED` off the contract's own status, not off counting rows.
+
+VERIFICATION: 383 API unit tests (was 328), Phase 6 live integration suite
+(32 checks incl. the concurrency harness), `db:verify` 20/20, lint and
+typecheck clean across all workspaces.
+
+The harness is the part worth knowing about: two accepts on different offers
+of the same transaction, fired without awaiting either, repeated 8 times, and
+then asserted **against the database** rather than only the HTTP statuses —
+one SELECTED, one NOT_SELECTED, one selection row, one snapshot, and
+`locked_by_offer_id` pointing at the offer that actually won. Every other
+test in the phase would pass against a naive read-then-write implementation.
+Only this one would not.
+
+FLAGGED — **Q-03 (Arabic digit set) is now overdue.** This phase ships the
+first Arabic legal prose in the product: the AR contract template, with
+amounts and dates, on a document a supplier signs. I used Arabic-Indic
+section numbers and Western digits for money — the common Jordanian banking
+convention, but my assumption standing in for a ruling, and now baked into a
+contract template rather than a UI label.
+
+  8. **A contract does NOT need every listed signatory to sign.** ZM-CON-010's
+     default is one authorized supplier signatory and one authorized bank
+     signatory. A bank with two signatories gets two PENDING slots because
+     either may sign — not because both must. The unsigned slot stays PENDING
+     after FULLY_SIGNED, deliberately: that person did not sign, and the
+     record says so. Drive the UI off `contract.status`, not off "are all
+     signature rows verified". (I had this wrong first — the live run caught
+     it at two-of-three verified.)
+## 2026-07-23 — Agent B (session 4, Phase 4 + Phase 5 head start)
+Branched from `origin/main` per the kickoff's Step 0. Agent A had not started
+Phase 4 at the start of this session (no daily-log entry, no `ML_DESIGN.md`)
+— expected, since B's Phase 4 scope is light and mock-driven from day one.
+
+DONE (mock — `phases/PHASE_4_RISK_ML.md`, Agent B tasks; all five items):
+- `TrustScoreGauge`, `ComponentBars`, `FactorList`, composed into one
+  `RiskPanel` so the disclaimer/model-version/fallback block is never
+  forgotten by a future consumer.
+- **`dataAvailabilityPct` is structurally incapable of a warning tone** —
+  `dataAvailabilityNeutralTone()` has no code path returning anything but
+  `"neutral"`, which a CI test asserts directly rather than just documenting.
+  Shown as its own row (a Badge, never a bar) below a divider in
+  `ComponentBars`, with an explanatory tooltip.
+- Disclaimer sourced from i18n on every score display, both languages —
+  deliberately not from `assessment.disclaimer`, whose locale the contract
+  doesn't guarantee (see completion report §4 for why this isn't a filed
+  question).
+- **INV-9 fully covered client-side**: identical inputs differing only in
+  `sourceAvailability` produce byte-identical components and composite score
+  across every single-source-down permutation and the all-down case, at both
+  the pure-engine level and the mock-store assembly level that the endpoint
+  handler actually calls.
+
+Remaining B capacity spent on the Phase 5 head start the kickoff named
+("marketplace feed, offer form skeletons"):
+- Bank marketplace feed (`GET /marketplace/eligible`) and underwriting view
+  (`GET /marketplace/listings/{id}`) — real screens, but a **static
+  two-listing stub**, not your real policy-filter eligibility engine, which
+  doesn't exist yet. The underwriting view is the risk components' first
+  real consuming screen.
+- Offer form skeleton: every field the phase file names, real catalogues
+  (transaction/recourse/condition types with plain-language explanations),
+  **submission deliberately not wired to a mock endpoint**. Commission and
+  listing fee are named but show no number — inventing an estimate would
+  have been the same invented-value defect the Phase 1/2/3 audits each
+  caught in a different form, one field earlier.
+- NOT attempted: listing activation, policy filters, approval queue, "my
+  offers", offer comparison. Real Phase 5 work, not this head start.
+
+VERIFIED: 116/116 vitest (25 new — 20 risk-engine, 5 risk-store; the 91 from
+Phase 3 all still green); typecheck, lint and `next build` clean in `web` and
+root-wide across all three workspaces; i18n parity **559 keys** (was 455).
+
+SWAPPED TO LIVE: none. 5 more endpoints join the mock board (2 risk, 3
+marketplace) — 36 mocked, still zero live, four phases running on the same
+undeployed-API carry-over.
+
+CONTRACT GAPS FOUND: none filed. Two candidates considered and both resolved
+without escalation — the disclaimer's locale is unambiguously the client's
+job regardless of what the API sends (unlike Q-03/Q-05, there's no ruling for
+a product owner to make), and the risk factor/reason-code vocabulary is
+response-only display text with no validation consequence on a mismatch
+(unlike Q-06/Q-13, a mismatch here is cosmetic, not a 422). Reasoning in §4-5
+of `docs/completion/PHASE_4_AGENT_B.md`.
+
+NEEDS FROM A:
+1. **Nothing blocking.** The demo risk engine (`lib/risk/risk-engine.ts`) is
+   a stand-in only — none of its formulas need to survive contact with your
+   real one. The one property worth preserving exactly is the separation
+   itself: `dataAvailabilityPct` must be computable from a wholly different
+   input than the five components, with no shared code path, which is what
+   ZM-RSK-005/006/008 actually require.
+2. A translation table for risk factors/reason codes already exists
+   (`messages/{en,ar}.json` → `risk.factor.*`, `risk.reasonCode.*`) if
+   reusing the keys is useful — not a request to match them, since
+   `FactorList` renders anything unrecognised as-is.
+3. **The marketplace/underwriting stub uses one invented invoice identity**,
+   `INV-2026-0004`, flagged the same way Phase 3's `MOCK-` numbers were:
+   nothing in `EINVOICE_QR.md` §7 assigns a fourth listing-ready invoice.
+   The whole `lib/mocks/marketplace-store.ts` file is disposable once your
+   real listing/eligibility endpoints land — it was never meant to model
+   your engine.
+4. The demo engine's fixed baselines mean it cannot produce a `CRITICAL`
+   band (floor sits around 29, inside `HIGH`) — noted in case anyone goes
+   looking for a `CRITICAL` listing in the mock data for a screenshot before
+   your real engine replaces it.
+
+## 2026-07-23 — Agent B (session 5, Phase 5)
+No Phase 5 kickoff document existed for B (only the phase's own master plan
+file, `phases/PHASE_5_MARKETPLACE_OFFERS.md`) — used as the scope reference,
+since its "Agent B tasks"/"Screens in scope" sections are unambiguous.
+Agent A had not started Phase 5 at the start of this session.
+
+DONE (all mock — all nine screens the phase file names for B):
+- Supplier listing-activation screen: fee shown with amount and the
+  "applies regardless of outcome" warning **before** confirmation;
+  deadlines shown only after activation, computed from the ZM-MKT-007
+  defaults — never supplier-chosen (ZM-MKT-008).
+- Bank marketplace feed + underwriting view, now backed by **real
+  per-bank policy-filter eligibility** (ZM-MKT-002) instead of Phase 4's
+  static two-listing stub — which is gone, along with its one invented
+  invoice identity.
+- Offer creation form wired to a real create endpoint: live client
+  preview of commission/listing fee/net (same pure formula the mock
+  "server" uses, so it can't disagree with what's persisted); below-floor
+  422 renders the generic message only, revealing no number
+  (ZM-MKT-012's design note) — proven by a store test asserting the
+  rejection's return value carries nothing but `{ok, error}`.
+- Approval queue: creator shown; the approve action is **hidden**, not
+  disabled, for the offer's own creator; server independently rejects
+  self-approval (ZM-ROL-002/ZM-OFR-016).
+- "My offers" (withdraw, no penalty pre-acceptance), policy-filter
+  configuration (create/activate/deactivate, D-12), and the supplier
+  **offer comparison screen** — net payout as the visual anchor, every
+  offer's transaction/recourse type with plain-language explanations,
+  **no default sort by amount, no "best" marking anywhere** (offers render
+  in submission order), live countdown to the selection deadline.
+- Bank offer-status view: `Offer` never carries another bank's data at the
+  type level, so nothing here could leak a competitor.
+- Rewrote `lib/mocks/marketplace-store.ts` from a static stub into a real
+  store: listings only exist because a genuinely `ELIGIBLE` transaction was
+  activated; eligibility persisted per bank with the rules applied
+  (ZM-MKT-003); full offer lifecycle (create/revise/withdraw/approve) with
+  immutable version history.
+
+VERIFIED: 154/154 web vitest (38 new — 9 offer-money, 10 policy-filters, 19
+marketplace-store; all 116 from Phase 4 still green), 254/254 API jest
+unchanged; typecheck, lint and `next build` clean in `web` and root-wide
+across all three workspaces; i18n parity **629 keys** (was 559). Manual
+smoke: `/bank/marketplace`, `/bank/offers`, `/bank/settings/policy-filters`,
+`/supplier/invoices` all 200 against the dev server.
+
+SWAPPED TO LIVE: none. 14 more endpoints (the full marketplace/offer/policy
+surface) join the mock board — 50 mocked, still zero live, five phases
+running on the same undeployed-API carry-over.
+
+CONTRACT GAPS FOUND: **Q-14**. `Offer` has no field naming the maker who
+created it, though the phase file requires the approval queue to show
+"creator" and block self-approval in the UI as well as the server. Not
+blocking — carried past the typed response on the two bank-scoped endpoints
+that need it. Reasoning in OPEN_QUESTIONS.md and completion report §5.
+
+NEEDS FROM A:
+1. **Nothing blocking.** `lib/mocks/marketplace-store.ts` is a stand-in
+   only. The properties worth preserving exactly: the floor rejection
+   carries zero numeric detail; `BankListingView` never contains
+   `minimumAcceptableAmount` or `offerCount`; self-approval independently
+   rejected server-side.
+2. **Q-14**: an `Offer` a bank reads about its own submission needs to name
+   who created it.
+3. Commission is a flat 1.5% demo rate with no tier lookup — your real
+   `CommissionTier` (ZM-FEE-011) can differ freely; nothing asserts the
+   demo rate as correct.
+4. Two of ZM-MKT-001's ten filter rows (sector; the two per-offer-type
+   filters) are configurable in the UI but evaluate no rule — no sector
+   field exists anywhere in the frozen contract, and transactionType/
+   recourseType are chosen per offer, not known at listing time. Worth
+   confirming your eligibility engine's intent here.
+5. The marketplace is empty on a fresh environment until a real invoice
+   reaches ELIGIBLE and is listed — correct (no invented listings) but
+   worth a seed helper if a checkpoint demo needs a populated feed
+   immediately.
+
+## 2026-07-23 — Agent B (session 6, Phase 6)
+No Phase 6 kickoff document existed for B either — used the phase's own
+master plan file, `phases/PHASE_6_SELECTION_CONTRACTS.md`, as the scope
+reference, same as Phase 5. Agent A had not started Phase 6.
+
+DONE (all mock — all six screens the phase file names for B):
+- Acceptance confirmation modal (atomic-and-irreversible, full breakdown
+  one last time) + result screen, and a reject-all flow with its own
+  confirmation, both on the offer comparison screen.
+- Post-acceptance transaction timeline (OFFER_ACCEPTED → CONDITIONS_PENDING
+  → CONTRACTED) on the supplier's transaction detail.
+- Conditions checklist with a fulfil action; contract review screen on
+  both portals (rendered terms, template version, EN-governs note);
+  click-to-accept signing — the sign button is **hidden**, not disabled,
+  for a non-signatory, and the server independently enforces the same
+  boundary.
+- Bank result screens: SELECTED/NOT_SELECTED, with an explanatory note
+  that zero competitor information is shared — `Offer` never carried that
+  data at the type level to begin with, so this was mostly copy + a
+  contract link.
+- `acceptOffer` (extended into `lib/mocks/marketplace-store.ts`): every
+  observable invariant §12.1 lists, enforced in-memory — the transaction's
+  `lockedAt` check comes first, so a second acceptance on any offer on the
+  same listing is impossible once the first lands; an idempotency-key
+  cache makes a network retry return the exact original result instead of
+  re-executing; every other active/pending offer flips to NOT_SELECTED in
+  the same call; the snapshot is written before the function returns.
+- `lib/mocks/contract-store.ts` (new): contract generation gated by all
+  four ZM-CON-006 checks, a real per-transactionType EN+AR template engine
+  reading only the frozen snapshot, click-to-accept signing requiring one
+  signature per side before FULLY_SIGNED and the transaction moving to
+  CONTRACTED.
+
+A REAL BUG CAUGHT BY A TEST: `signContract` updated the contract's own
+status to FULLY_SIGNED on the second signature but never moved the
+*transaction* to CONTRACTED — a one-line miss that "looked right" reading
+the code (the contract-status update was correct; the state side effect
+one branch later was missing). The FULLY_SIGNED test failed immediately
+or it would have shipped silently broken. Fixed.
+
+VERIFIED: 187/187 web vitest (25 new — 14 contract-domain, 11
+contract-store, +15 appended to marketplace-store's spec for acceptance;
+all 154 from Phase 5 still green), 254/254 API jest unchanged; typecheck,
+lint and `next build` clean in `web` and root-wide across all three
+workspaces; i18n parity **678 keys** (was 629). Manual smoke:
+`/supplier/contracts`, `/bank/offers`, `/supplier/invoices` all 200
+against the dev server.
+
+SWAPPED TO LIVE: none. 7 more endpoints (accept, reject-all, contract
+GET/POST, sign, conditions GET, fulfil) join the mock board — 57 mocked,
+still zero live, six phases running on the same undeployed-API carry-over.
+
+CONTRACT GAPS FOUND: **Q-15**. `AcceptedOfferSnapshot` is missing half its
+money components against ZM-SEL-007's "every money component," and
+`conditionsSnapshot` is typed as an array of objects with no declared
+properties at all (stricter than free-form). Not blocking — same
+widen-the-type pattern as Q-14, also used to carry the rendered contract
+text and each signature's organization type past the declared `Contract`
+shape. Reasoning in OPEN_QUESTIONS.md and completion report §6.
+
+NEEDS FROM A:
+1. **Nothing blocking.** The properties worth preserving exactly from the
+   mock: idempotency-key replay must return the original result, not
+   re-execute; every other active/pending offer must flip to NOT_SELECTED
+   in the same operation that selects the winner; FULLY_SIGNED (and
+   CONTRACTED) must require both a supplier and a bank signature.
+2. **Q-15**: the snapshot/contract need the full money breakdown, a real
+   conditions shape, and something for the client to read contract text
+   from if not a signed-URL document pattern like Phase 3's.
+3. Reject-all's listing status (CANCELLED) is a guess at the closest fit
+   in the declared enum — confirm your real engine's value.
+4. AS-01's acceptance role gate is enforced against SUPPLIER_OWNER
+   specifically (the only seeded role matching "Owner/Admin") — reconcile
+   if your real role set differs.
