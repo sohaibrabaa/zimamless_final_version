@@ -69,7 +69,7 @@ export const endpointStatus: EndpointStatusEntry[] = [
   { method: "POST", path: "/transactions/{id}/submit", phase: 3, status: "mock", notes: "wizard step 6 · 409 duplicate → blocked screen, reference is details.reviewReference (Q-11 resolved)" },
   { method: "GET", path: "/transactions/{id}/verification", phase: 3, status: "mock", notes: "verification panel on the transaction detail" },
 
-  { method: "GET", path: "/transactions/{id}/risk", phase: 4, status: "mock", notes: "TrustScoreGauge/ComponentBars/FactorList on the supplier transaction detail and the bank underwriting view" },
+  { method: "GET", path: "/transactions/{id}/risk", phase: 4, status: "live", notes: "TrustScoreGauge/ComponentBars/FactorList. Promoted 2026-07-24 on test/live/risk.live.spec.tsx — staged MATURING fixture's stored 86/LOW through useRiskAssessment; availability beside the score (ZM-RSK-005/006); no weight/coefficient/probability anywhere in the body (ZM-RSK-013)" },
   { method: "GET", path: "/admin/risk-models", phase: 4, status: "mock", notes: "handler not implemented — no admin screen this session, not B's Phase 4 scope" },
   { method: "POST", path: "/admin/risk-models", phase: 4, status: "mock", notes: "handler not implemented — no admin screen this session, not B's Phase 4 scope" },
 

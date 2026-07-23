@@ -151,7 +151,14 @@ const FIXTURES = [
   { n: 2, slot: 'ELIGIBLE',             ref: 'ZM-DEMO-ELIGIBLE',  dueInDays: 60 },
   { n: 3, slot: 'OPEN_FOR_OFFERS',      ref: 'ZM-DEMO-OPEN',      dueInDays: 75 },
   { n: 4, slot: 'FUNDING_CONF_PENDING', ref: 'ZM-DEMO-FCP',       dueInDays: 45 },
-  { n: 5, slot: 'FUNDED_NEAR_MATURITY', ref: 'ZM-DEMO-FUNDED',    dueInDays: 5 },
+  // Due +8, not +5: AS-08's 7-day minimum tenor is a hard blocker, and a
+  // fixture staged inside it would (correctly) carry a blocked CRITICAL
+  // score into every underwriting screen. Eight days clears the floor at
+  // staging and still leaves the time machine a one-jump maturity story.
+  // The first staging run used +5 under the id ...1005 (ref ZM-DEMO-FUNDED);
+  // that chain is funded and permanent (INV-7) and stays as a second
+  // maturing receivable.
+  { n: 10, slot: 'FUNDED_NEAR_MATURITY', ref: 'ZM-DEMO-MATURING', dueInDays: 8 },
   { n: 6, slot: 'OVERDUE_UNCONFIRMED',  ref: 'ZM-DEMO-OVERDUE-U', dueInDays: 1 },
   { n: 7, slot: 'RECOURSE_ACTIVE',      ref: 'ZM-DEMO-RECOURSE',  dueInDays: 1 },
   { n: 8, slot: 'PAID',                 ref: 'ZM-DEMO-PAID',      dueInDays: 20 },
@@ -640,6 +647,85 @@ async function driveToFunded(f) {
 }
 
 /**
+ * Every staged fixture gets a real ELECTRONIC_INVOICE document, uploaded
+ * through the real signed-URL flow as the supplier. Without one, the risk
+ * engine's `BLOCK_NO_ELECTRONIC_INVOICE` hard blocker caps the composite at
+ * the blocked ceiling and every demo receivable reads CRITICAL — technically
+ * correct for the facts on the ground, and exactly the wrong first
+ * impression. Inserting a bare `documents` row instead would trade that
+ * blocker for the file-integrity one (no bytes in storage to hash), so the
+ * bytes go up for real.
+ */
+async function ensureEinvoiceDocument(f) {
+  const findDoc = async () => {
+    const { rows } = await client.query(
+      `SELECT id, file_hash FROM documents
+        WHERE subject_type = 'TRANSACTION' AND subject_id = $1
+          AND document_type = 'ELECTRONIC_INVOICE'
+        ORDER BY uploaded_at DESC LIMIT 1`,
+      [txId(f)],
+    );
+    return rows[0] ?? null;
+  };
+
+  let doc = await findDoc();
+  let changed = false;
+
+  if (!doc) {
+    const pdf = readFileSync(
+      join(repoRoot, 'db', 'seed', 'einvoices', 'INV-2026-0001-alnoor-amman-retail.pdf'),
+    );
+    const issued = await api('supplier', 'POST', '/documents/upload-url', {
+      documentType: 'ELECTRONIC_INVOICE',
+      fileName: `${f.ref}.pdf`,
+      mimeType: 'application/pdf',
+      sizeBytes: pdf.length,
+      subjectType: 'TRANSACTION',
+      subjectId: txId(f),
+    });
+    if (issued.status !== 200) {
+      throw new Error(`[${f.ref}] upload-url failed (${issued.status}): ${issued.raw}`);
+    }
+    const put = await fetch(issued.body.uploadUrl, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/pdf' },
+      body: new Uint8Array(pdf),
+    });
+    if (!put.ok) throw new Error(`[${f.ref}] storage PUT failed (${put.status})`);
+    step(f.ref, 'e-invoice document uploaded');
+    doc = await findDoc();
+    changed = true;
+  }
+
+  // The bytes are hashed and OCR'd at finalization, which the wizard
+  // triggers by reading the extraction. Until then file_hash is empty and
+  // the integrity check would (correctly) refuse to vouch for the file.
+  if (doc && !doc.file_hash) {
+    const ex = await api('supplier', 'GET', `/documents/${doc.id}/extraction`);
+    if (ex.status !== 200) {
+      throw new Error(`[${f.ref}] finalize/extraction failed (${ex.status}): ${ex.raw}`);
+    }
+    step(f.ref, 'e-invoice finalized (hash + OCR)');
+    changed = true;
+  }
+
+  // A stored assessment computed before the document was in place is a
+  // stale derived cache, not evidence — no decision consumed it (GET /risk
+  // computes on first read; the fixtures' acceptances predate any
+  // assessment). Dropping it makes the next read recompute the real facts —
+  // and the read happens here, so the stored score is the staging-time one.
+  // In the real flow the displayed score is the submission-era assessment,
+  // not a live recompute; pre-warming gives the fixtures the same property.
+  if (changed) {
+    await client.query(`DELETE FROM risk_assessments WHERE transaction_id = $1`, [txId(f)]);
+    const risk = await api('supplier', 'GET', `/transactions/${txId(f)}/risk`);
+    if (risk.status === 200) {
+      step(f.ref, `trust score ${risk.body.compositeScore} (${risk.body.band})`);
+    }
+  }
+}
+
+/**
  * The demo time machine, driven through its real API (9.2): the platform
  * setting armed by a platform admin, the jump audited, the offset applied in
  * exactly one place. This script never touches `demo_time_offsets` directly.
@@ -930,10 +1016,10 @@ try {
   await driveToConfirmationPending(F[4]);
   step(F[4].ref, `${await stateOf(txId(F[4]))}`);
 
-  // 5 — FUNDED, due in 5 days: the time machine's target.
-  await ensureBase(F[5], 'OPEN_FOR_OFFERS', { withOffer: true });
-  await driveToFunded(F[5]);
-  step(F[5].ref, `${await stateOf(txId(F[5]))}`);
+  // 10 — FUNDED, due in 8 days: the time machine's target.
+  await ensureBase(F[10], 'OPEN_FOR_OFFERS', { withOffer: true });
+  await driveToFunded(F[10]);
+  step(F[10].ref, `${await stateOf(txId(F[10]))}`);
 
   // 8 — PAID: the buyer's payment recorded in full by the bank, then the
   // bank's confirmation. Balances are derived (D-13); nothing is hand-set.
@@ -987,6 +1073,12 @@ try {
       step(f.ref, 'cancelled');
     }
     step(f.ref, `${await stateOf(txId(f))}`);
+  }
+
+  // Every fixture with an invoice gets its e-invoice bytes, so no demo
+  // receivable carries the BLOCK_NO_ELECTRONIC_INVOICE cap.
+  for (const f of FIXTURES) {
+    if (f.dueInDays !== null) await ensureEinvoiceDocument(f);
   }
 
   console.log('\nDemo population staged. Current states:');
