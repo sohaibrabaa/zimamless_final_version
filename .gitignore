@@ -29,3 +29,8 @@ _manual/
 
 # Generated OpenAPI (emitted by CI for the conformance gate)
 apps/api/openapi.generated.json
+
+# Python ML service virtualenv and caches
+services/ml/.venv/
+services/ml/**/__pycache__/
+services/ml/.pytest_cache/

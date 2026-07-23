@@ -25,6 +25,14 @@ import {
   DEFAULT_RESILIENCE,
   ResilientGovernmentAdapter,
 } from './modules/government/resilient-adapter';
+import { BuyersController } from './modules/buyers/buyers.controller';
+import { BuyersService } from './modules/buyers/buyers.service';
+import { DocumentsController } from './modules/documents/documents.controller';
+import { DocumentsService } from './modules/documents/documents.service';
+import { StorageService } from './modules/documents/storage.service';
+import { MlClientService } from './modules/documents/ml-client.service';
+import { TransactionsController } from './modules/transactions/transactions.controller';
+import { TransactionsService } from './modules/transactions/transactions.service';
 
 export const APP_CONFIG = 'APP_CONFIG';
 
@@ -43,7 +51,16 @@ export const APP_CONFIG = 'APP_CONFIG';
  */
 @Global()
 @Module({
-  controllers: [AuthController, HealthController, OnboardingController, GovernmentController],
+  controllers: [
+    AuthController,
+    HealthController,
+    OnboardingController,
+    GovernmentController,
+    // --- Phase 3 ---
+    BuyersController,
+    DocumentsController,
+    TransactionsController,
+  ],
   providers: [
     {
       provide: AppConfig,
@@ -98,6 +115,13 @@ export const APP_CONFIG = 'APP_CONFIG';
         ),
       inject: [CcdAdapter, IstdAdapter, GamAdapter, TIME_PROVIDER],
     },
+
+    // --- Phase 3: buyers, documents, transactions -----------------------
+    BuyersService,
+    StorageService,
+    MlClientService,
+    DocumentsService,
+    TransactionsService,
 
     { provide: APP_GUARD, useClass: AuthGuard },
     { provide: APP_INTERCEPTOR, useClass: AuditInterceptor },

@@ -1,0 +1,31 @@
+# Zimmamless ML service — pinned, and deliberately all pure-wheel installs.
+#
+# Every dependency here installs from PyPI with no native toolchain and no
+# separately-installed binary. That is a hard constraint, not a preference:
+# the OCR requirement (ZM-DOC-005) would otherwise need Tesseract, which on
+# Windows means an out-of-band installer and a PATH entry that CI, the demo
+# machine, and the deployment target would each have to be told about
+# separately. RapidOCR ships its ONNX models inside the wheel, so
+# `pip install -r requirements.txt` is the whole setup on every platform.
+
+fastapi==0.139.2
+uvicorn==0.40.0
+pydantic==2.12.4
+python-multipart==0.0.20
+
+# OCR. onnxruntime is pulled in by rapidocr and pinned with it.
+rapidocr-onnxruntime==1.2.3
+
+# Rasterization (PDF -> image) and QR decoding.
+pymupdf==1.28.0
+opencv-python==5.0.0.93
+numpy==2.3.5
+
+# Seed e-invoice generation (tools/generate_einvoices.py only — not imported
+# by the service itself, but kept here so one install covers both).
+reportlab==5.0.0
+qrcode==8.2
+pillow==12.1.0
+
+pytest==9.0.1
+httpx==0.28.1

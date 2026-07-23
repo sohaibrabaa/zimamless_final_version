@@ -233,3 +233,107 @@ SEEDS: S1's consents re-seeded in the canonical vocabulary; S3 Jordan Valley Foo
 VERIFICATION: 154 API tests (was 129; new suites: onboarding-guards, government-access), 41 web tests (was 38), lint/typecheck all workspaces, i18n parity 274 keys both locales, `next build`, frozen-schema drift check, conformance gate — all green. `db:verify` and the RLS suite re-run against the hosted project after the seed re-apply.
 
 STILL OPEN: deployment. Unchanged, still the project's #1 risk, still not resolvable from a session. Q-01..Q-04 remain as they were.
+
+## 2026-07-23 — Agent A (session 3, Phase 3)
+LIVE: none on a public URL — **the API is still not deployed**, so every
+ENDPOINT_STATUS entry stays `mock`. Fourteen Phase 3 endpoints are
+implemented and verified against the hosted database **and hosted Supabase
+Storage** from localhost: `/buyers/search`, `/buyers/resolve`,
+`/buyers/{id}`, `/documents/upload-url`, `/documents/{id}/download-url`,
+`/documents/{id}/extraction`, `/transactions` GET+POST,
+`/transactions/{id}`, `…/invoice`, `…/buyer`, `…/minimum-amount`,
+`…/declarations`, `…/submit`, `…/verification`.
+Conformance gate: 29/82 paths, no drift on paths, verbs or status codes.
+
+CHANGED (shared surfaces — read this section):
+  - **`/services/ml` now exists and OCR genuinely runs.** The Phase 0
+    carry-over "Python is not installed" was wrong: `python` is a Microsoft
+    Store stub, but `py` runs 3.13.3. Nothing of yours changes; this is the
+    thing your wizard's pre-fill has been waiting for.
+  - **Every date the API emits was one day early, and is now correct.** A
+    Postgres `date` read as a JS Date lands on LOCAL midnight, so
+    `toISOString()` moved it back a day in Asia/Amman. If you built any
+    fixture by copying a live response, re-check it.
+  - **`docs/specs/EINVOICE_QR.md` is new** — the QR payload schemas, the
+    four `validationStatus` outcomes, and the seeded e-invoice inventory.
+  - `docs/coordination/ENDPOINT_STATUS.md` — the 14 Phase 3 rows now carry
+    behavioural notes rather than empty cells.
+  - `db/tools/migrate.mjs` gained `--rebaseline <name>`. Infrastructure, not
+    a shared surface, but it is why migrations run again at all — see the
+    completion report §4.6.
+
+SEED:
+  - **`db/seed/einvoices/` — five e-invoice PDFs we generate ourselves**
+    (`services/ml/tools/generate_einvoices.py`, byte-stable, `--check` mode).
+    These are the Phase 3 seed. Purposes are listed in EINVOICE_QR.md §7;
+    the one you want first is
+    `INV-2026-0002-alnoor-levant-mismatch.pdf` — its QR says `25000.000`
+    while the page prints `24500.000`, which is the deliberate
+    extracted-vs-entered mismatch your step 2 has to highlight.
+  - **`db/seed/0300_seed_phase3.sql`** — five supplier↔buyer relationships,
+    fixed ids, applied to the hosted database. Aqaba Logistics appears under
+    BOTH S1 and S2 with **different contacts**: that is ZM-BUY-008 made
+    visible, not a duplicate row.
+  - Deliberately **no seeded transactions, invoices or documents**. A
+    hand-written invoice row would be a fiction — its fingerprint, its
+    extraction rows and its stored object are produced by code paths that
+    have to actually run. Transactions `ZM-1004`+ on the hosted database are
+    residue from my verification run with random ids, exactly like the Phase
+    2 queue: real rows, not fixtures.
+
+BLOCKED ON: **the deploy**, unchanged and now three phases old. `render.yaml`
+is committed; §2 of the runbook needs a hosting account I do not have.
+
+NOTE FOR B — nine things that will affect your screens:
+  1. **`POST /buyers/resolve` is 200, not 201**, and needs
+     `confirmedByUser: true`. `SUSPENDED`/`STRUCK_OFF` are 409
+     `BUYER_BLOCKED`. **`UNDER_LIQUIDATION` is 200 with
+     `requiresManualReview: true`** — a review path, not a refusal (LT-02).
+     Please do not render it in the blocked-buyer style.
+  2. **There is no finalize call, deliberately.** `upload-url` → you PUT the
+     file to the signed URL → done. Hashing and OCR run lazily, so the
+     **first** `GET /documents/{id}/extraction` takes ~2–5 seconds and
+     later ones are instant. Show a pending state. (I built a
+     `POST /documents/{id}/finalize`, the conformance gate refused it as
+     not-in-contract, and it was right — completion report §4.5.)
+  3. **`qr.validationStatus` has four values and two are not failures.**
+     `UNAVAILABLE` = the document carries no QR at all (normal).
+     `UNPARSED` = a code was read and no schema recognised it (manual
+     review). Same shape as the `90000001`/`90000002` distinction — please
+     keep them visually distinct.
+  4. **`minimumAcceptableAmount` is absent from the bank view entirely**,
+     and the 422 refusing an excessive floor does not echo the floor back.
+     Do not reconstruct it from the error to show the supplier.
+  5. **A false declaration is 422 with `details.notAffirmed[]`** naming
+     which of the eight. Surface the list — it is better than a generic
+     message. (It is 422 and not 400 because it is a business rule, not a
+     malformed body.)
+  6. **Duplicate submit is 409 `DUPLICATE_INVOICE` with
+     `details.reviewReference`** for your blocked screen. It deliberately
+     discloses nothing about the other party.
+  7. **Money in is a 3-dp string** — `"12354"` is rejected, `"12354.000"` is
+     accepted. Status codes to pin: `resolve` **200**, `upload-url` **200**,
+     `submit` **200**, `POST /transactions` **201**, `declarations` **201**.
+  8. **`GET /transactions/{id}` varies by audience** — supplier and platform
+     get the floor, a bank never does. A bank cannot see an unlisted
+     transaction at all (404) until Phase 5 creates listings.
+  9. **`buyers/search` never returns a selection**, not even for a single
+     100% match, and there is no field in the response that could carry one.
+     `candidates[].matchSource` tells you whether a candidate came from this
+     supplier's own relationships, the platform, or the registry.
+
+VERIFICATION: 245 API unit tests (was 154), **56 live RLS persona tests**
+(was 23 — the Phase 2 carry-over is closed: the suite now runs against the
+Phase 2 and Phase 3 tables **with rows in them**, and fails loudly rather
+than passing vacuously if the fixtures are absent), 95 ML tests (new,
+including real rasterize→OCR→QR over the real seeded PDFs), 36 live
+end-to-end checks against hosted Supabase + Storage, `db:verify` 15/15,
+frozen-schema drift check, conformance gate, lint and typecheck — all green.
+
+Four real defects were found by running things rather than by testing them,
+and all four produced plausible-looking output rather than obvious failures:
+the one-day date shift above; two OCR label-matching bugs that silently
+dropped the seller's name from every Al-Noor invoice; and a duplicate check
+that was defeated by the very unique index meant to enforce it (the DB
+raised on the *draft*, so a 500 on `PUT …/buyer` meant `submit` never saw a
+collision). Completion report §4.

@@ -302,3 +302,18 @@ export function plusDays(instant: Date, days: number): Date {
   if (!Number.isSafeInteger(days)) throw new Error('plusDays requires a whole number of days.');
   return new Date(instant.getTime() + days * 86_400_000);
 }
+
+/**
+ * The same, in seconds — for short expiry windows such as the signed
+ * storage URLs (ZM-DOC-004), which are measured in minutes rather than days.
+ *
+ * Here for the same reason as `plusDays`: src/modules/** cannot construct a
+ * Date, and one shared helper in the file that is allowed to beats a lint
+ * suppression at each call site.
+ */
+export function plusSeconds(instant: Date, seconds: number): Date {
+  if (!Number.isSafeInteger(seconds)) {
+    throw new Error('plusSeconds requires a whole number of seconds.');
+  }
+  return new Date(instant.getTime() + seconds * 1000);
+}

@@ -12,6 +12,7 @@ import { AppModule } from './app.module';
 import { AppConfig } from './config/configuration';
 import { AppLogger } from './common/logging/app-logger.service';
 import { SystemTimeProvider } from './common/time/time.provider';
+import { StorageService } from './modules/documents/storage.service';
 import { buildOpenApiDocument } from './openapi.config';
 
 async function bootstrap(): Promise<void> {
@@ -71,6 +72,19 @@ async function bootstrap(): Promise<void> {
   // Prime the time-machine guard before serving traffic, so the first
   // /auth/me reports the demo block correctly rather than one refresh late.
   await app.get(SystemTimeProvider).refresh();
+
+  // The private documents bucket, created if absent. Idempotent, and a
+  // failure here is logged rather than fatal: document upload would be
+  // broken, but authentication, onboarding and every read still work, and
+  // taking the whole API down over it would turn a degraded feature into an
+  // outage. Discovering it at boot beats discovering it on a supplier's
+  // first upload in front of a judge.
+  await app
+    .get(StorageService)
+    .ensureBucket()
+    .catch((err: Error) => {
+      logger.event('error', 'Document storage bucket is unavailable', { error: err.message });
+    });
 
   app.enableShutdownHooks();
 

@@ -8,6 +8,9 @@
  *   node db/tools/migrate.mjs --reset    DROP and recreate the public schema first
  *   node db/tools/migrate.mjs --baseline <name>|all
  *                                        record as applied WITHOUT running
+ *   node db/tools/migrate.mjs --rebaseline <name>
+ *                                        re-record an applied migration's
+ *                                        checksum (see the flag's comment)
  *
  * Connection comes from DATABASE_URL. For Supabase use the session-mode
  * pooler (port 5432) or the direct connection — DDL does not work over the
@@ -59,16 +62,51 @@ const reset = args.has('--reset');
  * missing table. `db:verify` is the check that the claim was true.
  */
 const baselineNames = [];
+/**
+ * --rebaseline <name>: update the stored checksum of an ALREADY-APPLIED
+ * migration to the current file's bytes.
+ *
+ * For the one situation --baseline cannot reach: a migration recorded with
+ * a checksum whose source bytes no longer exist anywhere — applied from a
+ * working copy that was edited before being committed, or recorded on a
+ * checkout with different line endings. The drift check then fails forever
+ * and no further migration can be applied, even though the database is
+ * correct.
+ *
+ * Deliberately narrower than --baseline: it refuses "all", refuses a
+ * migration that is not already recorded, and prints both checksums, so
+ * "the file changed and I want to overwrite history" cannot be done by
+ * reflex. It asserts the database already contains this migration's effect;
+ * `db:verify` is what checks that claim. Use it only after verifying.
+ */
+const rebaselineNames = [];
 {
   const argv = process.argv.slice(2);
   for (let i = 0; i < argv.length; i++) {
-    if (argv[i] === '--baseline') {
+    if (argv[i] === '--baseline' || argv[i] === '--rebaseline') {
+      const flag = argv[i];
       const value = argv[i + 1];
       if (!value || value.startsWith('--')) {
-        console.error('FATAL: --baseline requires a migration name, or "all".');
+        console.error(
+          flag === '--baseline'
+            ? 'FATAL: --baseline requires a migration name, or "all".'
+            : 'FATAL: --rebaseline requires an explicit migration name ("all" is not accepted).',
+        );
         process.exit(1);
       }
-      baselineNames.push(value);
+      if (flag === '--rebaseline') {
+        if (value === 'all') {
+          console.error(
+            'FATAL: --rebaseline does not accept "all". Rewriting every recorded\n' +
+              'checksum at once is indistinguishable from silently accepting real drift.\n' +
+              'Name each migration you have verified.',
+          );
+          process.exit(1);
+        }
+        rebaselineNames.push(value);
+      } else {
+        baselineNames.push(value);
+      }
       i++;
     }
   }
@@ -140,6 +178,42 @@ try {
     'SELECT name, checksum, applied_at FROM schema_migrations',
   );
   const applied = new Map(appliedRows.map((r) => [r.name, r]));
+
+  // --rebaseline: re-record the checksum of an already-applied migration.
+  // Runs before the drift check, since resolving that check is its purpose.
+  for (const name of rebaselineNames) {
+    const migration = migrations.find((m) => m.name === name);
+    if (!migration) {
+      console.error(`FATAL: no migration file named "${name}".`);
+      process.exit(1);
+    }
+    const row = applied.get(name);
+    if (!row) {
+      console.error(
+        `FATAL: ${name} is not recorded as applied, so there is nothing to re-baseline.\n` +
+          'Use --baseline to record a migration that was applied by hand.',
+      );
+      process.exit(1);
+    }
+    if (row.checksum === migration.checksum) {
+      console.log(`  [rebaseline] ${name} — checksum already matches, nothing to do`);
+      continue;
+    }
+    await client.query('UPDATE schema_migrations SET checksum = $2 WHERE name = $1', [
+      name,
+      migration.checksum,
+    ]);
+    applied.set(name, { ...row, checksum: migration.checksum });
+    console.log(`  [rebaseline] ${name}`);
+    console.log(`      was: ${row.checksum}`);
+    console.log(`      now: ${migration.checksum}`);
+  }
+  if (rebaselineNames.length > 0) {
+    console.log(
+      '\nRe-baselined. This asserted that the database already contains what these\n' +
+        'migrations describe; it did not check. Run `npm run db:verify`.\n',
+    );
+  }
 
   // Drift check before doing anything: an applied migration whose file
   // changed means the database and the repo disagree about history.
