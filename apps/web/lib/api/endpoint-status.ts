@@ -61,7 +61,7 @@ export const endpointStatus: EndpointStatusEntry[] = [
   { method: "GET", path: "/documents/{id}/extraction", phase: 3, status: "mock", notes: "wizard step 2 · OCR/QR pre-fill and mismatch table" },
   { method: "GET", path: "/transactions", phase: 3, status: "live", notes: "supplier transaction list. Promoted 2026-07-23 — real rows rendered through useTransactionList inside the real SessionProvider, scoped server-side by the derived X-Organization-Id" },
   { method: "POST", path: "/transactions", phase: 3, status: "mock", notes: "wizard entry — creates the draft" },
-  { method: "GET", path: "/transactions/{id}", phase: 3, status: "mock", notes: "transaction detail · floor stripped for bank callers" },
+  { method: "GET", path: "/transactions/{id}", phase: 3, status: "live", notes: "transaction detail · floor stripped for bank callers. Promoted 2026-07-24 on test/live/detail-contract.live.spec.tsx — FUNDED demo fixture rendered through useTransaction, floor visible to its owning supplier as a 3-dp string (bank-side absence is floor.live.spec.tsx)" },
   { method: "PUT", path: "/transactions/{id}/invoice", phase: 3, status: "mock", notes: "wizard step 2" },
   { method: "PUT", path: "/transactions/{id}/buyer", phase: 3, status: "mock", notes: "wizard step 1" },
   { method: "PUT", path: "/transactions/{id}/minimum-amount", phase: 3, status: "mock", notes: "wizard step 4" },
@@ -76,7 +76,7 @@ export const endpointStatus: EndpointStatusEntry[] = [
   { method: "POST", path: "/transactions/{id}/listing", phase: 5, status: "mock", notes: "supplier listing-activation screen · requires a real ELIGIBLE transaction, moves it to OPEN_FOR_OFFERS" },
   { method: "GET", path: "/transactions/{id}/listing-current", phase: 5, status: "mock", notes: "v3.1.0 · supplier listing-activation screen + offer comparison screen" },
   { method: "GET", path: "/listings/{id}", phase: 5, status: "mock" },
-  { method: "GET", path: "/listings/{id}/offers", phase: 5, status: "mock", notes: "role-split · offer comparison screen (supplier) and own-offer check (bank)" },
+  { method: "GET", path: "/listings/{id}/offers", phase: 5, status: "live", notes: "role-split · offer comparison screen (supplier) and own-offer check (bank). Promoted 2026-07-24 on test/live/acceptance.live.spec.tsx — real ACTIVE offer rendered through useListingOffers inside the real SessionProvider, money as 3-dp strings" },
   { method: "GET", path: "/marketplace/eligible", phase: 5, status: "live", notes: "bank marketplace feed · real per-bank policy-filter eligibility (ZM-MKT-002). Promoted 2026-07-23 on test/live/marketplace.live.spec.tsx — rendered through useEligibleListings in the real SessionProvider; rows key off listingId (not id), no offerCount, no floor, myOffer carries no bankOrgId (INV-11)" },
   { method: "GET", path: "/marketplace/listings/{id}", phase: 5, status: "mock", notes: "v3.1.0 · bank underwriting view, incl. the Phase 4 risk components" },
   { method: "GET", path: "/banks/policy-filters", phase: 5, status: "mock", notes: "policy-filter configuration screen" },
@@ -89,10 +89,10 @@ export const endpointStatus: EndpointStatusEntry[] = [
   { method: "POST", path: "/offers/{id}/approve", phase: 5, status: "mock", notes: "approval queue · rejects self-approval server-side (SELF_APPROVAL_FORBIDDEN)" },
   { method: "POST", path: "/offers/{id}/withdraw", phase: 5, status: "mock", notes: "my offers · pre-acceptance, no penalty" },
 
-  { method: "POST", path: "/offers/{id}/accept", phase: 6, status: "mock", demoCritical: true, notes: "acceptance modal · atomic-in-memory, idempotency-key replay-safe, ZM-SEL-001..008 enforced in marketplace-store.ts" },
+  { method: "POST", path: "/offers/{id}/accept", phase: 6, status: "live", demoCritical: true, notes: "acceptance modal. Promoted 2026-07-24 on test/live/acceptance.live.spec.tsx — accepted through useOfferAcceptance against the real API; a second call on the same attempt replayed the identical snapshot (id, hash, capturedAt), one lock observed twice (INV-1/INV-4)" },
   { method: "POST", path: "/listings/{id}/reject-all", phase: 6, status: "mock", notes: "reject-all flow on the offer comparison screen" },
   { method: "POST", path: "/transactions/{id}/contract", phase: 6, status: "mock", notes: "contract review screen · generate, gated by ZM-CON-006 pre-contract checks" },
-  { method: "GET", path: "/transactions/{id}/contract", phase: 6, status: "mock", notes: "contract review screens (both portals)" },
+  { method: "GET", path: "/transactions/{id}/contract", phase: 6, status: "live", notes: "contract review screens (both portals). Promoted 2026-07-24 on test/live/detail-contract.live.spec.tsx — the seeded signed contract rendered through useContract, past PENDING_SIGNATURES" },
   { method: "POST", path: "/contracts/{id}/sign", phase: 6, status: "mock", notes: "click-to-accept signing · FULLY_SIGNED only once both sides sign (ZM-CON-012)" },
   { method: "GET", path: "/transactions/{id}/conditions", phase: 6, status: "mock", notes: "conditions checklist" },
   { method: "POST", path: "/conditions/{id}/fulfil", phase: 6, status: "mock", notes: "conditions checklist · fulfil action" },
@@ -134,7 +134,7 @@ export const endpointStatus: EndpointStatusEntry[] = [
   // left: `isLive` takes the first match, so two rows for one endpoint means
   // editing the wrong one changes nothing and looks like it should.
   { method: "POST", path: "/admin/relisting-requests/{id}/approve", phase: 9, status: "mock", notes: "Served: REQUESTED/UNDER_REVIEW only, idempotent, audited. Q-18 notes the 7-check gap. phase9-admin" },
-  { method: "POST", path: "/demo/time-travel", phase: 9, status: "mock", demoCritical: true, notes: "Served + integration-proven (phase9-demo): double-guarded 404, 403 to supplier, forward jump drives the maturity sweep to OVERDUE_UNCONFIRMED. UI control on platform/settings. Stays mock until smoke-tested through that screen live" },
+  { method: "POST", path: "/demo/time-travel", phase: 9, status: "live", demoCritical: true, notes: "Promoted 2026-07-24 on test/live/time-machine.live.spec.tsx — TimeMachineControl against the real endpoint: disarmed 404 surfaced as 'not armed', armed zero-day jump renders the server's offset/effective date. Forward-jump-drives-the-sweep is phase9-demo integration's proof; the screen test deliberately never moves the shared clock" },
 ];
 
 export function endpointKey(method: EndpointStatusEntry["method"], path: string): string {

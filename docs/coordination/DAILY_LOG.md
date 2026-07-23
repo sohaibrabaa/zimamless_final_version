@@ -1332,3 +1332,40 @@ DRAFT → CANCELLED across the demo path. API-driven per the phase-5 doctrine;
 OVERDUE_UNCONFIRMED is *waited for* from the real sweep, never written by
 hand. Run order per D-20: dedupe --apply, then the seed, after the regression
 frees the pooler.
+
+## 2026-07-24 — 9.3 landed; the promotion sweep resumes (13 live)
+
+DEMO POPULATION STAGED, 9/9: after three real defects found by the seed
+itself — the API's own boot had the refresh-before-init bug (main.ts, fixed
+with an explicit init()); contract signing takes `{accepted:true}`; and the
+cancel endpoint's listing-close branch wrote an `updated_at` column neither
+`listings` nor `bank_offers` has (`closed_at`/`withdrawn_at` are real). That
+last one had 18 green tests around it — none staged an actually-open listing,
+so the branch had never executed. Fixed + a phase9-admin test that stages a
+listing with a live offer and asserts both close with the cancellation
+(19/19). The past-due pair (OVERDUE_UNCONFIRMED, RECOURSE_ACTIVE) could not be
+walked with backdated invoices — contract generation rightly refuses
+INVOICE_PAST_DUE — so the seed matures them through the real time machine:
+armed via PATCH /admin/settings, +2 days via POST /demo/time-travel, marked by
+the real sweep, bank confirms, recourse opens, clock back to zero in a
+finally. Also learned from the API rather than fought: a payment settling the
+outstanding moves the state to PAID by itself (D-13), so the seed only
+confirms when something still awaits it.
+
+PROMOTIONS (8 → 13 live; both DEMO-CRITICAL endpoints now live):
+- POST /offers/{id}/accept + GET /listings/{id}/offers — acceptance.live:
+  accepted through the real hook; a second call on the same attempt replayed
+  the identical snapshot (id, hash, capturedAt). One lock, observed twice.
+- POST /demo/time-travel — time-machine.live: disarmed 404 rendered as "not
+  armed", armed zero-day jump renders the server's offset. The screen test
+  deliberately never moves the shared clock — the demo population lives in
+  the same database, and its OPEN listing's offer window would close.
+- GET /transactions/{id} + GET /transactions/{id}/contract — detail-contract
+  .live against the staged fixtures, read-only by design.
+
+Live suite 9 files / 33 tests green; hermetic web suite 232 green.
+
+OPERATIONAL NOTE FOR DEMO DAY: ZM-DEMO-OPEN's offer window follows the real
+platform deadline settings (~24h). Re-run `npm run scenario:demo -w db` on
+demo morning — the seed self-heals: a lapsed listing returns the transaction
+to ELIGIBLE and the script stages a fresh round with fresh approved offers.

@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeAll, afterAll } from "vitest";
+import { describe, it, expect, beforeAll, afterAll, vi } from "vitest";
 import { screen, waitFor, fireEvent } from "@testing-library/react";
 import { useState } from "react";
 import pg from "pg";
@@ -9,6 +9,26 @@ import {
   useOfferAcceptance,
   type AcceptedOfferSnapshotFull,
 } from "@/lib/contracts/useAcceptance";
+
+// useListingOffers reads useSession(), so the offers probe renders inside the
+// real SessionProvider. Only the Supabase browser SDK is substituted, handed
+// the real access token from the real password grant (the transactions.live
+// pattern).
+let liveToken = "";
+
+vi.mock("@/lib/supabase/client", () => ({
+  supabase: {
+    auth: {
+      getSession: async () => ({
+        data: { session: { access_token: liveToken, user: { id: "live" } } },
+      }),
+      onAuthStateChange: () => ({ data: { subscription: { unsubscribe: () => {} } } }),
+      signOut: async () => ({ error: null }),
+    },
+  },
+}));
+
+vi.mock("@/lib/mocks/persona-store", () => ({ getStoredPersona: () => null }));
 
 /**
  * `POST /offers/{id}/accept` — the demo-critical endpoint, through the real
@@ -168,6 +188,9 @@ describe("offer acceptance against the live API", () => {
 
   it("renders the real ACTIVE offer through useListingOffers, money as 3-dp strings", async () => {
     useSessionForApi(supplier);
+    liveToken = supplier.token;
+    // Imported lazily so the supabase mock above is installed first.
+    const { SessionProvider } = await import("@/lib/session/SessionProvider");
 
     function Probe() {
       const offers = useListingOffers(listingId);
@@ -184,7 +207,11 @@ describe("offer acceptance against the live API", () => {
       );
     }
 
-    renderLive(<Probe />);
+    renderLive(
+      <SessionProvider locale="en">
+        <Probe />
+      </SessionProvider>
+    );
     await waitFor(
       () => {
         expect(screen.queryByText(/^error:/)).toBeNull();
