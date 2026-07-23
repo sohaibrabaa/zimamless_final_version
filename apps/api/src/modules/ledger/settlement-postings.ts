@@ -12,15 +12,18 @@ import { LedgerLine } from './ledger.service';
  * ## The model
  *
  * Money moves bank → supplier directly (ZM-CON-013). The platform never holds
- * the gross, so no journal here debits platform funds for it. Instead
+ * the funds, so no journal here debits platform funds for them. Instead
  * `SETTLEMENT_CLEARING` acts as the pivot:
  *
  *   1. **Funding received** — the bank's funding obligation is discharged into
- *      clearing. DR clearing / CR bank-funding, for the gross.
- *   2. **Distribution** — clearing is emptied into the three things the gross
- *      actually becomes: the platform's commission, the platform's listing
- *      fee, and the supplier's payable. DR clearing is reversed here: clearing
- *      is credited and the destinations debited.
+ *      clearing. DR clearing / CR bank-funding, for the *distributable*
+ *      amount, not the headline gross. See `SettlementSplit.distributable`:
+ *      the bank retains its own discount and fees, so they never move and
+ *      never enter these books.
+ *   2. **Distribution** — clearing is emptied into the three things that
+ *      amount becomes: the platform's commission, the platform's listing fee,
+ *      and the supplier's payable. Clearing is credited and the destinations
+ *      debited.
  *   3. **Payout completed** — the supplier's payable is discharged.
  *
  * After (3) the clearing balance for the transaction is zero. That is the
@@ -33,7 +36,33 @@ import { LedgerLine } from './ledger.service';
  */
 
 export interface SettlementSplit {
-  gross: Money;
+  /**
+   * What the bank actually remits into the settlement arrangement.
+   *
+   * **Not** the headline `grossFundingAmount`, and the distinction is the one
+   * thing to get right here. Offer arithmetic is:
+   *
+   * ```
+   * net = gross - bankDiscount - bankFees - commission - listingFee - other
+   * ```
+   *
+   * The bank's discount and fees are its own pricing: it *retains* them and
+   * never transfers them to anyone. With the Phase 6 fixture — gross 9000,
+   * discount 300, fees 150, commission 135, listing fee 25, net 8390 — the
+   * money that actually leaves the bank is 8550, not 9000.
+   *
+   * Posting the headline 9000 into clearing and distributing only 8550 would
+   * strand 450 in a clearing account permanently, which is both an imbalance
+   * in substance and a claim that the platform is holding the bank's margin.
+   * That is also why the frozen `chk_settlement_split` is `>=` rather than `=`:
+   * it compares against the headline gross and tolerates the bank's retained
+   * remainder.
+   *
+   * So the ledger posts what moves. The bank's margin never enters the
+   * platform's books at all, because it is not the platform's business and the
+   * platform does not intermediate it.
+   */
+  distributable: Money;
   commission: Money;
   listingFee: Money;
   netPayout: Money;
@@ -42,29 +71,41 @@ export interface SettlementSplit {
 }
 
 export class SettlementSplitMismatch extends Error {
-  constructor(gross: string, parts: string) {
+  constructor(distributable: string, parts: string) {
     super(
-      `Settlement split does not reconcile: gross ${gross} != commission + listing fee + ` +
-        `net payout (${parts}). The database CHECK (chk_settlement_split) enforces the same ` +
-        'relation; a mismatch here would post a journal describing money that does not exist.',
+      `Settlement split does not reconcile: distributable ${distributable} != commission + ` +
+        `listing fee + net payout (${parts}). A mismatch here would post a journal describing ` +
+        'money that does not exist, or strand a balance in a clearing account.',
     );
     this.name = 'SettlementSplitMismatch';
   }
 }
 
 /**
- * The split must account for the whole gross, exactly.
+ * What the bank remits: everything the offer promised to someone other than
+ * the bank itself.
+ */
+export function distributableFrom(
+  commission: Money,
+  listingFee: Money,
+  netPayout: Money,
+): Money {
+  return commission.add(listingFee).add(netPayout);
+}
+
+/**
+ * The distributable amount must be exactly the three legs it becomes.
  *
- * `chk_settlement_split` in the frozen schema allows `gross >= parts`, which
- * tolerates a remainder. This refuses one: an unexplained remainder is money
- * the books cannot say the whereabouts of, and every leg the product defines
- * (commission, listing fee, payout) is already represented. If a future
- * deduction type appears it gets its own leg rather than hiding in a gap.
+ * Strict equality, unlike the database CHECK — that one compares against the
+ * headline gross and must tolerate the bank's retained margin. Here there is
+ * nothing left to tolerate: every leg is named, so a remainder would be money
+ * the books cannot say the whereabouts of. A future deduction type gets its own
+ * leg rather than hiding in a gap.
  */
 export function assertSplitReconciles(split: SettlementSplit): void {
-  const parts = split.commission.add(split.listingFee).add(split.netPayout);
-  if (!parts.equals(split.gross)) {
-    throw new SettlementSplitMismatch(split.gross.toString(), parts.toString());
+  const parts = distributableFrom(split.commission, split.listingFee, split.netPayout);
+  if (!parts.equals(split.distributable)) {
+    throw new SettlementSplitMismatch(split.distributable.toString(), parts.toString());
   }
 }
 
@@ -74,14 +115,14 @@ export function fundingReceivedJournal(split: SettlementSplit): LedgerLine[] {
     {
       entryType: 'DEBIT',
       accountKind: 'SETTLEMENT_CLEARING',
-      amount: split.gross,
+      amount: split.distributable,
       organizationId: null,
-      description: 'Gross funding received into settlement clearing',
+      description: 'Funding received into settlement clearing',
     },
     {
       entryType: 'CREDIT',
       accountKind: 'BANK_FUNDING',
-      amount: split.gross,
+      amount: split.distributable,
       organizationId: split.bankOrgId,
       description: 'Bank funding obligation discharged',
     },
@@ -100,7 +141,7 @@ export function distributionJournal(split: SettlementSplit): LedgerLine[] {
     {
       entryType: 'CREDIT',
       accountKind: 'SETTLEMENT_CLEARING',
-      amount: split.gross,
+      amount: split.distributable,
       organizationId: null,
       description: 'Settlement clearing distributed',
     },

@@ -3,6 +3,7 @@ import {
   SettlementSplit,
   SettlementSplitMismatch,
   assertSplitReconciles,
+  distributableFrom,
   distributionJournal,
   fundingReceivedJournal,
   payoutCompletedJournal,
@@ -22,12 +23,20 @@ import { Money } from '../../common/money/money';
 const SUPPLIER = '0e000000-0000-4000-8000-000000000002';
 const BANK = '0e000000-0000-4000-8000-000000000004';
 
-/** The Phase 6 fixture's real numbers: gross 9000, commission 135, fee 25. */
+/**
+ * The Phase 6 fixture's actual numbers.
+ *
+ * Headline gross 9000, bank discount 300, bank fees 150, commission 135,
+ * listing fee 25, net payout 8390. The bank retains 450 of its own pricing, so
+ * what it actually remits — and therefore what the ledger posts — is 8550.
+ * Using the headline 9000 here would strand 450 in clearing forever.
+ */
+const HEADLINE_GROSS = Money.from('9000.000');
 const SPLIT: SettlementSplit = {
-  gross: Money.from('9000.000'),
+  distributable: Money.from('8550.000'),
   commission: Money.from('135.000'),
   listingFee: Money.from('25.000'),
-  netPayout: Money.from('8840.000'),
+  netPayout: Money.from('8390.000'),
   supplierOrgId: SUPPLIER,
   bankOrgId: BANK,
 };
@@ -115,19 +124,33 @@ describe('INV-6 — every journal balances', () => {
   });
 });
 
-describe('the settlement split must account for the whole gross', () => {
+describe('the settlement split must account for the whole distributable amount', () => {
   it('accepts a split that reconciles', () => {
     expect(() => assertSplitReconciles(SPLIT)).not.toThrow();
   });
 
+  it('derives the distributable amount from the three legs', () => {
+    expect(
+      distributableFrom(SPLIT.commission, SPLIT.listingFee, SPLIT.netPayout).toString(),
+    ).toBe('8550.000');
+  });
+
+  it('is NOT the headline gross — the bank retains its discount and fees', () => {
+    // The distinction the whole model turns on. 9000 - 300 discount - 150 fees
+    // = 8550. Posting the headline would strand the bank's 450 margin in a
+    // clearing account, asserting the platform holds it.
+    expect(SPLIT.distributable.toString()).not.toBe(HEADLINE_GROSS.toString());
+    expect(HEADLINE_GROSS.subtract(SPLIT.distributable).toString()).toBe('450.000');
+    // And the frozen CHECK still holds against the headline: gross >= parts.
+    expect(HEADLINE_GROSS.greaterThanOrEqual(SPLIT.distributable)).toBe(true);
+  });
+
   it('refuses a split that leaves an unexplained remainder', () => {
-    // The DB CHECK allows gross >= parts. A remainder is money the books
-    // cannot say the whereabouts of, so this refuses it.
     const leaky: SettlementSplit = { ...SPLIT, netPayout: Money.from('8000.000') };
     expect(() => assertSplitReconciles(leaky)).toThrow(SettlementSplitMismatch);
   });
 
-  it('refuses a split that over-distributes the gross', () => {
+  it('refuses a split that over-distributes', () => {
     const over: SettlementSplit = { ...SPLIT, netPayout: Money.from('9000.000') };
     expect(() => assertSplitReconciles(over)).toThrow(SettlementSplitMismatch);
   });
@@ -147,13 +170,15 @@ describe('the ledger ruling — clearing passes through, revenue stays', () => {
     expect(net(wholeSettlement, 'SETTLEMENT_CLEARING').toString()).toBe('0.000');
   });
 
-  it('never posts the gross funding to a platform-funds account', () => {
+  it('never posts the funding amount to a platform-funds account', () => {
     // There is no cash account in the enum, and this asserts nothing invented
     // one: the only accounts that count as platform funds are the two revenue
-    // accounts, and neither ever carries the gross.
+    // accounts, and neither ever carries the distributable amount or the
+    // headline gross.
     for (const line of wholeSettlement) {
       if (countsAsPlatformFunds(line.accountKind)) {
-        expect(line.amount.toString()).not.toBe(SPLIT.gross.toString());
+        expect(line.amount.toString()).not.toBe(SPLIT.distributable.toString());
+        expect(line.amount.toString()).not.toBe(HEADLINE_GROSS.toString());
       }
     }
   });
@@ -185,11 +210,13 @@ describe('zero-amount legs', () => {
   it('omits a listing fee of nothing rather than posting a zero row', () => {
     // `CHECK (amount > 0)` forbids a zero row, and a fee of nothing is not an
     // event that happened.
+    // The fee's 25 goes to the supplier instead: 8550 = 135 + 0 + 8415.
     const noFee: SettlementSplit = {
       ...SPLIT,
       listingFee: Money.zero(),
-      netPayout: Money.from('8865.000'),
+      netPayout: Money.from('8415.000'),
     };
+    expect(() => assertSplitReconciles(noFee)).not.toThrow();
     const lines = distributionJournal(noFee);
     expect(lines.some((l) => l.accountKind === 'PLATFORM_LISTING_FEE_REVENUE')).toBe(false);
 

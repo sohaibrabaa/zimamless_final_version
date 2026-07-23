@@ -75,9 +75,27 @@ const TRANSITIONS: ReadonlyMap<TransactionState, ReadonlySet<TransactionState>> 
     new Set<TransactionState>(['CONDITIONS_PENDING', 'CONTRACTED', 'CANCELLED']),
   ],
   ['CONDITIONS_PENDING', new Set<TransactionState>(['OFFER_ACCEPTED', 'CONTRACTED', 'CANCELLED'])],
-  // CONTRACTED onwards is Phase 7's (funding and settlement). Declaring those
-  // transitions now would assert behaviour no code can perform.
-  ['CONTRACTED', new Set<TransactionState>([])],
+  [
+    'CONTRACTED',
+    // Phase 7. `mark-sent` is the only thing that moves a contracted
+    // transaction, and it moves it to FUNDING_CONFIRMATION_PENDING — never to
+    // FUNDED, which is the whole point of defining behaviour #5.
+    //
+    // READY_FOR_DISBURSEMENT is deliberately NOT declared. The enum carries it
+    // and it is a plausible staging state, but nothing in this phase sets it,
+    // and this file's rule is that a declared transition is one some code can
+    // actually perform. The phase that introduces it declares it.
+    new Set<TransactionState>(['FUNDING_CONFIRMATION_PENDING']),
+  ],
+  [
+    'FUNDING_CONFIRMATION_PENDING',
+    // INV-10 lives on this edge. Reaching FUNDED requires a VERIFIED OTP *and*
+    // settlement evidence; the transition being legal here does not make it
+    // available, and FundingService checks both before performing it.
+    new Set<TransactionState>(['FUNDED']),
+  ],
+  // FUNDED onwards (payments, overdue, recourse, closure) is Phase 8's.
+  ['FUNDED', new Set<TransactionState>([])],
   ['FRAUD_REVIEW', new Set<TransactionState>(['ELIGIBLE', 'REJECTED'])],
 ]);
 
