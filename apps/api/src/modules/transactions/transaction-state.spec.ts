@@ -44,9 +44,20 @@ describe('transitions the machine refuses', () => {
     expect(canTransition('CANCELLED', 'DRAFT')).toBe(false);
   });
 
-  it('does not yet allow listing — that is Phase 5 to add', () => {
-    // Declaring the transition now would assert a move no code can perform.
-    expect(canTransition('ELIGIBLE', 'OPEN_FOR_OFFERS')).toBe(false);
+  it('allows listing now that Phase 5 can perform it', () => {
+    // Phase 3 asserted this was false, deliberately: declaring a transition
+    // no code could perform would have been a claim about behaviour that did
+    // not exist. Phase 5 added listing activation, so the assertion flips
+    // rather than being deleted — the pair reads as a record of when the
+    // capability arrived.
+    expect(canTransition('ELIGIBLE', 'OPEN_FOR_OFFERS')).toBe(true);
+  });
+
+  it('returns a lapsed listing to ELIGIBLE rather than to a terminal state', () => {
+    // A missed selection deadline must not destroy the receivable's value —
+    // the supplier can relist.
+    expect(canTransition('OPEN_FOR_OFFERS', 'ELIGIBLE')).toBe(true);
+    expect(canTransition('OPEN_FOR_OFFERS', 'OFFER_ACCEPTED')).toBe(true);
   });
 
   it('is a whitelist, so an unknown pairing is refused rather than allowed', () => {

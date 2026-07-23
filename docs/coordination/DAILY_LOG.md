@@ -513,3 +513,96 @@ Phase 4 kickoff. Still OPEN, still needed before Phase 6 Arabic templates. It
 is slightly more pressing now: Phase 4 ships the **first Arabic prose the API
 itself emits** (the Trust Score disclaimer), so the question is no longer
 confined to `apps/web`.
+
+## 2026-07-23 — Agent A (session 5, Phase 5)
+Branched `a/phase5` from `a/phase4`. The confidential marketplace is live end
+to end against the hosted database.
+
+DONE (`phases/PHASE_5_MARKETPLACE_OFFERS.md`, Agent A tasks — all 11 items):
+Listing activation with the fee obligation and a balanced ledger journal;
+policy-filtered eligibility recorded **for every bank, eligible or not**, with
+the rules that produced each decision; maker/approver offers with all money
+computed server-side; the deadline sweep; the three v3.1.0 endpoints
+(D-06/07/08) and the D-12 `PATCH`. Twelve endpoints, taking the conformance
+gate to **44/82 with no drift** (was 31/82).
+
+CHANGED (shared surfaces — read this section):
+  - **Migration `0007_phase5_commission_tiers.sql`** — three active tiers
+    (1.5% / 1.25% / 1.0%, half-open bands, top tier open-ended). A migration
+    rather than a seed because ZM-FEE-011 prices every offer from the active
+    tier: a migrated database with no dev seed could not price an offer at
+    all. Additive only — three rows, no column, constraint, policy or
+    response-shape change.
+  - **`transactions/dto.ts` and `money.ts`** now share `MONEY_PATTERN` /
+    `MONEY_MESSAGE` instead of each restating the 3-dp regex. Same accepted
+    strings, same messages; nothing you send changes.
+  - Nothing renamed. No response shape you already consume was altered.
+
+SEED: `npm run db:scenario:phase5` — the checkpoint fixture. Note it is a
+**script that calls the API**, not SQL, and that is deliberate: a listing is
+not a row (fee obligation, ledger journal, per-bank eligibility with
+`rules_applied`, notifications, state change) and neither is an offer (tier
+commission, listing-fee component, server-recomputed net under a database
+CHECK). Hand-written SQL would give you a listing that looks right on screen
+and was never priced, evaluated or audited. It is idempotent and has
+`--status` and `--purge`. It leaves both offers in
+`PENDING_INTERNAL_APPROVAL` on purpose — approving them would consume the
+checkpoint's best moment.
+
+BLOCKED ON: **the deploy**, unchanged and now five phases old, and per the
+product owner now a deliberate deferral rather than an impediment: verify
+locally, deploy when the account exists. Worth stating plainly so nobody
+reads the checkmarks as "it is up".
+
+NOTE FOR B — six things about the marketplace, all of which will bite if
+assumed otherwise:
+
+  1. **The floor does not exist in your bank-side data.** Not null, not
+     redacted — absent. `describeForBank` is built additively from an empty
+     object, and there is a test that byte-scans every bank-facing response
+     for a sentinel floor value. If your underwriting view has a field for
+     it, delete the field.
+  2. **`offerCount` is supplier and platform only.** A bank must not learn
+     how many competitors exist, including by counting array length — the
+     bank's `/listings/{id}/offers` returns its own offer or nothing.
+  3. **`netSupplierPayout` is the server's number.** You may send yours and
+     the server will compare; a mismatch is a 422 that names the
+     disagreement, not a silent correction. Preview live in the form, always
+     reconcile to the response.
+  4. **Do not send `platformCommissionAmount` or `listingFeeAmount`.** They
+     are not in `OfferInputDto`, and `forbidNonWhitelisted` means sending
+     them is a 400 naming the property rather than a silent ignore. That is
+     the friendlier failure: a bank computing its own commission has a
+     misunderstanding worth surfacing.
+  5. **The below-floor 422 carries no numbers, ever.** `OFFER_BELOW_SUPPLIER_
+     REQUIREMENT` with a generic message. Do not add "you were X short" —
+     there is no X: `meetsFloor` returns a bare boolean so the shortfall is
+     never computed anywhere in the process.
+  6. **The submission window is decided by listing *status*, not by
+     comparing the clock.** After the sweep closes it, create/revise/withdraw
+     all 409. Render the countdown from `offerSubmissionDeadline`, but let
+     the server decide.
+
+VERIFICATION: 328 API unit tests (was 293), **128 live integration tests**
+(was 96), 122 ML tests, `db:verify` 17/17, conformance 44/82 with no drift,
+lint and typecheck across all workspaces — all green. The checkpoint scenario
+was created and then re-run to confirm idempotency; both offers came back
+with nets matching the arithmetic predicted in the script's comment to the
+millifils, which independently confirms the tier lookup and listing-fee
+injection.
+
+TWO TESTS I HAD TO FIX BECAUSE THEY WERE WRONG, not because Phase 5 broke
+them — both worth knowing about:
+  - My INV-12 self-approval test passed **for the wrong reason**. It used a
+    plain maker, who is stopped by the route guard with `INSUFFICIENT_ROLE`
+    before the self-approval check ever runs. The invariant was untested and
+    green. Now driven by a BANK_ADMIN (who holds both capabilities) plus a
+    separate test against the `chk_maker_approver_differ` database
+    constraint, so neither layer can pass on the other's behalf.
+  - `rls-phase3` asserted a bank sees **zero** transactions. Phase 5 made
+    that false *correctly* — a bank now sees a transaction it was found
+    eligible for. Narrowed to the claim it was always about.
+
+FLAGGED AGAIN — **Q-03 (Arabic digit set)**. Now genuinely pressing: Phase 6
+ships Arabic contract templates, which is prose with numbers in it on a
+document a supplier signs.

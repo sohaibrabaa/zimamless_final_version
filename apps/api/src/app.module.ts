@@ -37,6 +37,12 @@ import { AdminRiskModelsController, RiskController } from './modules/risk/risk.c
 import { RiskService } from './modules/risk/risk.service';
 import { RiskModelsService } from './modules/risk/risk-models.service';
 import { RiskModelClientService } from './modules/risk/risk-model-client.service';
+import { MarketplaceController, OffersController } from './modules/marketplace/marketplace.controller';
+import { ListingsService } from './modules/marketplace/listings.service';
+import { OffersService } from './modules/marketplace/offers.service';
+import { PolicyFiltersService } from './modules/marketplace/policy-filters.service';
+import { CommissionService } from './modules/marketplace/commission.service';
+import { ListingDeadlinesService } from './modules/marketplace/listing-deadlines.service';
 
 export const APP_CONFIG = 'APP_CONFIG';
 
@@ -66,6 +72,8 @@ export const APP_CONFIG = 'APP_CONFIG';
     TransactionsController,
     RiskController,
     AdminRiskModelsController,
+    MarketplaceController,
+    OffersController,
   ],
   providers: [
     {
@@ -131,6 +139,11 @@ export const APP_CONFIG = 'APP_CONFIG';
     RiskModelsService,
     RiskModelClientService,
     RiskService,
+    CommissionService,
+    ListingsService,
+    OffersService,
+    PolicyFiltersService,
+    ListingDeadlinesService,
 
     { provide: APP_GUARD, useClass: AuthGuard },
     { provide: APP_INTERCEPTOR, useClass: AuditInterceptor },

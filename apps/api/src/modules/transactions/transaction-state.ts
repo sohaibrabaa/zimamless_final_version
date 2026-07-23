@@ -55,9 +55,16 @@ const TRANSITIONS: ReadonlyMap<TransactionState, ReadonlySet<TransactionState>> 
     new Set<TransactionState>(['ELIGIBLE', 'INFORMATION_REQUIRED', 'REJECTED', 'FRAUD_REVIEW']),
   ],
   ['INFORMATION_REQUIRED', new Set<TransactionState>(['AUTOMATED_CHECKS', 'UNDER_REVIEW', 'CANCELLED'])],
-  // ELIGIBLE's onward transition to OPEN_FOR_OFFERS is Phase 5's to add,
-  // when listing activation exists to perform it.
-  ['ELIGIBLE', new Set<TransactionState>(['CANCELLED'])],
+  // Phase 5 added OPEN_FOR_OFFERS, as the Phase 3 note here anticipated.
+  ['ELIGIBLE', new Set<TransactionState>(['OPEN_FOR_OFFERS', 'CANCELLED'])],
+  [
+    'OPEN_FOR_OFFERS',
+    // Back to ELIGIBLE when a listing lapses with nothing selected: the
+    // receivable is untouched and the supplier may relist, so returning it
+    // to a terminal state would destroy value over a missed deadline.
+    // OFFER_ACCEPTED is Phase 6's to perform.
+    new Set<TransactionState>(['ELIGIBLE', 'OFFER_ACCEPTED', 'CANCELLED']),
+  ],
   ['FRAUD_REVIEW', new Set<TransactionState>(['ELIGIBLE', 'REJECTED'])],
 ]);
 
