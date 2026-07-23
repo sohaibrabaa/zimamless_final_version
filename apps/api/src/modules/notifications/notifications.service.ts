@@ -2,6 +2,7 @@ import { Inject, Injectable, Logger } from '@nestjs/common';
 import { PoolClient } from 'pg';
 import { DatabaseService } from '../../database/database.service';
 import { AppException } from '../../common/errors/app.exception';
+import { AuditService } from '../../common/audit/audit.service';
 import { TIME_PROVIDER, TimeProvider } from '../../common/time/time.provider';
 import {
   DeliveryResult,
@@ -54,6 +55,7 @@ export interface NotificationRow {
   provider_reference: string | null;
   failure_reason: string | null;
   manual_call_notes: string | null;
+  manual_call_by: string | null;
   transaction_id: string | null;
   queued_at: Date;
   sent_at: Date | null;
@@ -77,6 +79,7 @@ export class NotificationsService {
 
   constructor(
     private readonly db: DatabaseService,
+    private readonly audit: AuditService,
     @Inject(TIME_PROVIDER) private readonly time: TimeProvider,
     @Inject(NOTIFICATION_CHANNELS)
     private readonly channels: NotificationChannelAdapter[],
@@ -228,6 +231,24 @@ export class NotificationsService {
    * The platform cannot place calls, so this does not pretend to. It records
    * that a human did, with their notes, through the same pipeline and the same
    * evidence fields as everything else.
+   *
+   * **This method has no HTTP route, and cannot have one without a ruling.**
+   * The frozen contract declares no notification paths and the v3.1.0 overlay
+   * declares only `GET /notifications` and `POST /notifications/{id}/read`, so
+   * ZM-NOT-007's manual-call record has storage but no input. Raised as Q-17;
+   * kept rather than deleted because the schema clearly intends the capability
+   * and the columns are already there. Do not wire it to `read` — a recipient
+   * opening their inbox and an operator attesting to a phone conversation are
+   * different claims by different people.
+   *
+   * Audited with the previous notes in `previousValue`, and that is not
+   * boilerplate. `manual_call_notes` is a single column, so a second operator
+   * recording a later call overwrites the first one's account of what was
+   * said — and this is the one field in the system whose entire content is a
+   * human's unverifiable assertion about a conversation that happened offline.
+   * Losing the earlier version silently would be a hard delete of evidence in a
+   * system that forbids them (INV-7). The audit row keeps every superseded
+   * version, attributed and timestamped.
    */
   async recordManualCall(
     notificationId: string,
@@ -235,16 +256,40 @@ export class NotificationsService {
     notes: string,
   ): Promise<NotificationRow> {
     const now = this.time.now();
-    const { rows } = await this.db.query<NotificationRow>(
-      `UPDATE notifications
-          SET status = 'DELIVERED', manual_call_notes = $2, manual_call_by = $3::uuid,
-              delivered_at = COALESCE(delivered_at, $4::timestamptz)
-        WHERE id = $1 AND channel = 'MANUAL_CALL'
-      RETURNING *`,
-      [notificationId, notes, ctx.userId, now],
-    );
-    if (rows.length === 0) throw AppException.notFound('Notification');
-    return rows[0];
+    return this.db.transaction(async (client) => {
+      const { rows: before } = await client.query<NotificationRow>(
+        `SELECT * FROM notifications WHERE id = $1 AND channel = 'MANUAL_CALL' FOR UPDATE`,
+        [notificationId],
+      );
+      if (before.length === 0) throw AppException.notFound('Notification');
+
+      const { rows } = await client.query<NotificationRow>(
+        `UPDATE notifications
+            SET status = 'DELIVERED', manual_call_notes = $2, manual_call_by = $3::uuid,
+                delivered_at = COALESCE(delivered_at, $4::timestamptz)
+          WHERE id = $1 AND channel = 'MANUAL_CALL'
+        RETURNING *`,
+        [notificationId, notes, ctx.userId, now],
+      );
+
+      await this.audit.recordIn(client, {
+        actionType: 'NOTIFICATION_MANUAL_CALL_RECORDED',
+        targetEntityType: 'NOTIFICATION',
+        targetEntityId: notificationId,
+        previousValue: {
+          manualCallNotes: before[0].manual_call_notes,
+          manualCallBy: before[0].manual_call_by,
+          status: before[0].status,
+        },
+        newValue: {
+          manualCallNotes: notes,
+          manualCallBy: ctx.userId,
+          status: 'DELIVERED',
+        },
+      });
+
+      return rows[0];
+    });
   }
 
   // ===================================================================

@@ -41,23 +41,31 @@ export function overdueDays(dueDate: Date, now: Date): number {
 }
 
 /**
- * Which pre-maturity reminder, if any, is due.
+ * Which pre-maturity reminder, if any, is due — at most one.
  *
- * Returns the *largest* threshold that has been reached rather than the
- * closest, so a sweep that has not run for a week still sends the 14-day
- * reminder before the 7-day one, and each is sent once (the caller keys on
- * `template_key` + `transaction_id`). `0` is the due-date reminder itself.
+ * Returns the **nearest** reached threshold, not every reached threshold.
+ * Backfilling the ones that were missed is tempting and wrong: an invoice
+ * funded five days before it matures has reached 30, 14 and 7 all at once, and
+ * sending all three would put "your invoice is due in 30 days" in front of a
+ * supplier whose invoice is due in five. A reminder is a factual claim about a
+ * date. A late one is not a reminder, it is a false statement, and three of
+ * them arriving in the same minute is worse than none.
+ *
+ * Because the value only ever decreases as the due date approaches, returning
+ * the nearest threshold still fires each one exactly once on its own crossing
+ * in the normal case; the caller keys on `template_key` + `transaction_id`.
+ * `0` is the due-date reminder itself.
  */
-export function remindersDue(
+export function reminderDue(
   dueDate: Date,
   now: Date,
   thresholds: readonly number[],
-): number[] {
+): number | null {
   const remaining = daysUntilDue(dueDate, now);
-  return [...thresholds]
+  const reached = [...thresholds]
     .filter((t) => Number.isFinite(t) && t >= 0)
-    .sort((a, b) => b - a)
     .filter((t) => remaining <= t);
+  return reached.length === 0 ? null : Math.min(...reached);
 }
 
 /**

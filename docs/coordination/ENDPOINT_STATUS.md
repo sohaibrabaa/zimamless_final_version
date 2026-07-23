@@ -1,6 +1,8 @@
 # Endpoint Status — mock → live promotion board
 
-Mirror of `apps/web/lib/api/endpoint-status.ts`. Agent A flips **Announced live** when deployed; Agent B flips **B status** to `live` only after a same-day smoke test on the consuming screen. Demo-path endpoints must all be `live` before the Phase 9 rehearsal.
+Mirror of `apps/web/lib/api/endpoint-status.ts`. **Announced live** is set when the endpoint is deployed and proved by an integration test; the **B status** column flips to `live` only after a same-day smoke test on the consuming screen. Demo-path endpoints must all be `live` before the Phase 9 rehearsal.
+
+The column names date from the retired two-agent split; one engineer now owns both sides. The two-step promotion survives that change deliberately — the second step tests something the first cannot, which is why every row still reads `mock`.
 
 Legend: `mock` = MSW mock · `live` = real API, smoke-passed · `n/a` = not yet generated.
 

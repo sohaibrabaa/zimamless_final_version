@@ -7,6 +7,7 @@ import { AppModule } from '../src/app.module';
 import { AppConfig } from '../src/config/configuration';
 import { SystemTimeProvider } from '../src/common/time/time.provider';
 import { MaturityService } from '../src/modules/payments/maturity.service';
+import { NotificationsService } from '../src/modules/notifications/notifications.service';
 
 /**
  * Phase 8 integration checkpoint — the lifecycle after money moves.
@@ -1108,5 +1109,91 @@ describeIfDb('Phase 8 — post-funding lifecycle', () => {
       // The original reason stands; a second close does not rewrite history.
       expect(res.body.closureReason).toBe('SETTLED_BY_AGREEMENT');
     }, 60_000);
+  });
+
+  // -------------------------------------------------------------------
+  // ZM-NOT-007 — the manual call record (Q-17)
+  // -------------------------------------------------------------------
+
+  describe('a superseded manual call record survives in the audit trail', () => {
+    /**
+     * Driven through the service rather than HTTP because there is no route:
+     * neither the frozen contract nor the v3.1.0 overlay declares one, which is
+     * Q-17. The SQL still has to be proved against real Postgres — the two
+     * bugs that escaped Phases 7 and 8 were both casts that a fake database
+     * could not see, and this method casts `$3::uuid` and locks `FOR UPDATE`.
+     *
+     * The behaviour under test is the reason the audit entry exists at all:
+     * `manual_call_notes` is one column, so a second operator's call overwrites
+     * the first one's account of the conversation. That is a hard delete of
+     * evidence unless the previous text is preserved somewhere (INV-7).
+     */
+    let notificationId: string;
+    let opsUserId: string;
+    let complianceUserId: string;
+
+    beforeAll(async () => {
+      const ids = await db.query<{ id: string; email: string }>(
+        `SELECT id, email FROM users
+          WHERE email IN ('admin@platform.zimmamless.test','compliance@platform.zimmamless.test')`,
+      );
+      opsUserId = ids.rows.find((r) => r.email.startsWith('admin'))!.id;
+      complianceUserId = ids.rows.find((r) => r.email.startsWith('compliance'))!.id;
+
+      const { rows } = await db.query<{ id: string }>(
+        `INSERT INTO notifications
+           (template_key, channel, language, recipient_user_id, destination,
+            subject, body, status, transaction_id)
+         VALUES ('SUPPLIER_CONTACT_ATTEMPT','MANUAL_CALL','EN',$1,'+962790000000',
+                 'Courtesy call','Operator to call the supplier.','QUEUED',$2)
+         RETURNING id`,
+        [opsUserId, main.transactionId],
+      );
+      notificationId = rows[0].id;
+    }, 60_000);
+
+    it('records the first call, with the operator and DELIVERED', async () => {
+      const row = await app.get(NotificationsService).recordManualCall(
+        notificationId,
+        { userId: opsUserId, organizationId: orgs.platformOps, organizationType: 'PLATFORM', roles: ['PLATFORM_OPS_ADMIN'] },
+        'Spoke to the finance manager; buyer paid on the 3rd.',
+      );
+      expect(row.status).toBe('DELIVERED');
+      expect(row.manual_call_by).toBe(opsUserId);
+      expect(row.delivered_at).not.toBeNull();
+    }, 60_000);
+
+    it('keeps the first operator’s notes in the audit trail when a second call overwrites them', async () => {
+      await app.get(NotificationsService).recordManualCall(
+        notificationId,
+        { userId: complianceUserId, organizationId: orgs.compliance, organizationType: 'PLATFORM', roles: ['PLATFORM_COMPLIANCE'] },
+        'Called back; the finance manager retracted the earlier statement.',
+      );
+
+      const { rows } = await db.query<{ previous_value: { manualCallNotes: string } | null }>(
+        `SELECT previous_value FROM audit_logs
+          WHERE action_type = 'NOTIFICATION_MANUAL_CALL_RECORDED' AND target_entity_id = $1
+          ORDER BY occurred_at`,
+        [notificationId],
+      );
+
+      expect(rows).toHaveLength(2);
+      // The row itself now holds only the second account...
+      const current = await db.query<{ manual_call_notes: string; manual_call_by: string }>(
+        `SELECT manual_call_notes, manual_call_by FROM notifications WHERE id = $1`,
+        [notificationId],
+      );
+      expect(current.rows[0].manual_call_notes).toContain('retracted');
+      expect(current.rows[0].manual_call_by).toBe(complianceUserId);
+      // ...and the first is still recoverable, which is the whole point.
+      expect(rows[1].previous_value?.manualCallNotes).toContain('buyer paid on the 3rd');
+    }, 60_000);
+
+    afterAll(async () => {
+      await db
+        .query(`DELETE FROM audit_logs WHERE target_entity_id = $1`, [notificationId])
+        .catch(() => undefined);
+      await db.query(`DELETE FROM notifications WHERE id = $1`, [notificationId]).catch(() => undefined);
+    });
   });
 });

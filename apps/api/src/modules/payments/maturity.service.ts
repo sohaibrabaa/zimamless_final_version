@@ -4,7 +4,7 @@ import { DatabaseService } from '../../database/database.service';
 import { TIME_PROVIDER, TimeProvider } from '../../common/time/time.provider';
 import { AuditService } from '../../common/audit/audit.service';
 import { requireTransition, TransactionState } from '../transactions/transaction-state';
-import { automationPaused, maturityAction, overdueDays, remindersDue } from './maturity';
+import { automationPaused, daysUntilDue, maturityAction, overdueDays, reminderDue } from './maturity';
 
 /**
  * The maturity sweep (ZM-PMT-006..011, AS-05).
@@ -201,31 +201,34 @@ export class MaturityService {
   ): Promise<number> {
     if (row.state !== 'FUNDED' && row.state !== 'PARTIALLY_PAID') return 0;
 
-    let sent = 0;
-    for (const threshold of remindersDue(row.due_date, now, thresholds)) {
-      const key = `MATURITY_REMINDER_${threshold}`;
-      const already = await this.db.queryOne(
-        `SELECT 1 FROM notifications WHERE template_key = $1 AND transaction_id = $2 LIMIT 1`,
-        [key, row.transaction_id],
-      );
-      if (already) continue;
+    const threshold = reminderDue(row.due_date, now, thresholds);
+    if (threshold === null) return 0;
 
-      await this.db.transaction(async (client) => {
-        await this.notifySupplier(
-          client,
-          row,
-          key,
-          threshold === 0
-            ? 'Your invoice is due today'
-            : `Your invoice is due in ${threshold} days`,
-          `Invoice ${row.invoice_number} is due on ` +
-            `${row.due_date.toISOString().slice(0, 10)}. The buyer pays the bank directly; ` +
-            `this is for your records.`,
-        );
-      });
-      sent += 1;
-    }
-    return sent;
+    const key = `MATURITY_REMINDER_${threshold}`;
+    const already = await this.db.queryOne(
+      `SELECT 1 FROM notifications WHERE template_key = $1 AND transaction_id = $2 LIMIT 1`,
+      [key, row.transaction_id],
+    );
+    if (already) return 0;
+
+    // The wording comes from the real number of days left, never from the
+    // threshold that triggered it. They are equal on the day a threshold is
+    // crossed and differ whenever the sweep picks a transaction up late — and
+    // in that case the *date* is the truth and the bucket label is not.
+    const remaining = daysUntilDue(row.due_date, now);
+
+    await this.db.transaction(async (client) => {
+      await this.notifySupplier(
+        client,
+        row,
+        key,
+        remaining <= 0 ? 'Your invoice is due today' : `Your invoice is due in ${remaining} days`,
+        `Invoice ${row.invoice_number} is due on ` +
+          `${row.due_date.toISOString().slice(0, 10)}. The buyer pays the bank directly; ` +
+          `this is for your records.`,
+      );
+    });
+    return 1;
   }
 
   private async notifySupplier(

@@ -6,7 +6,7 @@ import {
   isSweepable,
   maturityAction,
   overdueDays,
-  remindersDue,
+  reminderDue,
   stateAfterPayment,
   totalPaid,
 } from './maturity';
@@ -112,26 +112,40 @@ describe('pre-maturity reminders', () => {
   const thresholds = [30, 14, 7];
 
   it('sends nothing while the invoice is far from due', () => {
-    expect(remindersDue(DUE, new Date('2026-07-01T00:00:00.000Z'), thresholds)).toEqual([]);
+    expect(reminderDue(DUE, new Date('2026-07-01T00:00:00.000Z'), thresholds)).toBeNull();
   });
 
   it('sends the 30-day reminder at exactly 30 days out', () => {
-    expect(remindersDue(DUE, new Date('2026-07-31T00:00:00.000Z'), thresholds)).toEqual([30]);
+    expect(reminderDue(DUE, new Date('2026-07-31T00:00:00.000Z'), thresholds)).toBe(30);
   });
 
-  it('returns every reached threshold, largest first, so a lapsed sweep catches up', () => {
-    // A sweep that has not run for three weeks must still send the 30 and 14
-    // day reminders rather than silently skipping to the nearest one.
-    expect(remindersDue(DUE, new Date('2026-08-20T00:00:00.000Z'), thresholds)).toEqual([30, 14]);
-    expect(remindersDue(DUE, new Date('2026-08-25T00:00:00.000Z'), thresholds)).toEqual([30, 14, 7]);
+  it('fires each threshold exactly once as the due date approaches', () => {
+    expect(reminderDue(DUE, new Date('2026-07-31T00:00:00.000Z'), thresholds)).toBe(30);
+    expect(reminderDue(DUE, new Date('2026-08-16T00:00:00.000Z'), thresholds)).toBe(14);
+    expect(reminderDue(DUE, new Date('2026-08-23T00:00:00.000Z'), thresholds)).toBe(7);
+  });
+
+  it('never backfills the thresholds it missed', () => {
+    // This replaces a test that asserted the opposite, and the old one was
+    // wrong. It returned [30, 14, 7] here and called it "catching up" — but an
+    // invoice funded five days before maturity has reached all three at once,
+    // so the supplier got three notifications in the same minute claiming the
+    // invoice was due in 30, 14 and 7 days when it was due in five. A reminder
+    // is a claim about a date; a backfilled one is simply false. Only the
+    // nearest reached threshold fires.
+    expect(reminderDue(DUE, new Date('2026-08-20T00:00:00.000Z'), thresholds)).toBe(14);
+    expect(reminderDue(DUE, new Date('2026-08-25T00:00:00.000Z'), thresholds)).toBe(7);
   });
 
   it('keeps sending nothing new past the due date — the sweep takes over there', () => {
-    expect(remindersDue(DUE, new Date('2026-09-15T00:00:00.000Z'), thresholds)).toEqual([30, 14, 7]);
+    // 0 is not in `thresholds` here, so the nearest reached one stays 7 and the
+    // caller has already sent it. Past due, reminders stop and
+    // `maturityAction` owns the transaction.
+    expect(reminderDue(DUE, new Date('2026-09-15T00:00:00.000Z'), thresholds)).toBe(7);
   });
 
   it('ignores nonsense thresholds rather than throwing on bad settings', () => {
-    expect(remindersDue(DUE, new Date('2026-08-29T00:00:00.000Z'), [7, -3, NaN])).toEqual([7]);
+    expect(reminderDue(DUE, new Date('2026-08-29T00:00:00.000Z'), [7, -3, NaN])).toBe(7);
   });
 });
 

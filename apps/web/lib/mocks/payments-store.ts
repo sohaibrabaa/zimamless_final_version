@@ -1,4 +1,5 @@
 import { addMoney, compareMoney, subtractMoney } from "@/lib/money";
+import { overdueDaysFrom } from "@/lib/payments/payments-domain";
 
 /**
  * Post-funding mock store.
@@ -88,7 +89,12 @@ export function paymentHistory(transactionId: string): {
     // Clamped, as the API clamps it: an overpayment is a reconciliation
     // conversation, not a negative balance on a screen.
     outstandingAmount: compareMoney(remaining, "0.000") < 0 ? "0.000" : remaining,
-    overdueDays: 0,
+    // Derived from the ledger's own due date rather than hardcoded. It was 0,
+    // which meant `PaymentTimeline`'s overdue-days line could never render —
+    // and since no endpoint is promoted to live yet, the mock *is* what the
+    // demo shows. A fixture that silently disables a screen element is worse
+    // than no fixture, because the element looks built and never appears.
+    overdueDays: overdueDaysFrom(ledger.dueDate, new Date()),
   };
 }
 

@@ -226,14 +226,17 @@ describe('pre-maturity reminders (AS-05)', () => {
     expect(db.sent).toHaveLength(1);
   });
 
-  it('catches up on every missed threshold when the sweep has not run', async () => {
+  it('sends one honest reminder, not three false ones, when it picks a transaction up late', async () => {
+    // The previous version of this test expected all three of _30, _14 and _7
+    // here and called it catching up. Five days remain, so those three
+    // notifications would have told the supplier the invoice was due in 30, 14
+    // and 7 days — three false statements delivered in the same minute. Only
+    // the nearest threshold fires, and the subject line quotes the real number
+    // of days rather than the bucket that triggered it.
     const { db, service } = build('2026-08-25T00:00:00.000Z');
     await service.sweep();
-    expect(db.sent.map((n) => n.templateKey)).toEqual([
-      'MATURITY_REMINDER_30',
-      'MATURITY_REMINDER_14',
-      'MATURITY_REMINDER_7',
-    ]);
+    expect(db.sent.map((n) => n.templateKey)).toEqual(['MATURITY_REMINDER_7']);
+    expect(db.sent[0].subject).toBe('Your invoice is due in 5 days');
   });
 
   it('includes the due-date reminder, which the setting does not carry', async () => {
@@ -246,6 +249,8 @@ describe('pre-maturity reminders (AS-05)', () => {
     const { db, service } = build('2026-08-25T00:00:00.000Z');
     db.thresholds = 'not-an-array';
     await service.sweep();
-    expect(db.sent.map((n) => n.templateKey)).toContain('MATURITY_REMINDER_14');
+    // 7 is the nearest of the defaulted 30/14/7 five days out — the point is
+    // that a broken setting still produces a reminder rather than silence.
+    expect(db.sent.map((n) => n.templateKey)).toContain('MATURITY_REMINDER_7');
   });
 });

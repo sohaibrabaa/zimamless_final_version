@@ -38,6 +38,16 @@ All four sit behind the `NOTIFICATION_CHANNELS` symbol. Nothing in the domain
 names a concrete adapter, so swapping a dummy for a real gateway is a one-line
 change in `app.module.ts`.
 
+**`MANUAL_CALL` is stuck at `QUEUED`, and this is a known gap, not an
+oversight.** `ZM-NOT-007` requires the manual call record with its recording
+user and outcome; `notifications.manual_call_notes` and `manual_call_by` exist
+in the frozen schema and `NotificationsService.recordManualCall()` writes them,
+audited. What is missing is a route: the frozen contract declares no
+notification paths at all and the v3.1.0 overlay declares only
+`GET /notifications` and `POST /notifications/{id}/read`. So the requirement is
+met in storage and unreachable through the API. Raised as **Q-17**; ZM-NOT-007
+is declared **partially met** until it is ruled on.
+
 ---
 
 ## The ZM-NOT-009 catalogue

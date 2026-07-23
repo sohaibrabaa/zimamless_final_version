@@ -5,9 +5,15 @@
  * MSW's passthrough() for `live` entries, so flipping one here genuinely
  * routes to the deployed API; every other entry stays mocked.
  *
- * Flip an entry to "live" only after Agent A posts it LIVE in
+ * Flip an entry to "live" only after the endpoint is recorded LIVE in
  * docs/coordination/DAILY_LOG.md AND the consuming screen has been
  * smoke-tested the same day (Master Plan 3.4 #4).
+ *
+ * The two-agent split that this rule was written for is retired — one engineer
+ * now owns both sides — but the rule itself is not, and it is the reason every
+ * entry below still reads "mock". Passing an integration test proves the
+ * endpoint; it does not prove the screen that consumes it. The smoke test is
+ * the part that has not happened yet, and it needs both servers running.
  */
 
 export type EndpointLifecycleStatus = "mock" | "live";
