@@ -225,6 +225,14 @@ describeIfDb('Phase 8 — post-funding lifecycle', () => {
           await db.query('ROLLBACK');
           continue;
         }
+        await db.query(
+          `DELETE FROM recourse_repayments WHERE recourse_case_id IN
+             (SELECT id FROM recourse_cases WHERE transaction_id = $1)`,
+          [fixture.transactionId],
+        );
+        await db.query('DELETE FROM recourse_cases WHERE transaction_id = $1', [
+          fixture.transactionId,
+        ]);
         await db.query('DELETE FROM buyer_payments WHERE transaction_id = $1', [
           fixture.transactionId,
         ]);
@@ -493,6 +501,181 @@ describeIfDb('Phase 8 — post-funding lifecycle', () => {
       );
       expect(rows).toHaveLength(0);
     }, 180_000);
+  });
+
+  // -------------------------------------------------------------------
+  // ZM-REC-002/004 — recourse
+  // -------------------------------------------------------------------
+
+  describe('recourse is the bank’s claim, and only the bank’s', () => {
+    let recourseFixture: Fixture;
+    let caseId: string;
+
+    beforeAll(async () => {
+      // A confirmed overdue: recourse follows a bank's confirmation, never an
+      // unconfirmed one.
+      recourseFixture = await buildFunded(-40);
+      await db.query(`UPDATE receivable_transactions SET state = 'OVERDUE' WHERE id = $1`, [
+        recourseFixture.transactionId,
+      ]);
+    }, 120_000);
+
+    it('refuses a supplier attempting to initiate recourse against itself', async () => {
+      const res = await api(
+        'supplier',
+        'post',
+        `/transactions/${recourseFixture.transactionId}/recourse`,
+        { reason: 'NON_PAYMENT', requestedAmount: '9000.000' },
+      );
+      expect([403, 404]).toContain(res.status);
+    }, 60_000);
+
+    it('refuses a claim larger than the bank advanced (ZM-REC-004)', async () => {
+      // The face value is 11,600 but the advance was 9,000. Claiming the face
+      // value would recover more than was ever paid out.
+      const res = await api(
+        'bankOps',
+        'post',
+        `/transactions/${recourseFixture.transactionId}/recourse`,
+        { reason: 'NON_PAYMENT', requestedAmount: '11600.000' },
+      );
+      expect(res.status).toBe(422);
+      expect(res.body.details?.maximum).toBe('9000.000');
+    }, 60_000);
+
+    it('opens the case and moves the transaction to RECOURSE_ACTIVE', async () => {
+      const res = await api(
+        'bankOps',
+        'post',
+        `/transactions/${recourseFixture.transactionId}/recourse`,
+        {
+          reason: 'NON_PAYMENT',
+          requestedAmount: '9000.000',
+          notes: 'Buyer unreachable after three attempts — bank internal',
+        },
+      );
+
+      expect(res.status).toBe(201);
+      expect(res.body.status).toBe('RECOURSE_INITIATED');
+      expect(res.body.remainingAmount).toBe('9000.000');
+      caseId = res.body.id;
+
+      expect(await stateOf(recourseFixture.transactionId)).toBe('RECOURSE_ACTIVE');
+    }, 60_000);
+
+    it('refuses a second open case on the same transaction', async () => {
+      const res = await api(
+        'bankOps',
+        'post',
+        `/transactions/${recourseFixture.transactionId}/recourse`,
+        { reason: 'NON_PAYMENT', requestedAmount: '1000.000' },
+      );
+      expect(res.status).toBe(409);
+    }, 60_000);
+
+    it('does NOT show the supplier the bank’s free-text notes', async () => {
+      const res = await api('supplier', 'get', `/recourse/${caseId}`);
+      expect(res.status).toBe(200);
+
+      const serialized = JSON.stringify(res.body);
+      expect(serialized).not.toContain('bank internal');
+      expect(serialized).not.toContain('reasonNotes');
+      expect(serialized).not.toContain('initiatedBy');
+      // But it does see the claim it has to answer.
+      expect(res.body.requestedAmount).toBe('9000.000');
+      expect(res.body.reason).toBe('NON_PAYMENT');
+    }, 60_000);
+
+    it('records NO automatic commission refund (ZM-FEE-016)', async () => {
+      const { rows } = await db.query<{ new_value: Record<string, unknown> }>(
+        `SELECT new_value FROM audit_logs
+          WHERE target_entity_id = $1 AND action_type = 'RECOURSE_INITIATED'`,
+        [recourseFixture.transactionId],
+      );
+      expect(rows[0].new_value).toMatchObject({ commissionRefunded: false });
+
+      // And the commission row itself is untouched — still FINALIZED, not
+      // reversed. The platform earned its fee on a transaction that funded.
+      const { rows: commission } = await db.query<{ status: string }>(
+        `SELECT status FROM commission_calculations WHERE transaction_id = $1`,
+        [recourseFixture.transactionId],
+      );
+      // The fixture has no commission row (it was arranged in SQL, not through
+      // acceptance), so the meaningful assertion is that recourse created no
+      // reversal of any kind.
+      expect(commission.filter((c) => c.status === 'REVERSED')).toHaveLength(0);
+    }, 30_000);
+
+    it('lets the supplier dispute, but not mark it settled', async () => {
+      const settle = await api('supplier', 'post', `/recourse/${caseId}/status`, {
+        status: 'SETTLED',
+      });
+      // Letting the debtor discharge their own debt is the failure mode here.
+      expect(settle.status).toBe(403);
+    }, 60_000);
+
+    it('progresses through notification to payment pending', async () => {
+      const notified = await api('bankOps', 'post', `/recourse/${caseId}/status`, {
+        status: 'SUPPLIER_NOTIFIED',
+      });
+      expect(notified.status).toBe(200);
+      expect(notified.body.status).toBe('SUPPLIER_NOTIFIED');
+
+      const pending = await api('bankOps', 'post', `/recourse/${caseId}/status`, {
+        status: 'PAYMENT_PENDING',
+      });
+      expect(pending.body.status).toBe('PAYMENT_PENDING');
+    }, 90_000);
+
+    it('refuses SETTLED while a balance remains', async () => {
+      const res = await api('bankOps', 'post', `/recourse/${caseId}/status`, { status: 'SETTLED' });
+      expect(res.status).toBe(422);
+      expect(res.body.details?.remainingAmount).toBe('9000.000');
+    }, 60_000);
+
+    it('records a partial repayment and leaves the case open', async () => {
+      const res = await api('supplier', 'post', `/recourse/${caseId}/repay`, {
+        amount: '4000.000',
+        providerReference: 'SUPPLIER-REPAY-1',
+      });
+      expect(res.status).toBe(200);
+      expect(res.body.repaidAmount).toBe('4000.000');
+      expect(res.body.remainingAmount).toBe('5000.000');
+      expect(res.body.status).toBe('PAYMENT_PENDING');
+    }, 60_000);
+
+    it('settles on the final repayment and closes with RECOURSE_SETTLED', async () => {
+      const res = await api('supplier', 'post', `/recourse/${caseId}/repay`, {
+        amount: '5000.000',
+      });
+      expect(res.status).toBe(200);
+      expect(res.body.status).toBe('SETTLED');
+      expect(res.body.remainingAmount).toBe('0.000');
+
+      const { rows } = await db.query<{ state: string; closure_reason: string }>(
+        `SELECT state, closure_reason FROM receivable_transactions WHERE id = $1`,
+        [recourseFixture.transactionId],
+      );
+      expect(rows[0].state).toBe('CLOSED');
+      expect(rows[0].closure_reason).toBe('RECOURSE_SETTLED');
+    }, 60_000);
+
+    it('treats a repayment against a settled case as a no-op, not an error', async () => {
+      const res = await api('supplier', 'post', `/recourse/${caseId}/repay`, {
+        amount: '100.000',
+      });
+      expect(res.status).toBe(200);
+      expect(res.body.remainingAmount).toBe('0.000');
+      expect(res.body.repaidAmount).toBe('9000.000');
+    }, 60_000);
+
+    it('kept every repayment row (INV-7)', async () => {
+      const { rows } = await db.query<{ count: string }>(
+        `SELECT count(*)::text AS count FROM recourse_repayments WHERE recourse_case_id = $1`,
+        [caseId],
+      );
+      expect(Number(rows[0].count)).toBe(2);
+    }, 30_000);
   });
 
   // -------------------------------------------------------------------
