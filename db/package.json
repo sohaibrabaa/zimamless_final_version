@@ -12,7 +12,8 @@
     "verify": "node tools/verify.mjs",
     "seed": "node tools/seed.mjs",
     "reset": "node tools/migrate.mjs --reset",
-    "scenario:phase5": "node tools/scenario-phase5.mjs"
+    "scenario:phase5": "node tools/scenario-phase5.mjs",
+    "scenario:demo": "node tools/scenario-demo.mjs"
   },
   "dependencies": {
     "pg": "^8.13.1"

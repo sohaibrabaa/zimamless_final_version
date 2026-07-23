@@ -1287,3 +1287,48 @@ server error log. That was the orphaned dev-server's stdout going nowhere after
 its file-watcher died in an EADDRINUSE restart loop — a test-environment
 artifact, cleared by a clean restart. `AllExceptionsFilter` logs every 500 at
 error with the full stack; that code is correct and unchanged.
+
+## 2026-07-23 (late session) — the regression that wasn't transient, and the notification engine nobody was using
+
+REGRESSION FAILURE, TWICE, SAME LINE: the phase 3–8 regression failed at
+`database.service.ts:71` (`this.pool.query` on undefined) in five suites. The
+first failure was misdiagnosed as pooler exhaustion from orphaned dev servers —
+plausible, matched the phase prompt's warning, and wrong. The second identical
+failure forced the real diagnosis: enabling `DEMO_TIME_MACHINE_ENABLED=true`
+for 9.2 changed `SystemTimeProvider.refresh()` from a no-op short-circuit into
+a database read, and five older suites call `refresh()` one line **before**
+`app.init()` — before `onModuleInit` creates the pool. Six phases of green runs
+had depended on the env flag keeping that ordering bug unreachable. The two
+Phase 9 suites, written with the right order, passed in the middle of the same
+run. FIX: `refresh()` moved after `app.init()` in phase3/5/6/7/8 specs.
+LESSON: one occurrence is an anomaly, two identical ones are a mechanism — and
+"transient infrastructure" is a diagnosis that must predict the retry's result
+to be believed.
+
+D-21 — THE SENDERS DIDN'T USE THE ENGINE: 9.3 requires seeding the bilingual
+`notification_templates` catalogue. Before writing rows, checked who reads the
+table: only `NotificationsService.send()` — which had **zero callers**. All
+eight senders wrote `INSERT INTO notifications` directly, hardcoded English,
+`language='EN'` literal. Seeded templates would have been decoration, and the
+9.5 Arabic pass structurally impossible for notifications. Retrofitted all
+eight through `send()` (literal text preserved as fallback — the ZM-NOT-004
+degrade direction), plus `OFFER_RECEIVED`, which the catalogue listed as built
+and nothing sent — now dispatched at offer approval, naming no bank and no
+amount. First real execution of `send()` immediately exposed a dormant defect:
+`recipient()` selected `users.language`, a column that does not exist
+(`preferred_language`). It had sat unexecuted since Phase 8; the mid-run
+contaminated regression proved it live (`column "language" does not exist`
+on the acceptance path) before the fixed code went in. Unit suite 540/540
+with the retrofit; catalogue doc aligned to the code's keys.
+
+SELF-INFLICTED, TWICE: both regression re-runs were contaminated by editing
+`apps/api` source while ts-jest was still compiling suites mid-run. The final
+run goes out with the tree frozen until it reports.
+
+9.3 SEED AUTHORED (not yet run): `db/tools/scenario-demo.mjs` — 17 template
+keys × EN/AR (Western digits per D-17; the two constrained bodies carry their
+constraints into Arabic), nine fixtures in the `0e990000` block staging
+DRAFT → CANCELLED across the demo path. API-driven per the phase-5 doctrine;
+OVERDUE_UNCONFIRMED is *waited for* from the real sweep, never written by
+hand. Run order per D-20: dedupe --apply, then the seed, after the regression
+frees the pooler.

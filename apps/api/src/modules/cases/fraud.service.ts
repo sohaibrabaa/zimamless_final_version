@@ -7,6 +7,7 @@ import { TIME_PROVIDER, TimeProvider } from '../../common/time/time.provider';
 import { AuditService } from '../../common/audit/audit.service';
 import { canTransition, requireTransition, TransactionState } from '../transactions/transaction-state';
 import type { ActorContext } from '../onboarding/onboarding.service';
+import { NotificationsService } from '../notifications/notifications.service';
 
 /**
  * Fraud review (ZM-FRD-001..006).
@@ -67,6 +68,7 @@ export class FraudService {
   constructor(
     private readonly db: DatabaseService,
     private readonly audit: AuditService,
+    private readonly notifications: NotificationsService,
     @Inject(TIME_PROVIDER) private readonly time: TimeProvider,
   ) {}
 
@@ -392,19 +394,19 @@ export class FraudService {
     }
 
     for (const recipient of rows) {
-      await client.query(
-        `INSERT INTO notifications
-           (template_key, channel, language, recipient_user_id, destination,
-            subject, body, status, transaction_id)
-         VALUES ('FRAUD_REVIEW_OPENED','IN_PLATFORM','EN',$1,'in-platform',$2,$3,'QUEUED',$4)`,
-        [
-          recipient.user_id,
-          'A fraud review needs compliance attention',
-          `A fraud review was opened on a transaction and funding is frozen pending your ` +
+      await this.notifications.send(
+        {
+          templateKey: 'FRAUD_REVIEW_OPENED',
+          recipientUserId: recipient.user_id,
+          transactionId,
+          fallbackSubject: 'A fraud review needs compliance attention',
+          fallbackBody:
+            `A fraud review was opened on a transaction and funding is frozen pending your ` +
             `decision. Reported: ${summary}. No finding has been recorded — only a compliance ` +
             `decision can do that (ZM-FRD-004).`,
-          transactionId,
-        ],
+          variables: { summary },
+        },
+        client,
       );
     }
   }

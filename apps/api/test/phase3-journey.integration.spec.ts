@@ -237,9 +237,11 @@ describeIfDb('Phase 3 — supplier journey against real infrastructure', () => {
         transformOptions: { enableImplicitConversion: false },
       }),
     );
+    await app.init();
+    // After init: refresh() reads the database when DEMO_TIME_MACHINE_ENABLED
+    // is on, and the pool only exists once onModuleInit has run.
     await app.get(SystemTimeProvider).refresh();
     await app.get(StorageService).ensureBucket();
-    await app.init();
 
     for (const [persona, email] of [
       ['supplier', 'owner@alnoor.zimmamless.test'],

@@ -9,6 +9,7 @@ import type { ActorContext } from '../onboarding/onboarding.service';
 import { TransactionsService } from '../transactions/transactions.service';
 import { CommissionService } from './commission.service';
 import { ListingsService, type ListingRow } from './listings.service';
+import { NotificationsService } from '../notifications/notifications.service';
 import { meetsFloor, validateOffer, type OfferRejection } from './offer-math';
 import {
   acceptsOfferActivity,
@@ -113,6 +114,7 @@ export class OffersService {
     private readonly transactions: TransactionsService,
     private readonly commission: CommissionService,
     private readonly audit: AuditService,
+    private readonly notifications: NotificationsService,
     @Inject(TIME_PROVIDER) private readonly time: TimeProvider,
   ) {}
 
@@ -525,7 +527,39 @@ export class OffersService {
       newValue: { status: 'ACTIVE', approvedBy: ctx.userId },
     });
 
+    // ZM-NOT-009: the supplier is told an offer exists — at approval, not at
+    // creation, because PENDING_INTERNAL_APPROVAL is the bank's internal
+    // state and the supplier cannot see the offer until it is ACTIVE. The
+    // body deliberately names no bank and no amount: those belong on the
+    // comparison screen, behind the supplier's login, not in an inbox row.
+    await this.notifyOfferReceived(offer.listing_id);
+
     return rows[0];
+  }
+
+  private async notifyOfferReceived(listingId: string): Promise<void> {
+    const { rows: recipients } = await this.db.query<{
+      user_id: string;
+      transaction_id: string;
+    }>(
+      `SELECT DISTINCT m.user_id, t.id AS transaction_id
+         FROM listings l
+         JOIN receivable_transactions t ON t.id = l.transaction_id
+         JOIN organization_memberships m ON m.organization_id = t.supplier_org_id
+        WHERE l.id = $1 AND m.status = 'ACTIVE'`,
+      [listingId],
+    );
+    for (const recipient of recipients) {
+      await this.notifications.send({
+        templateKey: 'OFFER_RECEIVED',
+        recipientUserId: recipient.user_id,
+        transactionId: recipient.transaction_id,
+        fallbackSubject: 'You have received a financing offer',
+        fallbackBody:
+          'A bank has submitted an offer on your listed receivable. ' +
+          'Review and compare your offers on the platform.',
+      });
+    }
   }
 
   async withdraw(offerId: string, ctx: ActorContext, reason?: string): Promise<OfferRow> {

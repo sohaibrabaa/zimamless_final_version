@@ -17,6 +17,7 @@ import {
 import { requireTransition, TransactionState } from '../transactions/transaction-state';
 import { GeneratedOtp, OtpService } from './otp.service';
 import type { ActorContext } from '../onboarding/onboarding.service';
+import { NotificationsService } from '../notifications/notifications.service';
 
 /**
  * Funding — the bank's half of defining behaviour #5.
@@ -71,6 +72,7 @@ export class FundingService {
     private readonly ledger: LedgerService,
     private readonly otp: OtpService,
     private readonly audit: AuditService,
+    private readonly notifications: NotificationsService,
     @Inject(TIME_PROVIDER) private readonly time: TimeProvider,
   ) {}
 
@@ -509,18 +511,20 @@ export class FundingService {
     );
 
     for (const recipient of recipients) {
-      await client.query(
-        `INSERT INTO notifications
-           (template_key, channel, language, recipient_user_id, destination,
-            subject, body, status, transaction_id)
-         VALUES ('FUNDING_MARKED_SENT','IN_PLATFORM','EN',$1,'in-platform',$2,$3,'QUEUED',$4)`,
-        [
-          recipient.user_id,
-          'The bank has sent your funding',
-          'The bank has recorded the transfer. To complete funding, confirm receipt with the ' +
-            'one-time code the bank will provide to you directly.',
+      // No variables deliberately: the body carries no amount (see the
+      // docblock above) and no OTP — a placeholder would be a slot either
+      // could leak through in a future template edit.
+      await this.notifications.send(
+        {
+          templateKey: 'FUNDING_MARKED_SENT',
+          recipientUserId: recipient.user_id,
           transactionId,
-        ],
+          fallbackSubject: 'The bank has sent your funding',
+          fallbackBody:
+            'The bank has recorded the transfer. To complete funding, confirm receipt with the ' +
+            'one-time code the bank will provide to you directly.',
+        },
+        client,
       );
     }
   }

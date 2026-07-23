@@ -1,4 +1,6 @@
 import { FundingDeadlinesService } from './funding-deadlines.service';
+import { NotificationsService } from '../notifications/notifications.service';
+import { InPlatformChannel } from '../notifications/notification.channel';
 import { FixedTimeProvider } from '../../common/time/time.provider';
 
 /**
@@ -56,14 +58,29 @@ class FakeDb {
     if (sql.includes('SUPPLIER_OWNER')) {
       return this.membersWithRole('SUPPLIER_OWNER', params[0] as string);
     }
+    // The sends now route through NotificationsService (Phase 9), which asks
+    // for the recipient's language, looks for a template row, inserts the
+    // notification and records the dispatch outcome. The fake answers each.
+    if (sql.includes('FROM users')) {
+      return {
+        rows: [{ email: 'user@test', phone_number: null, language: 'EN' }],
+        rowCount: 1,
+      };
+    }
+    if (sql.includes('FROM notification_templates')) {
+      return { rows: [], rowCount: 0 }; // no template → the caller's literal text
+    }
     if (sql.includes('INSERT INTO notifications')) {
       this.sent.push({
         templateKey: params[0] as string,
-        userId: params[1] as string,
-        body: params[3] as string,
-        transactionId: params[4] as string,
+        userId: params[4] as string,
+        body: params[7] as string,
+        transactionId: params[8] as string,
       });
-      return { rows: [], rowCount: 1 };
+      return { rows: [{ id: `n-${this.sent.length}` }], rowCount: 1 };
+    }
+    if (sql.includes('UPDATE notifications')) {
+      return { rows: [{ id: params[0] }], rowCount: 1 };
     }
     return { rows: [], rowCount: 0 };
   });
@@ -101,11 +118,11 @@ function build(at: string) {
       });
     }),
   };
-  const service = new FundingDeadlinesService(
-    db as never,
-    audit as never,
-    new FixedTimeProvider(new Date(at)),
-  );
+  const time = new FixedTimeProvider(new Date(at));
+  const notifications = new NotificationsService(db as never, audit as never, time, [
+    new InPlatformChannel(),
+  ]);
+  const service = new FundingDeadlinesService(db as never, audit as never, notifications, time);
   return { db, service };
 }
 

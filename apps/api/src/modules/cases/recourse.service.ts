@@ -16,6 +16,8 @@ import {
   settlesCase,
 } from './recourse-state';
 import type { ActorContext } from '../onboarding/onboarding.service';
+import { NotificationsService } from '../notifications/notifications.service';
+import type { TemplateVariables } from '../notifications/template-render';
 
 /**
  * Recourse — the bank's claim against the supplier (ZM-REC-001..012).
@@ -64,6 +66,7 @@ export class RecourseService {
   constructor(
     private readonly db: DatabaseService,
     private readonly audit: AuditService,
+    private readonly notifications: NotificationsService,
     @Inject(TIME_PROVIDER) private readonly time: TimeProvider,
   ) {}
 
@@ -176,6 +179,7 @@ export class RecourseService {
         `The bank has claimed ${requested.toString()} JOD under the recourse terms of your ` +
           `financing agreement. You will be contacted with the details. If you believe this ` +
           `claim is incorrect, you may dispute it through the platform.`,
+        { requestedAmount: requested.toString() },
       );
 
       await this.audit.recordIn(client, {
@@ -362,6 +366,7 @@ export class RecourseService {
           'Action needed on a recourse claim',
           `The bank is claiming ${recourse.remaining_amount} JOD under the recourse terms of ` +
             `your financing agreement.${input.notes ? ` ${input.notes}` : ''}`,
+          { remainingAmount: recourse.remaining_amount, notes: input.notes ?? '' },
         );
       }
 
@@ -517,6 +522,7 @@ export class RecourseService {
     templateKey: string,
     subject: string,
     body: string,
+    variables?: TemplateVariables,
   ): Promise<void> {
     const { rows } = await client.query<{ user_id: string }>(
       `SELECT DISTINCT m.user_id
@@ -525,12 +531,16 @@ export class RecourseService {
       [supplierOrgId],
     );
     for (const recipient of rows) {
-      await client.query(
-        `INSERT INTO notifications
-           (template_key, channel, language, recipient_user_id, destination,
-            subject, body, status, transaction_id)
-         VALUES ($1,'IN_PLATFORM','EN',$2,'in-platform',$3,$4,'QUEUED',$5)`,
-        [templateKey, recipient.user_id, subject, body, transactionId],
+      await this.notifications.send(
+        {
+          templateKey,
+          recipientUserId: recipient.user_id,
+          transactionId,
+          fallbackSubject: subject,
+          fallbackBody: body,
+          variables,
+        },
+        client,
       );
     }
   }

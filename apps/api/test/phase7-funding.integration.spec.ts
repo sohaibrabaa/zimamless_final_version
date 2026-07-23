@@ -301,8 +301,10 @@ describeIfDb('Phase 7 — funding, settlement and the ledger', () => {
         transformOptions: { enableImplicitConversion: false },
       }),
     );
-    await app.get(SystemTimeProvider).refresh();
     await app.init();
+    // After init: refresh() reads the database when DEMO_TIME_MACHINE_ENABLED
+    // is on, and the pool only exists once onModuleInit has run.
+    await app.get(SystemTimeProvider).refresh();
 
     for (const [persona, email, expectedOrg] of [
       ['supplier', 'owner@alnoor.zimmamless.test', ORG.alNoor],

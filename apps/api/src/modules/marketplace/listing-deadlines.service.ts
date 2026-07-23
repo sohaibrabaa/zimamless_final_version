@@ -2,6 +2,7 @@ import { Inject, Injectable, Logger } from '@nestjs/common';
 import { DatabaseService } from '../../database/database.service';
 import { TIME_PROVIDER, TimeProvider } from '../../common/time/time.provider';
 import { ListingsService, type ListingRow } from './listings.service';
+import { NotificationsService } from '../notifications/notifications.service';
 
 /**
  * Listing deadline processing (ZM-MKT-009, AS-02).
@@ -38,6 +39,7 @@ export class ListingDeadlinesService {
   constructor(
     private readonly db: DatabaseService,
     private readonly listings: ListingsService,
+    private readonly notifications: NotificationsService,
     @Inject(TIME_PROVIDER) private readonly time: TimeProvider,
   ) {}
 
@@ -185,23 +187,23 @@ export class ListingDeadlinesService {
           [listing.transaction_id],
         );
 
+        // A displayed percentage, not money — truncated rather than rounded
+        // so the notification never claims more time remains than does.
+        const pctRemaining = Math.max(0, Math.trunc(remainingPct));
         for (const recipient of recipients) {
-          await this.db.query(
-            `INSERT INTO notifications
-               (template_key, channel, language, recipient_user_id, destination,
-                subject, body, status, transaction_id)
-             VALUES ($1,'IN_PLATFORM','EN',$2,'in-platform',
-                     'Offer selection deadline approaching', $3, 'QUEUED', $4)`,
-            [
-              key,
-              recipient.user_id,
-              `About ${// A displayed percentage, not money — truncated rather than rounded so
-                // the notification never claims more time remains than does.
-                Math.max(0, Math.trunc(remainingPct))}% of your selection window remains. ` +
-                `It closes at ${listing.supplier_selection_deadline.toISOString()}.`,
-              listing.transaction_id,
-            ],
-          );
+          await this.notifications.send({
+            templateKey: key,
+            recipientUserId: recipient.user_id,
+            transactionId: listing.transaction_id,
+            fallbackSubject: 'Offer selection deadline approaching',
+            fallbackBody:
+              `About ${pctRemaining}% of your selection window remains. ` +
+              `It closes at ${listing.supplier_selection_deadline.toISOString()}.`,
+            variables: {
+              percentRemaining: pctRemaining,
+              selectionDeadline: listing.supplier_selection_deadline.toISOString(),
+            },
+          });
           sent += 1;
         }
       }

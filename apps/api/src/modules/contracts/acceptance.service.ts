@@ -9,6 +9,7 @@ import { AuditService } from '../../common/audit/audit.service';
 import type { ActorContext } from '../onboarding/onboarding.service';
 import { contentHash } from './content-hash';
 import { CommissionService } from '../marketplace/commission.service';
+import { NotificationsService } from '../notifications/notifications.service';
 
 /**
  * Offer acceptance — the highest-risk code in the system (brief §5).
@@ -88,6 +89,7 @@ export class AcceptanceService {
     private readonly db: DatabaseService,
     private readonly audit: AuditService,
     private readonly commission: CommissionService,
+    private readonly notifications: NotificationsService,
     @Inject(TIME_PROVIDER) private readonly time: TimeProvider,
   ) {}
 
@@ -577,23 +579,24 @@ export class AcceptanceService {
       );
 
       for (const recipient of recipients) {
-        await client.query(
-          `INSERT INTO notifications
-             (template_key, channel, language, recipient_user_id, destination,
-              subject, body, status, transaction_id)
-           VALUES ($1,'IN_PLATFORM','EN',$2,'in-platform',$3,$4,'QUEUED',$5)`,
-          [
-            won ? 'OFFER_SELECTED' : 'OFFER_NOT_SELECTED',
-            recipient.user_id,
-            won ? 'Your offer has been accepted' : 'Your offer was not selected',
-            won
+        // No variables on either template deliberately: the not-selected
+        // message must carry nothing about the winning terms (ZM-MKT-013),
+        // and a placeholder is a hole a future template edit could leak
+        // through. Fixed prose only, in both languages.
+        await this.notifications.send(
+          {
+            templateKey: won ? 'OFFER_SELECTED' : 'OFFER_NOT_SELECTED',
+            recipientUserId: recipient.user_id,
+            transactionId,
+            fallbackSubject: won ? 'Your offer has been accepted' : 'Your offer was not selected',
+            fallbackBody: won
               ? 'The supplier has accepted your offer. The contract will be generated next.'
               : // Deliberately terse. Anything about the winning terms, the
                 // number of competitors, or the margin would be exactly the
                 // information the confidential marketplace exists to withhold.
                 'The supplier has selected another offer for this receivable.',
-            transactionId,
-          ],
+          },
+          client,
         );
       }
     }

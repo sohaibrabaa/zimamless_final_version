@@ -59,10 +59,29 @@ delete of evidence in a system that forbids them (INV-7).
 
 ---
 
+## How a message is sent (Phase 9 — D-21)
+
+Every sender routes through `NotificationsService.send()`. The service resolves
+the recipient's `preferred_language`, looks up the active
+`notification_templates` row for `(key, channel, language)`, renders it with
+the sender's variables, and dispatches through the channel adapter — so the
+seeded EN/AR rows are what recipients actually read, and an Arabic-preferring
+user gets Arabic. Where no template row exists the sender's literal text goes
+out unchanged (the correct failure direction). Until Phase 9 the senders wrote
+`INSERT INTO notifications` directly with hardcoded English and the render
+path had no caller — which also hid a defect: `recipient()` selected a
+`language` column that does not exist (`preferred_language` is the schema's
+name). First real call found it; fixed with the retrofit.
+
 ## The ZM-NOT-009 catalogue
 
 `ZM-NOT-009` names fifteen things the platform must notify. Status is against
-Phase 8; keys marked **built** are sent by live code today.
+Phase 9; keys marked **built** are sent by live code today. **Key names below
+are the ones the code passes** — Phase 9 aligned this document to the code
+(`LISTING_AVAILABLE`, `OFFER_SELECTED`), not the other way round: the wire
+and the database already carried the code's names, and renaming a
+`template_key` retroactively would orphan every notification row already
+written under it.
 
 ### Onboarding and applications (Phase 2)
 
@@ -76,9 +95,9 @@ Phase 8; keys marked **built** are sent by live code today.
 
 | Key | Recipient | Trigger | Status |
 |---|---|---|---|
-| `NEW_ELIGIBLE_LISTING` | Bank | A listing the bank is eligible for opens | built |
-| `OFFER_RECEIVED` | Supplier | A bank submits an offer | built |
-| `OFFER_ACCEPTED` | Bank | Its offer was selected | built |
+| `LISTING_AVAILABLE` | Bank | A listing the bank is eligible for opens | built |
+| `OFFER_RECEIVED` | Supplier | An offer becomes ACTIVE (internal approval) — not at creation, which is the bank's internal state; names no bank and no amount | built (Phase 9 — the catalogue previously claimed this and no code sent it) |
+| `OFFER_SELECTED` | Bank | Its offer was selected | built |
 | `OFFER_NOT_SELECTED` | Bank | Another offer was selected — and **nothing about which** | built |
 | `SELECTION_REMINDER_50` / `_15` | Supplier | AS-02 selection window points | built |
 | `CONTRACT_READY_FOR_SIGNATURE` | Both | Contract generated | built |

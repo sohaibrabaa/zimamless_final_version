@@ -3,6 +3,7 @@ import { PoolClient } from 'pg';
 import { DatabaseService } from '../../database/database.service';
 import { TIME_PROVIDER, TimeProvider } from '../../common/time/time.provider';
 import { AuditService } from '../../common/audit/audit.service';
+import { NotificationsService } from '../notifications/notifications.service';
 
 /**
  * Stalled funding confirmation (ZM-FND-011, ZM-FND-012, AS-04).
@@ -79,6 +80,7 @@ export class FundingDeadlinesService {
   constructor(
     private readonly db: DatabaseService,
     private readonly audit: AuditService,
+    private readonly notifications: NotificationsService,
     @Inject(TIME_PROVIDER) private readonly time: TimeProvider,
   ) {}
 
@@ -151,22 +153,18 @@ export class FundingDeadlinesService {
     if (recipients.length === 0) return false;
 
     for (const userId of recipients) {
-      await this.db.query(
-        `INSERT INTO notifications
-           (template_key, channel, language, recipient_user_id, destination,
-            subject, body, status, transaction_id)
-         VALUES ($1,'IN_PLATFORM','EN',$2,'in-platform',$3,$4,'QUEUED',$5)`,
-        [
-          REMINDER_KEY,
-          userId,
-          'Please confirm you received your funding',
+      await this.notifications.send({
+        templateKey: REMINDER_KEY,
+        recipientUserId: userId,
+        transactionId: row.transaction_id,
+        fallbackSubject: 'Please confirm you received your funding',
+        fallbackBody:
           `Your bank recorded this transfer as sent. Confirming receipt with the one-time ` +
-            `code the bank gave you is what completes funding. If you have not received the ` +
-            `code, ask the bank to issue a new one. After about ${windowHours} hours without ` +
-            `a confirmation this is escalated to platform operations.`,
-          row.transaction_id,
-        ],
-      );
+          `code the bank gave you is what completes funding. If you have not received the ` +
+          `code, ask the bank to issue a new one. After about ${windowHours} hours without ` +
+          `a confirmation this is escalated to platform operations.`,
+        variables: { windowHours },
+      });
     }
     this.logger.log(`Reminded supplier to confirm funding on transaction ${row.transaction_id}`);
     return true;
@@ -208,23 +206,27 @@ export class FundingDeadlinesService {
 
     await this.db.transaction(async (client: PoolClient) => {
       for (const userId of admins) {
-        await client.query(
-          `INSERT INTO notifications
-             (template_key, channel, language, recipient_user_id, destination,
-              subject, body, status, transaction_id)
-           VALUES ($1,'IN_PLATFORM','EN',$2,'in-platform',$3,$4,'QUEUED',$5)`,
-          [
-            ESCALATION_KEY,
-            userId,
-            'Funding confirmation stalled — operations action needed',
-            `Invoice ${row.invoice_number ?? row.transaction_id}: the bank marked the ` +
+        await this.notifications.send(
+          {
+            templateKey: ESCALATION_KEY,
+            recipientUserId: userId,
+            transactionId: row.transaction_id,
+            fallbackSubject: 'Funding confirmation stalled — operations action needed',
+            fallbackBody:
+              `Invoice ${row.invoice_number ?? row.transaction_id}: the bank marked the ` +
               `transfer sent at ${row.bank_marked_sent_at.toISOString()} and the supplier has ` +
               `not confirmed receipt in ${Math.floor(elapsedHours)} hours. ` +
               `Net payout ${row.net_supplier_payout} JOD is held pending confirmation. ` +
               `The transaction is not FUNDED and the commission is not finalized. ` +
               `Contact the supplier, or have the bank reissue the one-time code.`,
-            row.transaction_id,
-          ],
+            variables: {
+              invoiceNumber: row.invoice_number ?? row.transaction_id,
+              markedSentAt: row.bank_marked_sent_at.toISOString(),
+              hoursPending: Math.floor(elapsedHours),
+              netSupplierPayout: row.net_supplier_payout,
+            },
+          },
+          client,
         );
       }
 

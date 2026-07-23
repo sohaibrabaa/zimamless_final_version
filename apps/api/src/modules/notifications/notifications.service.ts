@@ -350,7 +350,13 @@ export class NotificationsService {
       email: string;
       phone_number: string | null;
       language: string | null;
-    }>(`SELECT email, phone_number, language FROM users WHERE id = $1`, [userId]);
+    }>(
+      // preferred_language, not language — the column ZM-I18N-003 defined.
+      // This query had no caller until Phase 9 routed the senders through
+      // send(), so the wrong name sat here unexecuted since Phase 8.
+      `SELECT email, phone_number, preferred_language AS language FROM users WHERE id = $1`,
+      [userId],
+    );
     return rows[0] ?? null;
   }
 

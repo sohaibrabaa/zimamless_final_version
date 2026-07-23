@@ -5,6 +5,8 @@ import { TIME_PROVIDER, TimeProvider } from '../../common/time/time.provider';
 import { AuditService } from '../../common/audit/audit.service';
 import { requireTransition, TransactionState } from '../transactions/transaction-state';
 import { automationPaused, daysUntilDue, maturityAction, overdueDays, reminderDue } from './maturity';
+import { NotificationsService } from '../notifications/notifications.service';
+import type { TemplateVariables } from '../notifications/template-render';
 
 /**
  * The maturity sweep (ZM-PMT-006..011, AS-05).
@@ -58,6 +60,7 @@ export class MaturityService {
   constructor(
     private readonly db: DatabaseService,
     private readonly audit: AuditService,
+    private readonly notifications: NotificationsService,
     @Inject(TIME_PROVIDER) private readonly time: TimeProvider,
   ) {}
 
@@ -163,6 +166,10 @@ export class MaturityService {
           `${row.due_date.toISOString().slice(0, 10)} and the bank has not yet reported whether ` +
           `the buyer paid. This is not a record of non-payment — it means we are waiting for ` +
           `the bank to confirm. No action is needed from you.`,
+        {
+          invoiceNumber: row.invoice_number,
+          dueDate: row.due_date.toISOString().slice(0, 10),
+        },
       );
 
       await this.audit.recordIn(client, {
@@ -226,17 +233,29 @@ export class MaturityService {
         `Invoice ${row.invoice_number} is due on ` +
           `${row.due_date.toISOString().slice(0, 10)}. The buyer pays the bank directly; ` +
           `this is for your records.`,
+        {
+          invoiceNumber: row.invoice_number,
+          dueDate: row.due_date.toISOString().slice(0, 10),
+          remainingDays: remaining,
+        },
       );
     });
     return 1;
   }
 
+  /**
+   * Routed through `NotificationsService.send` (Phase 9): the template row
+   * and the recipient's `preferred_language` decide the final wording, and
+   * the literal text here is the fallback when no template exists — the
+   * degrade direction ZM-NOT-004 requires (the message still goes out).
+   */
   private async notifySupplier(
     client: PoolClient,
     row: MaturingRow,
     templateKey: string,
     subject: string,
     body: string,
+    variables: TemplateVariables,
   ): Promise<void> {
     const { rows: recipients } = await client.query<{ user_id: string }>(
       `SELECT DISTINCT m.user_id
@@ -246,12 +265,16 @@ export class MaturityService {
     );
 
     for (const recipient of recipients) {
-      await client.query(
-        `INSERT INTO notifications
-           (template_key, channel, language, recipient_user_id, destination,
-            subject, body, status, transaction_id)
-         VALUES ($1,'IN_PLATFORM','EN',$2,'in-platform',$3,$4,'QUEUED',$5)`,
-        [templateKey, recipient.user_id, subject, body, row.transaction_id],
+      await this.notifications.send(
+        {
+          templateKey,
+          recipientUserId: recipient.user_id,
+          transactionId: row.transaction_id,
+          fallbackSubject: subject,
+          fallbackBody: body,
+          variables,
+        },
+        client,
       );
     }
   }

@@ -12,6 +12,7 @@ import type { ActorContext } from '../onboarding/onboarding.service';
 import { TransactionsService } from '../transactions/transactions.service';
 import { evaluateBank, type ListingFacts, type PolicyFilter, type RiskBand } from './eligibility';
 import { canTransitionListing, type ListingStatus } from './offer-state';
+import { NotificationsService } from '../notifications/notifications.service';
 
 /**
  * Listing activation and lifecycle (ZM-MKT-001..009, ZM-FEE-001..005).
@@ -49,6 +50,7 @@ export class ListingsService {
     private readonly db: DatabaseService,
     private readonly transactions: TransactionsService,
     private readonly audit: AuditService,
+    private readonly notifications: NotificationsService,
     @Inject(TIME_PROVIDER) private readonly time: TimeProvider,
   ) {}
 
@@ -415,19 +417,21 @@ export class ListingsService {
       );
 
       for (const recipient of recipients) {
-        await client.query(
-          `INSERT INTO notifications
-             (template_key, channel, language, recipient_user_id, destination,
-              subject, body, status, transaction_id)
-           VALUES ('LISTING_AVAILABLE','IN_PLATFORM','EN',$1,'in-platform',
-                   'A new receivable is available',
-                   $2, 'QUEUED', $3)`,
-          [
-            recipient.user_id,
-            `A receivable of ${facts.outstandingAmount.toString()} JOD is open for offers until ` +
+        await this.notifications.send(
+          {
+            templateKey: 'LISTING_AVAILABLE',
+            recipientUserId: recipient.user_id,
+            transactionId: listing.transaction_id,
+            fallbackSubject: 'A new receivable is available',
+            fallbackBody:
+              `A receivable of ${facts.outstandingAmount.toString()} JOD is open for offers until ` +
               `${listing.offer_submission_deadline.toISOString()}.`,
-            listing.transaction_id,
-          ],
+            variables: {
+              outstandingAmount: facts.outstandingAmount.toString(),
+              offerDeadline: listing.offer_submission_deadline.toISOString(),
+            },
+          },
+          client,
         );
       }
     }
