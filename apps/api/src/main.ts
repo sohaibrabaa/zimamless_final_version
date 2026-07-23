@@ -69,6 +69,14 @@ async function bootstrap(): Promise<void> {
     yamlDocumentUrl: 'docs-yaml',
   });
 
+  // Lifecycle hooks (and with them the database pool) exist only after
+  // init(); listen() would run it implicitly, but the two boot steps below
+  // both touch infrastructure that onModuleInit creates. Explicit, so the
+  // ordering is a statement rather than a coincidence — with the time
+  // machine's env flag off, refresh() never touched the database and this
+  // ordering bug sat unreachable from Phase 1 until 9.2 turned the flag on.
+  await app.init();
+
   // Prime the time-machine guard before serving traffic, so the first
   // /auth/me reports the demo block correctly rather than one refresh late.
   await app.get(SystemTimeProvider).refresh();

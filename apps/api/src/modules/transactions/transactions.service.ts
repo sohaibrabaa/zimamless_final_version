@@ -818,13 +818,17 @@ export class TransactionsService {
       // transaction, so a bank is not left holding an offer on a receivable
       // that no longer exists.
       if (row.state === 'OPEN_FOR_OFFERS') {
+        // listings closes with closed_at and offers with withdrawn_at —
+        // neither table has an updated_at, which the first version of this
+        // wrote and no test drove through an actually-open listing. The demo
+        // seed's CANCELLED fixture was the first caller to reach this branch.
         await client.query(
-          `UPDATE listings SET status = 'CANCELLED', updated_at = now()
+          `UPDATE listings SET status = 'CANCELLED', closed_at = now()
             WHERE transaction_id = $1 AND status = 'OPEN_FOR_OFFERS'`,
           [id],
         );
         await client.query(
-          `UPDATE bank_offers SET status = 'WITHDRAWN', updated_at = now()
+          `UPDATE bank_offers SET status = 'WITHDRAWN', withdrawn_at = now()
             WHERE listing_id IN (SELECT id FROM listings WHERE transaction_id = $1)
               AND status IN ('ACTIVE','PENDING_INTERNAL_APPROVAL')`,
           [id],

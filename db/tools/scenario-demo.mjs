@@ -82,6 +82,7 @@ const purge = process.argv.includes('--purge');
 // ---------------------------------------------------------------------------
 
 const ORG = {
+  platform: '0e000000-0000-4000-8000-000000000001',
   alNoor: '0e000000-0000-4000-8000-000000000002',
   bankA: '0e000000-0000-4000-8000-000000000004',
   bankB: '0e000000-0000-4000-8000-000000000005',
@@ -98,6 +99,7 @@ const PERSONA = {
   bankAOps: 'ops@jnb.zimmamless.test',
   bankBMaker: 'maker@lcb.zimmamless.test',
   bankBApprover: 'approver@lcb.zimmamless.test',
+  platformAdmin: 'admin@platform.zimmamless.test',
 };
 const PERSONA_ORG = {
   supplier: ORG.alNoor,
@@ -106,6 +108,7 @@ const PERSONA_ORG = {
   bankAOps: ORG.bankA,
   bankBMaker: ORG.bankB,
   bankBApprover: ORG.bankB,
+  platformAdmin: ORG.platform,
 };
 
 // ---------------------------------------------------------------------------
@@ -126,12 +129,22 @@ const MONEY = {
   net: '8390.000',
 };
 
+// Last UUID group is exactly 12 hex chars: 8 zeros + slot digit + 3-digit n.
 const fid = (slot, n) =>
-  `0e990000-0000-4000-8000-0000000${slot}${String(n).padStart(3, '0')}`;
+  `0e990000-0000-4000-8000-00000000${slot}${String(n).padStart(3, '0')}`;
 
 /**
  * dueInDays is what makes the population worth demoing: +5 gives the time
- * machine something to cross; -3 and -10 give the sweep something to find.
+ * machine something to cross live on stage.
+ *
+ * Fixtures 6 and 7 need due dates in the *past* — but a receivable that has
+ * already matured cannot be listed, accepted or contracted (the contract
+ * generator refuses with INVOICE_PAST_DUE, correctly: it is no longer a
+ * future receivable). So they are staged with due dates one day out, funded
+ * while still legitimate, and then matured **through the demo time machine**
+ * — the exact mechanism the live demo uses — with the clock returned to zero
+ * before the date-sensitive fixtures are staged. Nothing hand-writes a state
+ * and nothing backdates an invoice.
  */
 const FIXTURES = [
   { n: 1, slot: 'DRAFT',                ref: 'ZM-DEMO-DRAFT',     dueInDays: null },
@@ -139,9 +152,9 @@ const FIXTURES = [
   { n: 3, slot: 'OPEN_FOR_OFFERS',      ref: 'ZM-DEMO-OPEN',      dueInDays: 75 },
   { n: 4, slot: 'FUNDING_CONF_PENDING', ref: 'ZM-DEMO-FCP',       dueInDays: 45 },
   { n: 5, slot: 'FUNDED_NEAR_MATURITY', ref: 'ZM-DEMO-FUNDED',    dueInDays: 5 },
-  { n: 6, slot: 'OVERDUE_UNCONFIRMED',  ref: 'ZM-DEMO-OVERDUE-U', dueInDays: -3 },
-  { n: 7, slot: 'RECOURSE_ACTIVE',      ref: 'ZM-DEMO-RECOURSE',  dueInDays: -10 },
-  { n: 8, slot: 'PAID',                 ref: 'ZM-DEMO-PAID',      dueInDays: -2 },
+  { n: 6, slot: 'OVERDUE_UNCONFIRMED',  ref: 'ZM-DEMO-OVERDUE-U', dueInDays: 1 },
+  { n: 7, slot: 'RECOURSE_ACTIVE',      ref: 'ZM-DEMO-RECOURSE',  dueInDays: 1 },
+  { n: 8, slot: 'PAID',                 ref: 'ZM-DEMO-PAID',      dueInDays: 20 },
   { n: 9, slot: 'CANCELLED',            ref: 'ZM-DEMO-CANCELLED', dueInDays: 30 },
 ];
 const txId = (f) => fid('1', f.n);
@@ -492,6 +505,20 @@ async function ensureBase(f, state, { withOffer = false, withDeclarations = true
        ON CONFLICT (id) DO NOTHING`,
       [invId(f), txId(f), `DEMO-${f.ref}`, `JO-EINV-${f.ref}`, f.dueInDays, MONEY.face, `demo-p9-${f.n}`],
     );
+    // Heal a stale re-run: while the fixture is still pre-acceptance —
+    // nothing priced, snapshotted or contracted against it — the staged
+    // invoice's due date is inert scaffolding and may be realigned. The
+    // moment an offer is accepted the invoice is part of a real history and
+    // is left alone.
+    await client.query(
+      `UPDATE invoices i
+          SET due_date = CURRENT_DATE + $2::int
+         FROM receivable_transactions t
+        WHERE i.transaction_id = t.id AND t.id = $1
+          AND t.state IN ('DRAFT','ELIGIBLE','OPEN_FOR_OFFERS')
+          AND i.due_date <> CURRENT_DATE + $2::int`,
+      [txId(f), f.dueInDays],
+    );
   }
   if (withDeclarations) {
     await client.query(
@@ -574,7 +601,10 @@ async function driveToConfirmationPending(f) {
   const contract = await api('supplier', 'GET', `/transactions/${txId(f)}/contract`);
   if (contract.status === 200) {
     for (const persona of ['supplier', 'bankAApprover']) {
-      const res = await api(persona, 'POST', `/contracts/${contract.body.id}/sign`);
+      // Explicit assent: `accepted: true` IS the signature (SignContractDto).
+      const res = await api(persona, 'POST', `/contracts/${contract.body.id}/sign`, {
+        accepted: true,
+      });
       if (res.status === 200 || res.status === 201) step(f.ref, `${persona} signed`);
       else if (res.status !== 409 && res.status !== 422) {
         throw new Error(`[${f.ref}] ${persona} signing failed (${res.status}): ${res.raw}`);
@@ -610,8 +640,32 @@ async function driveToFunded(f) {
 }
 
 /**
+ * The demo time machine, driven through its real API (9.2): the platform
+ * setting armed by a platform admin, the jump audited, the offset applied in
+ * exactly one place. This script never touches `demo_time_offsets` directly.
+ */
+async function armTimeMachine(on) {
+  const res = await api('platformAdmin', 'PATCH', `/admin/settings`, {
+    demo_time_machine_enabled: on,
+  });
+  if (res.status !== 200) {
+    throw new Error(`arming the time machine (${on}) failed (${res.status}): ${res.raw}`);
+  }
+  console.log(`  [time-machine] ${on ? 'armed' : 'disarmed'}`);
+}
+
+async function timeTravel(offsetDays) {
+  const res = await api('platformAdmin', 'POST', `/demo/time-travel`, { offsetDays });
+  if (res.status !== 200 && res.status !== 201) {
+    throw new Error(`time-travel(${offsetDays}) failed (${res.status}): ${res.raw}`);
+  }
+  console.log(`  [time-machine] offset now ${offsetDays} day(s), effective ${res.body.effectiveDate ?? '?'}`);
+}
+
+/**
  * OVERDUE_UNCONFIRMED is the sweep's to write, never this script's. Funded
- * with a past due date, the next scheduler tick must pick it up.
+ * and then aged past maturity by the time machine, the next scheduler tick
+ * must pick it up.
  */
 async function awaitSweep(f, timeoutMs = 180_000) {
   const startedAt = Date.now();
@@ -664,12 +718,24 @@ async function purgeRemovable() {
     }
     await client.query('BEGIN');
     try {
+      // accepted_offer_snapshots references offer_selections, so the
+      // snapshot rows must go before the selections they point at.
       await client.query(
-        `DELETE FROM offer_conditions WHERE offer_id IN
-           (SELECT o.id FROM bank_offers o JOIN listings l ON l.id = o.listing_id
-             WHERE l.transaction_id = $1)`,
+        `DELETE FROM contract_signatures WHERE contract_id IN
+           (SELECT id FROM contracts WHERE transaction_id = $1)`,
         [txId(f)],
       );
+      for (const table of ['contracts', 'accepted_offer_snapshots']) {
+        await client.query(`DELETE FROM ${table} WHERE transaction_id = $1`, [txId(f)]);
+      }
+      for (const child of ['offer_conditions', 'offer_selections']) {
+        await client.query(
+          `DELETE FROM ${child} WHERE offer_id IN
+             (SELECT o.id FROM bank_offers o JOIN listings l ON l.id = o.listing_id
+               WHERE l.transaction_id = $1)`,
+          [txId(f)],
+        );
+      }
       for (const [table, column] of [
         ['bank_offers', 'listing_id'],
         ['bank_eligibility', 'listing_id'],
@@ -681,6 +747,8 @@ async function purgeRemovable() {
         );
       }
       for (const table of [
+        'commission_calculations',
+        'settlements',
         'notifications',
         'listings',
         'risk_assessments',
@@ -738,6 +806,59 @@ try {
   // 2 — ELIGIBLE, ready to be listed on stage.
   await ensureBase(F[2], 'ELIGIBLE');
   step(F[2].ref, `${await stateOf(txId(F[2]))}`);
+
+  // 6 & 7 — the matured pair, staged FIRST among the walked fixtures.
+  // Funded while the receivable is still a day from maturity, then aged past
+  // it with the demo time machine — the same lever the live demo pulls — so
+  // the real sweep marks them and the bank's confirmation and recourse claim
+  // are real API calls. The clock returns to zero and the machine is
+  // disarmed before any date-sensitive fixture below is staged; their
+  // timestamps sit a couple of days ahead of the wall clock afterwards,
+  // which is the time machine's honest artifact, not an error.
+  {
+    const done6 = (await stateOf(txId(F[6]))) === 'OVERDUE_UNCONFIRMED';
+    const done7 = (await stateOf(txId(F[7]))) === 'RECOURSE_ACTIVE';
+    if (!done6 || !done7) {
+      await ensureBase(F[6], 'OPEN_FOR_OFFERS', { withOffer: true });
+      await ensureBase(F[7], 'OPEN_FOR_OFFERS', { withOffer: true });
+      if (!done6) await driveToFunded(F[6]);
+      if (!done7) await driveToFunded(F[7]);
+
+      await armTimeMachine(true);
+      await timeTravel(2);
+      try {
+        if ((await stateOf(txId(F[6]))) === 'FUNDED') await awaitSweep(F[6]);
+        if ((await stateOf(txId(F[7]))) === 'FUNDED') await awaitSweep(F[7]);
+
+        if ((await stateOf(txId(F[7]))) === 'OVERDUE_UNCONFIRMED') {
+          const res = await api('bankAOps', 'POST', `/transactions/${txId(F[7])}/confirm-status`, {
+            status: 'OVERDUE',
+            notes: 'Buyer contacted; no payment received by maturity.',
+          });
+          if (res.status !== 200 && res.status !== 201) {
+            throw new Error(`[${F[7].ref}] confirm OVERDUE failed (${res.status}): ${res.raw}`);
+          }
+          step(F[7].ref, 'bank confirmed OVERDUE');
+        }
+        if ((await stateOf(txId(F[7]))) === 'OVERDUE') {
+          const res = await api('bankAOps', 'POST', `/transactions/${txId(F[7])}/recourse`, {
+            reason: 'NON_PAYMENT',
+            requestedAmount: MONEY.gross, // never more than the bank advanced (ZM-REC-004)
+          });
+          if (res.status !== 201) {
+            throw new Error(`[${F[7].ref}] recourse failed (${res.status}): ${res.raw}`);
+          }
+          step(F[7].ref, `recourse case opened (${res.body.id})`);
+        }
+      } finally {
+        // Whatever happened above, the clock never stays moved.
+        await timeTravel(0);
+        await armTimeMachine(false);
+      }
+    }
+    step(F[6].ref, `${await stateOf(txId(F[6]))}`);
+    step(F[7].ref, `${await stateOf(txId(F[7]))}`);
+  }
 
   // 3 — OPEN_FOR_OFFERS with two approved offers side by side, created and
   // approved through the API so each is priced, evaluated and audited. Bank B
@@ -814,39 +935,6 @@ try {
   await driveToFunded(F[5]);
   step(F[5].ref, `${await stateOf(txId(F[5]))}`);
 
-  // 6 — FUNDED with the due date already passed; the real sweep marks it.
-  await ensureBase(F[6], 'OPEN_FOR_OFFERS', { withOffer: true });
-  await driveToFunded(F[6]);
-  if ((await stateOf(txId(F[6]))) === 'FUNDED') await awaitSweep(F[6]);
-  step(F[6].ref, `${await stateOf(txId(F[6]))}`);
-
-  // 7 — the full recourse arc: sweep → bank confirms OVERDUE → recourse.
-  {
-    const f = F[7];
-    await ensureBase(f, 'OPEN_FOR_OFFERS', { withOffer: true });
-    await driveToFunded(f);
-    if ((await stateOf(txId(f))) === 'FUNDED') await awaitSweep(f);
-    if ((await stateOf(txId(f))) === 'OVERDUE_UNCONFIRMED') {
-      const res = await api('bankAOps', 'POST', `/transactions/${txId(f)}/confirm-status`, {
-        status: 'OVERDUE',
-        notes: 'Buyer contacted; no payment received by maturity.',
-      });
-      if (res.status !== 200 && res.status !== 201) {
-        throw new Error(`[${f.ref}] confirm OVERDUE failed (${res.status}): ${res.raw}`);
-      }
-      step(f.ref, 'bank confirmed OVERDUE');
-    }
-    if ((await stateOf(txId(f))) === 'OVERDUE') {
-      const res = await api('bankAOps', 'POST', `/transactions/${txId(f)}/recourse`, {
-        reason: 'NON_PAYMENT',
-        requestedAmount: MONEY.gross, // never more than the bank advanced (ZM-REC-004)
-      });
-      if (res.status !== 201) throw new Error(`[${f.ref}] recourse failed (${res.status}): ${res.raw}`);
-      step(f.ref, `recourse case opened (${res.body.id})`);
-    }
-    step(f.ref, `${await stateOf(txId(f))}`);
-  }
-
   // 8 — PAID: the buyer's payment recorded in full by the bank, then the
   // bank's confirmation. Balances are derived (D-13); nothing is hand-set.
   {
@@ -863,13 +951,20 @@ try {
       if (paid.status !== 201 && paid.status !== 409) {
         throw new Error(`[${f.ref}] payment failed (${paid.status}): ${paid.raw}`);
       }
-      const confirm = await api('bankAOps', 'POST', `/transactions/${txId(f)}/confirm-status`, {
-        status: 'PAID',
-      });
-      if (confirm.status !== 200 && confirm.status !== 201) {
-        throw new Error(`[${f.ref}] confirm PAID failed (${confirm.status}): ${confirm.raw}`);
+      step(f.ref, 'buyer payment recorded in full');
+      // A payment that settles the outstanding moves the state to PAID by
+      // itself (derived balances, D-13). The explicit confirmation only
+      // applies when something is still awaiting it.
+      state = await stateOf(txId(f));
+      if (state === 'FUNDED' || state === 'PARTIALLY_PAID' || state === 'OVERDUE_UNCONFIRMED') {
+        const confirm = await api('bankAOps', 'POST', `/transactions/${txId(f)}/confirm-status`, {
+          status: 'PAID',
+        });
+        if (confirm.status !== 200 && confirm.status !== 201) {
+          throw new Error(`[${f.ref}] confirm PAID failed (${confirm.status}): ${confirm.raw}`);
+        }
+        step(f.ref, 'bank confirmed PAID');
       }
-      step(f.ref, 'payment recorded in full and confirmed');
     }
     step(f.ref, `${await stateOf(txId(f))}`);
   }

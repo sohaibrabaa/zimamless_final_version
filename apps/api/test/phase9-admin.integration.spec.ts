@@ -29,8 +29,11 @@ const describeIfDb = connectionString && SUPABASE && ANON ? describe : describe.
 const ORG = {
   alNoor: '0e000000-0000-4000-8000-000000000002',
   platform: '0e000000-0000-4000-8000-000000000001',
+  bankA: '0e000000-0000-4000-8000-000000000004',
 };
 const AL_NOOR_OWNER = '0e100000-0000-4000-8000-000000000001';
+const BANK_A_MAKER = '0e100000-0000-4000-8000-000000000005';
+const BANK_A_APPROVER = '0e100000-0000-4000-8000-000000000006';
 const BUYER_ESTABLISHMENT = '30000201';
 
 describeIfDb('Phase 9 — admin surface, cancel, relisting', () => {
@@ -266,6 +269,59 @@ describeIfDb('Phase 9 — admin surface, cancel, relisting', () => {
       const res = await api('supplier', 'post', `/transactions/${id}/cancel`);
       expect(res.status).toBe(409);
       expect(await stateOf(id)).toBe('OFFER_ACCEPTED');
+    }, 60_000);
+
+    it('closes the open listing and withdraws its live offers with the cancellation', async () => {
+      // The branch the first round of these tests never drove: cancelling at
+      // OPEN_FOR_OFFERS with a real listing and a live offer attached. The
+      // demo seed was the first caller to reach it and found the closing
+      // UPDATEs naming an updated_at column neither table has — proof that
+      // "cancel works" tested only against bare rows proves less than it
+      // sounds like it does.
+      const id = await buildTx('OPEN_FOR_OFFERS');
+      const listingId = randomUUID();
+      const offerId = randomUUID();
+      await db.query(
+        `INSERT INTO listings
+           (id, transaction_id, round_number, status, activated_at,
+            offer_submission_deadline, supplier_selection_deadline, activated_by)
+         VALUES ($1,$2,1,'OPEN_FOR_OFFERS', now(), now() + interval '1 day',
+                 now() + interval '2 days', $3)`,
+        [listingId, id, AL_NOOR_OWNER],
+      );
+      await db.query(
+        `INSERT INTO bank_offers
+           (id, listing_id, bank_org_id, status, version_number, transaction_type, recourse_type,
+            gross_funding_amount, bank_discount_amount, bank_fees_amount,
+            platform_commission_amount, listing_fee_amount, other_deductions_amount,
+            net_supplier_payout, valid_until, created_by, approved_by, approved_at, submitted_at)
+         VALUES ($1,$2,$3,'ACTIVE',1,'INVOICE_FINANCING','FULL_RECOURSE',
+                 9000.000,300.000,150.000,135.000,25.000,0.000,8390.000,
+                 now() + interval '30 days',$4,$5, now(), now())`,
+        [offerId, listingId, ORG.bankA, BANK_A_MAKER, BANK_A_APPROVER],
+      );
+
+      const res = await api('supplier', 'post', `/transactions/${id}/cancel`, {
+        reason: 'Withdrawn before selection.',
+      });
+      expect(res.status).toBe(200);
+      expect(await stateOf(id)).toBe('CANCELLED');
+
+      const { rows: listings } = await db.query<{ status: string; closed_at: Date | null }>(
+        `SELECT status, closed_at FROM listings WHERE id = $1`,
+        [listingId],
+      );
+      expect(listings[0].status).toBe('CANCELLED');
+      expect(listings[0].closed_at).not.toBeNull();
+
+      const { rows: offers } = await db.query<{ status: string; withdrawn_at: Date | null }>(
+        `SELECT status, withdrawn_at FROM bank_offers WHERE id = $1`,
+        [offerId],
+      );
+      // The bank is not left holding a live offer on a receivable that no
+      // longer exists.
+      expect(offers[0].status).toBe('WITHDRAWN');
+      expect(offers[0].withdrawn_at).not.toBeNull();
     }, 60_000);
   });
 
