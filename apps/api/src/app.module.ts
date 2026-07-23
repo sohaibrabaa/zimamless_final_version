@@ -10,6 +10,8 @@ import { AuditService } from './common/audit/audit.service';
 import { AuditInterceptor } from './common/audit/audit.interceptor';
 import { IdempotencyInterceptor } from './common/idempotency/idempotency.interceptor';
 import { LedgerService } from './modules/ledger/ledger.service';
+import { FundingService } from './modules/funding/funding.service';
+import { FundingController } from './modules/funding/funding.controller';
 import { TIME_PROVIDER, SystemTimeProvider } from './common/time/time.provider';
 import { AuthGuard } from './modules/auth/auth.guard';
 import { AuthService } from './modules/auth/auth.service';
@@ -90,6 +92,8 @@ export const APP_CONFIG = 'APP_CONFIG';
     // --- Phase 6 ---
     AcceptanceController,
     ContractsController,
+    // --- Phase 7 ---
+    FundingController,
   ],
   providers: [
     {
@@ -172,6 +176,7 @@ export const APP_CONFIG = 'APP_CONFIG';
     // PoolClient so a journal commits with the settlement or commission row it
     // describes, never separately.
     LedgerService,
+    FundingService,
     // The provider is bound to a symbol, not to its class, so ZM-CON-009's
     // "insertable without core domain changes" is a one-line swap here and
     // nothing else. Nothing outside this file names DummySignatureProvider.
