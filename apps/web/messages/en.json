@@ -1155,5 +1155,27 @@
       "outcome": "Outcome",
       "gross": "Gross funding"
     }
+  },
+  "dashboard": {
+    "unread": "Unread notifications",
+    "supplier": {
+      "receivables": "Receivables",
+      "inRound": "In a financing round",
+      "inFlight": "Between acceptance and funding",
+      "funded": "Funded"
+    },
+    "bank": {
+      "opportunities": "Marketplace opportunities",
+      "liveOffers": "Live offers",
+      "approvalQueue": "Awaiting internal approval",
+      "wonRounds": "Rounds won",
+      "openRecourse": "Open recourse claims"
+    },
+    "platform": {
+      "receivables": "Receivables on platform",
+      "openCases": "Open cases",
+      "auditEntries": "Audit entries",
+      "settings": "Platform settings"
+    }
   }
 }

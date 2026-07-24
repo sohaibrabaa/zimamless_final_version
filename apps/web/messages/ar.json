@@ -1155,5 +1155,27 @@
       "outcome": "النتيجة",
       "gross": "إجمالي التمويل"
     }
+  },
+  "dashboard": {
+    "unread": "إشعارات غير مقروءة",
+    "supplier": {
+      "receivables": "الذمم المدينة",
+      "inRound": "في جولة عروض",
+      "inFlight": "بين القبول والتمويل",
+      "funded": "ممولة"
+    },
+    "bank": {
+      "opportunities": "فرص في السوق",
+      "liveOffers": "عروض قائمة",
+      "approvalQueue": "بانتظار الموافقة الداخلية",
+      "wonRounds": "جولات مكسوبة",
+      "openRecourse": "مطالبات رجوع مفتوحة"
+    },
+    "platform": {
+      "receivables": "ذمم مدينة على المنصة",
+      "openCases": "حالات مفتوحة",
+      "auditEntries": "سجلات التدقيق",
+      "settings": "إعدادات المنصة"
+    }
   }
 }
