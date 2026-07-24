@@ -27,7 +27,9 @@ export function OrgSwitcher() {
       await switchOrganization(orgId);
       const membership = me!.memberships.find((m) => m.organizationId === orgId);
       const portal = portalForOrgType(membership?.organizationType);
-      router.push(`/${locale}/${portal ?? "login"}/dashboard`);
+      // The root dispatcher owns the no-portal fallback; never build a
+      // /login/dashboard URL, which does not exist.
+      router.push(portal ? `/${locale}/${portal}/dashboard` : `/${locale}`);
     } catch (err) {
       // The API answers one identical 403 (ORGANIZATION_CONTEXT_INVALID)
       // whether the org does not exist or the user is simply not a member —

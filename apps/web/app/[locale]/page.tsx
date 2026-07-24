@@ -19,7 +19,12 @@ export default function RootDispatcherPage() {
       return;
     }
     const portal = portalForOrgType(activeMembership?.organizationType);
-    router.replace(`/${locale}/${portal ?? "login"}/dashboard`);
+    // No membership yet = a fresh registrant: their next step is creating
+    // their organization in the onboarding wizard, not a portal dashboard
+    // (and certainly not /login/dashboard, which does not exist).
+    router.replace(
+      portal ? `/${locale}/${portal}/dashboard` : `/${locale}/supplier/onboarding`
+    );
   }, [loading, me, activeMembership, locale, router]);
 
   return (
