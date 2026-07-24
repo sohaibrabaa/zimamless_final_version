@@ -19,11 +19,17 @@ export default function Page() {
 
 /**
  * Landing point of the emailed activation link (PA-04: verification stays
- * client-side against Supabase Auth). The link carries Supabase's own
- * single-use confirmation token as `token_hash`; verifyOtp validates it
- * server-side at Supabase, consumes it, and establishes the session. No
- * custom tokens, no API involvement — the NestJS API only ever sees the
- * resulting JWT.
+ * client-side against Supabase Auth). Two arrival formats, both backed by
+ * Supabase's own single-use confirmation token — no custom tokens, no API
+ * involvement; the NestJS API only ever sees the resulting JWT:
+ *
+ * 1. `?token_hash=…&type=signup` (custom-SMTP template): verifyOtp validates
+ *    and consumes the token at Supabase and establishes the session here.
+ * 2. Default `{{ .ConfirmationURL }}` template (no custom SMTP — templates
+ *    aren't editable on the built-in mailer): Supabase verifies the token on
+ *    its side first, then redirects here with session tokens (or an error)
+ *    in the URL fragment; the client consumes them in the background
+ *    (detectSessionInUrl), so we wait for the session to materialize.
  */
 function ConfirmPage() {
   const t = useTranslations();
@@ -43,19 +49,61 @@ function ConfirmPage() {
   const type = (searchParams.get("type") ?? "signup") as EmailOtpType;
 
   useEffect(() => {
-    if (!tokenHash || started.current) return;
+    if (started.current) return;
     started.current = true;
+    let active = true;
+    const dest = `/${locale}`;
 
-    supabase.auth.verifyOtp({ type, token_hash: tokenHash }).then(({ error }) => {
-      if (error) {
+    const run = async () => {
+      if (tokenHash) {
+        const { error } = await supabase.auth.verifyOtp({ type, token_hash: tokenHash });
+        if (!active) return;
+        if (error) {
+          setFailed(true);
+          return;
+        }
+        router.replace(dest);
+        return;
+      }
+
+      // Default-template arrival: the session may already be live (the
+      // client consumed the fragment tokens before we mounted) …
+      const { data: initial } = await supabase.auth.getSession();
+      if (!active) return;
+      if (initial.session) {
+        router.replace(dest);
+        return;
+      }
+
+      // … or Supabase reported failure in the fragment (expired/used link),
+      // or there is nothing to wait for at all (page opened directly).
+      const fragment = new URLSearchParams(window.location.hash.replace(/^#/, ""));
+      const hasError = Boolean(fragment.get("error") || fragment.get("error_code"));
+      if (hasError || !window.location.hash) {
         setFailed(true);
         return;
       }
-      router.replace(`/${locale}`);
-    });
+
+      // Fragment tokens present: poll briefly while the client stores them.
+      for (let i = 0; i < 20; i++) {
+        await new Promise((resolve) => setTimeout(resolve, 250));
+        const { data } = await supabase.auth.getSession();
+        if (!active) return;
+        if (data.session) {
+          router.replace(dest);
+          return;
+        }
+      }
+      setFailed(true);
+    };
+
+    void run();
+    return () => {
+      active = false;
+    };
   }, [tokenHash, type, router, locale]);
 
-  if (failed || !tokenHash) {
+  if (failed) {
     return (
       <div className="flex flex-col gap-4 text-center">
         <h1 className="text-lg font-semibold">{t("auth.activationFailedTitle")}</h1>
