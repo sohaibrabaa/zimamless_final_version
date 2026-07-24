@@ -34,7 +34,13 @@ function VerifyEmailPage() {
     // (a handful of emails per hour), and an already-confirmed address is
     // refused too. Swallowing those showed a green ✓ over a send that never
     // happened — "resend isn't working" with no way to see why.
-    const { error: resendError } = await supabase.auth.resend({ type: "signup", email });
+    const { error: resendError } = await supabase.auth.resend({
+      type: "signup",
+      email,
+      // Same destination as signup: the emailed activation link must land on
+      // the confirm route that validates the single-use token.
+      options: { emailRedirectTo: `${window.location.origin}/${locale}/confirm` },
+    });
     setResending(false);
     if (resendError) {
       setError(
@@ -53,7 +59,7 @@ function VerifyEmailPage() {
       <p className="text-sm text-(--color-muted)">{t("auth.verifyEmailBody", { email })}</p>
       <p className="text-xs text-(--color-muted)">{t("auth.verifyEmailHint")}</p>
       <Button variant="secondary" loading={resending} onClick={resend}>
-        {t("auth.resendCode")}
+        {t("auth.resendLink")}
       </Button>
       {sent && <p className="text-xs text-(--color-success)">✓ {t("auth.resendSent")}</p>}
       {error && <p className="text-xs text-(--color-danger)">{error}</p>}

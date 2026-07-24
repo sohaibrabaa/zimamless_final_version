@@ -34,7 +34,13 @@ export default function RegisterPage() {
     const { data, error: signUpError } = await supabase.auth.signUp({
       email,
       password,
-      options: { data: { phone } },
+      options: {
+        data: { phone },
+        // The activation email carries a single-use Supabase confirmation
+        // link; this sends the user back to our confirm route, which
+        // validates the token and establishes the session.
+        emailRedirectTo: `${window.location.origin}/${locale}/confirm`,
+      },
     });
     setLoading(false);
     if (signUpError) {
