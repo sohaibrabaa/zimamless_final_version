@@ -62,6 +62,8 @@
     "verifyEmailBody": "We've sent a verification link to {email}. Follow it to continue.",
     "verifyEmailHint": "Open the email on this computer — the link points to this machine and won't work from a phone.",
     "resendCode": "Resend code",
+    "resendSent": "Sent — check your inbox (and spam).",
+    "resendRateLimited": "Email limit reached — Supabase's built-in mailer allows only a few emails per hour. Wait a while, or ask the operator to confirm your account directly.",
     "orgSwitcherLabel": "Organization",
     "orgSwitchFailed": "Could not switch organization.",
     "wrongPortal": "That portal belongs to a different organization type.",

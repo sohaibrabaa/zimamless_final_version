@@ -14,11 +14,26 @@ export default function VerifyEmailPage() {
   const email = searchParams.get("email") ?? "";
   const [resending, setResending] = useState(false);
   const [sent, setSent] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   async function resend() {
     setResending(true);
-    await supabase.auth.resend({ type: "signup", email });
+    setError(null);
+    setSent(false);
+    // The error must surface: Supabase's built-in mailer rate-limits hard
+    // (a handful of emails per hour), and an already-confirmed address is
+    // refused too. Swallowing those showed a green ✓ over a send that never
+    // happened — "resend isn't working" with no way to see why.
+    const { error: resendError } = await supabase.auth.resend({ type: "signup", email });
     setResending(false);
+    if (resendError) {
+      setError(
+        resendError.message.toLowerCase().includes("rate limit")
+          ? t("auth.resendRateLimited")
+          : resendError.message
+      );
+      return;
+    }
     setSent(true);
   }
 
@@ -30,7 +45,8 @@ export default function VerifyEmailPage() {
       <Button variant="secondary" loading={resending} onClick={resend}>
         {t("auth.resendCode")}
       </Button>
-      {sent && <p className="text-xs text-(--color-success)">✓</p>}
+      {sent && <p className="text-xs text-(--color-success)">✓ {t("auth.resendSent")}</p>}
+      {error && <p className="text-xs text-(--color-danger)">{error}</p>}
       <Button variant="ghost" onClick={() => router.push(`/${locale}/login`)}>
         {t("auth.loginButton")}
       </Button>
