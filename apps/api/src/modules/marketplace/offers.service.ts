@@ -454,8 +454,14 @@ export class OffersService {
     const listing = await this.listings.findById(listingId);
     if (!listing) throw AppException.notFound('Listing');
 
-    if (!acceptsOfferActivity(listing.status)) {
-      // ZM-MKT-009: nothing moves after the submission deadline.
+    // ZM-MKT-009: nothing moves after the submission deadline. The status is
+    // the primary record — the sweep writes it — but the deadline is checked
+    // here too, because "the sweep will have closed it" is a liveness
+    // assumption this gate must not inherit: the sweep ticks once a minute,
+    // and a broken sweep once left listings OPEN past their windows for
+    // weeks (the 42P08 transition bug), during which this status-only check
+    // would have accepted offers the round had already refused.
+    if (!acceptsOfferActivity(listing.status) || listing.offer_submission_deadline <= this.time.now()) {
       throw new AppException(
         ErrorCode.INVALID_STATE_TRANSITION,
         'The offer submission window for this listing has closed.',

@@ -713,8 +713,7 @@ describeIfDb('Phase 5 — the confidential marketplace', () => {
 
   describe('the submission window (ZM-MKT-009)', () => {
     it('refuses offer activity once the listing is no longer open', async () => {
-      // Close the window by hand rather than waiting 24 hours; the deadline
-      // sweep's own behaviour is covered by its unit tests.
+      // Close the window by hand rather than waiting 24 hours.
       await db.query(`UPDATE listings SET status = 'AWAITING_SELECTION' WHERE id = $1`, [listingId]);
       try {
         const res = await api('bankAMaker', 'patch', `/offers/${bankAOfferId}`, {
@@ -728,5 +727,59 @@ describeIfDb('Phase 5 — the confidential marketplace', () => {
         await db.query(`UPDATE listings SET status = 'OPEN_FOR_OFFERS' WHERE id = $1`, [listingId]);
       }
     });
+
+    it('refuses offer activity past the deadline even while the status still says OPEN', async () => {
+      // The sweep is the primary enforcement, but it is a liveness
+      // assumption: it ticks once a minute and it has been broken before
+      // (see below). The gate must also read the clock.
+      await db.query(
+        `UPDATE listings SET offer_submission_deadline = now() - interval '1 hour' WHERE id = $1`,
+        [listingId],
+      );
+      const res = await api('bankAMaker', 'patch', `/offers/${bankAOfferId}`, {
+        transactionType: 'INVOICE_FINANCING',
+        recourseType: 'FULL_RECOURSE',
+        grossFundingAmount: '11000.000',
+        validUntil: '2027-01-01T00:00:00.000Z',
+      });
+      expect(res.status).toBe(409);
+    });
+
+    it('the deadline sweep itself closes the window — executed, not hand-written', async () => {
+      // This exact path — ListingDeadlinesService.sweep() driving
+      // listings.transition() — was broken from Phase 5 to Phase 9 with a
+      // 42P08 ("inconsistent types deduced for parameter $2"): every suite
+      // that needed a closed window wrote the status by hand in SQL, so the
+      // one query the scheduler runs every minute in production was the one
+      // query no test had ever executed. The previous test's UPDATE is why
+      // the bug survived; this test exists so it cannot come back.
+      const { ListingDeadlinesService } = await import(
+        '../src/modules/marketplace/listing-deadlines.service'
+      );
+      const before = await db.query<{ status: string }>(
+        `SELECT status FROM listings WHERE id = $1`,
+        [listingId],
+      );
+      expect(before.rows[0].status).toBe('OPEN_FOR_OFFERS'); // deadline already backdated above
+
+      await app.get(ListingDeadlinesService).sweep();
+
+      const after = await db.query<{ status: string }>(
+        `SELECT status FROM listings WHERE id = $1`,
+        [listingId],
+      );
+      expect(after.rows[0].status).toBe('AWAITING_SELECTION');
+
+      // The intermediate state is on the record, not skipped.
+      const { rows: history } = await db.query<{ new_status: string }>(
+        `SELECT new_status FROM status_history
+          WHERE entity_type = 'LISTING' AND entity_id = $1
+          ORDER BY changed_at`,
+        [listingId],
+      );
+      const statuses = history.map((h) => h.new_status);
+      expect(statuses).toContain('OFFER_PERIOD_CLOSED');
+      expect(statuses).toContain('AWAITING_SELECTION');
+    }, 120_000);
   });
 });

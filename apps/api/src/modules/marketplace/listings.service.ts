@@ -464,9 +464,18 @@ export class ListingsService {
         HttpStatus.CONFLICT,
       );
     }
+    // Both uses of $2 carry an explicit cast: bare, `status = $2` makes the
+    // planner deduce listing_status while `$2 IN ('EXPIRED',…)` deduces text
+    // — "inconsistent types deduced for parameter $2" (42P08). That error
+    // killed every sweep transition since Phase 5, silently: no suite ever
+    // drove a listing through the sweep (they hand-wrote statuses in SQL),
+    // so the first caller to actually reach this line was the production
+    // scheduler, failing once a minute in the logs.
     await client.query(
-      `UPDATE listings SET status = $2, closed_at = CASE WHEN $2 IN ('EXPIRED','CANCELLED','OFFER_SELECTED')
-                                                          THEN $3 ELSE closed_at END
+      `UPDATE listings
+          SET status = $2::listing_status,
+              closed_at = CASE WHEN $2::listing_status IN ('EXPIRED','CANCELLED','OFFER_SELECTED')
+                               THEN $3 ELSE closed_at END
         WHERE id = $1`,
       [listing.id, to, this.time.now()],
     );
