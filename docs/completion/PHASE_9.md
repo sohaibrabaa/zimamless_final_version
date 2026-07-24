@@ -84,6 +84,11 @@ offer approval, naming no bank and no amount.
    listing (the offer window follows the real deadline settings, ~24h)
    returns its transaction to ELIGIBLE and the seed stages a fresh round
    with fresh approved offers. `--status` shows the board.
+   The **web app must run in live mode**: `apps/web/.env.local` with
+   `NEXT_PUBLIC_API_MOCKING=disabled` plus the Supabase URL/anon key
+   (copy from the root `.env`; see `.env.local.example`). Without it the
+   app silently serves the MSW mock shell — empty inbox, personas instead
+   of logins, a Sign out that appears to do nothing.
 2. **The time machine** is armed from platform/settings (the arm switch is
    a real `PATCH /admin/settings`; the jump control is beside it). Jump
    ≥ +9 days to mature the maturing fixture live on stage; return to zero

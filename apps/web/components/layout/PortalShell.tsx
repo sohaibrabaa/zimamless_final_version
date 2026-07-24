@@ -12,6 +12,8 @@ import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { clsx } from "@/lib/clsx";
 
+const MOCKING_ENABLED = process.env.NEXT_PUBLIC_API_MOCKING !== "disabled";
+
 export function PortalShell({ portal, children }: { portal: Portal; children: React.ReactNode }) {
   const t = useTranslations();
   const pathname = usePathname();
@@ -20,6 +22,15 @@ export function PortalShell({ portal, children }: { portal: Portal; children: Re
   const { me, loading, activeMembership, signOut } = useSession();
 
   const basePath = `/${locale}/${portal}`;
+
+  // Nobody signed in → the login screen, not a hollow portal shell. Mock
+  // mode is exempt: it has no Supabase session by construction and the
+  // persona picker on the login page is its only "auth".
+  const signedOut = !MOCKING_ENABLED && !loading && !me;
+
+  useEffect(() => {
+    if (signedOut) router.replace(`/${locale}/login`);
+  }, [signedOut, router, locale]);
 
   // A bank user must not browse the supplier portal, and vice versa. This is
   // navigation hygiene, not the security boundary: the API's org-context
@@ -32,7 +43,7 @@ export function PortalShell({ portal, children }: { portal: Portal; children: Re
     if (misrouted) router.replace(`/${locale}/${homePortal}/dashboard`);
   }, [misrouted, router, locale, homePortal]);
 
-  if (misrouted) return null;
+  if (misrouted || signedOut) return null;
 
   return (
     <div className="flex min-h-screen">
@@ -76,7 +87,19 @@ export function PortalShell({ portal, children }: { portal: Portal; children: Re
           </div>
           <div className="flex items-center gap-3">
             <LanguageSwitcher />
-            <Button variant="ghost" size="sm" onClick={() => signOut()}>
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={async () => {
+                // Sign out must LAND somewhere: without the push, live mode
+                // left the user staring at the same page (the redirect
+                // effect races the next render), and mock mode — where the
+                // persona is instantly re-fetched — looked like the button
+                // did nothing at all.
+                await signOut();
+                router.push(`/${locale}/login`);
+              }}
+            >
               {t("nav.signOut")}
             </Button>
           </div>
