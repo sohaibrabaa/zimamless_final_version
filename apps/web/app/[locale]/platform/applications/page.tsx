@@ -52,7 +52,7 @@ export default function PlatformApplicationsPage() {
       render: (row) => (
         <Link
           href={`/${localeParam}/platform/applications/${row.id}`}
-          className="font-medium text-(--color-primary) underline-offset-2 hover:underline"
+          className="font-medium text-(--color-secondary) underline-offset-2 hover:underline"
         >
           {row.organizationName ?? row.organizationId ?? "—"}
         </Link>

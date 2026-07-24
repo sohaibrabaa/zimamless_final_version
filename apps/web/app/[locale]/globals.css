@@ -2,14 +2,17 @@
 
 :root {
   --color-bg: #ffffff;
-  --color-fg: #0f172a;
-  --color-muted: #64748b;
-  --color-border: #e2e8f0;
+  --color-fg: #2c313a;
+  --color-muted: #5e6b7c;
+  --color-border: #d9e2ec;
   --color-surface: #f8fafc;
 
-  --color-primary: #1d4ed8;
+  --color-primary: #0f2744;
   --color-primary-fg: #ffffff;
-  --color-primary-hover: #1e40af;
+  --color-primary-hover: #1e5aa8;
+
+  --color-secondary: #1e5aa8;
+  --color-secondary-hover: #0f2744;
 
   --color-danger: #b91c1c;
   --color-danger-bg: #fef2f2;
@@ -25,15 +28,18 @@
 
 @media (prefers-color-scheme: dark) {
   :root {
-    --color-bg: #0b1120;
-    --color-fg: #e2e8f0;
-    --color-muted: #94a3b8;
-    --color-border: #1e293b;
-    --color-surface: #111827;
+    --color-bg: #0a1628;
+    --color-fg: #e3eaf3;
+    --color-muted: #93a5bc;
+    --color-border: #24354d;
+    --color-surface: #102035;
 
-    --color-primary: #3b82f6;
-    --color-primary-fg: #0b1120;
-    --color-primary-hover: #60a5fa;
+    --color-primary: #5b9be6;
+    --color-primary-fg: #0a1628;
+    --color-primary-hover: #82b4ee;
+
+    --color-secondary: #6fa6ea;
+    --color-secondary-hover: #9cc3f5;
 
     --color-danger: #f87171;
     --color-danger-bg: #2a1112;
@@ -41,8 +47,8 @@
     --color-warning-bg: #2a2110;
     --color-success: #4ade80;
     --color-success-bg: #0f2a18;
-    --color-neutral-bg: #1e293b;
-    --color-neutral-fg: #cbd5e1;
+    --color-neutral-bg: #1b2c44;
+    --color-neutral-fg: #c9d5e4;
   }
 }
 

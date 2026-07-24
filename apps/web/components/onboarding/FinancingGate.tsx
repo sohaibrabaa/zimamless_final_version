@@ -47,7 +47,7 @@ export function FinancingGate({ children }: { children: ReactNode }) {
       <p className="mt-1 text-sm text-(--color-muted)">{t(reasonKey)}</p>
       <Link
         href={`/${locale}/supplier/onboarding`}
-        className="mt-3 inline-block text-sm text-(--color-primary) underline-offset-2 hover:underline"
+        className="mt-3 inline-block text-sm text-(--color-secondary) underline-offset-2 hover:underline"
       >
         {t("onboarding.financingGate.goToOnboarding")}
       </Link>

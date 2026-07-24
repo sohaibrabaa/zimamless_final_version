@@ -1,12 +1,22 @@
 "use client";
 
-import { useState } from "react";
+import { Suspense, useState } from "react";
 import { useParams, useRouter, useSearchParams } from "next/navigation";
 import { supabase } from "@/lib/supabase/client";
 import { useTranslations } from "@/lib/i18n/dictionary-context";
 import { Button } from "@/components/ui/Button";
 
-export default function VerifyEmailPage() {
+// useSearchParams() requires a Suspense boundary at build time, or
+// prerendering the page fails (missing-suspense-with-csr-bailout).
+export default function Page() {
+  return (
+    <Suspense>
+      <VerifyEmailPage />
+    </Suspense>
+  );
+}
+
+function VerifyEmailPage() {
   const t = useTranslations();
   const router = useRouter();
   const { locale } = useParams<{ locale: string }>();

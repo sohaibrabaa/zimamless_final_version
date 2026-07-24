@@ -61,7 +61,7 @@ export default function LoginPage() {
       </form>
       <p className="text-center text-sm text-(--color-muted)">
         {t("auth.noAccount")}{" "}
-        <Link href={`/${locale}/register`} className="font-medium text-(--color-primary)">
+        <Link href={`/${locale}/register`} className="font-medium text-(--color-secondary)">
           {t("auth.registerButton")}
         </Link>
       </p>

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { Suspense, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { useTranslations } from "@/lib/i18n/dictionary-context";
 import { Button } from "@/components/ui/Button";
@@ -26,7 +26,17 @@ import { useAuditLogs, type AuditLog } from "@/lib/admin/useAdmin";
 // here is a reference number like ZM-DEMO-…, which is not an id.
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
-export default function PlatformAuditPage() {
+// useSearchParams() requires a Suspense boundary at build time, or
+// prerendering the page fails (missing-suspense-with-csr-bailout).
+export default function Page() {
+  return (
+    <Suspense>
+      <PlatformAuditPage />
+    </Suspense>
+  );
+}
+
+function PlatformAuditPage() {
   const t = useTranslations();
   // "?entity=<uuid>" pre-scopes the trail — the transactions register links
   // here per row. Validated the same as typed input; a bad value is ignored.

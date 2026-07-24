@@ -15,7 +15,7 @@ const variantClasses: Record<ButtonVariant, string> = {
   primary:
     "bg-(--color-primary) text-(--color-primary-fg) hover:bg-(--color-primary-hover) disabled:opacity-50",
   secondary:
-    "bg-(--color-surface) text-(--color-fg) border border-(--color-border) hover:bg-(--color-neutral-bg) disabled:opacity-50",
+    "bg-(--color-surface) text-(--color-secondary) border border-(--color-border) hover:bg-(--color-neutral-bg) disabled:opacity-50",
   ghost: "bg-transparent text-(--color-fg) hover:bg-(--color-neutral-bg) disabled:opacity-50",
   danger: "bg-(--color-danger) text-white hover:opacity-90 disabled:opacity-50",
 };

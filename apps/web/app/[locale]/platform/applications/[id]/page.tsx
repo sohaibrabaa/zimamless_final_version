@@ -50,7 +50,7 @@ export default function PlatformApplicationDetailPage() {
     <div className="max-w-4xl">
       <Link
         href={`/${localeParam}/platform/applications`}
-        className="text-sm text-(--color-primary) underline-offset-2 hover:underline"
+        className="text-sm text-(--color-secondary) underline-offset-2 hover:underline"
       >
         ← {t("onboarding.queue.title")}
       </Link>
