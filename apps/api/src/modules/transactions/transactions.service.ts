@@ -306,32 +306,38 @@ export class TransactionsService {
     }
     const where = conditions.length ? `WHERE ${conditions.join(' AND ')}` : '';
 
-    const totalRow = await this.db.queryOne<{ count: string }>(
-      `SELECT count(*)::text AS count FROM receivable_transactions ${where}`,
-      params,
-    );
-    const total = Number(totalRow?.count ?? '0');
-
+    // Count and page run concurrently — they are independent reads, and
+    // against a remote pooler every avoided sequential round trip is real
+    // wall-clock the person clicking feels (~300ms each from here).
+    const countParams = [...params];
     params.push(filters.pageSize, (filters.page - 1) * filters.pageSize);
-    const { rows } = await this.db.query<TransactionRow>(
-      `SELECT id, reference_number, supplier_org_id, buyer_id, state,
-              minimum_acceptable_amount::text, currency, locked_at, created_by,
-              created_at, updated_at, closure_reason
-         FROM receivable_transactions ${where}
-        ORDER BY created_at DESC, id
-        LIMIT $${params.length - 1} OFFSET $${params.length}`,
-      params,
-    );
+    const [totalRow, { rows }] = await Promise.all([
+      this.db.queryOne<{ count: string }>(
+        `SELECT count(*)::text AS count FROM receivable_transactions ${where}`,
+        countParams,
+      ),
+      this.db.query<TransactionRow>(
+        `SELECT id, reference_number, supplier_org_id, buyer_id, state,
+                minimum_acceptable_amount::text, currency, locked_at, created_by,
+                created_at, updated_at, closure_reason
+           FROM receivable_transactions ${where}
+          ORDER BY created_at DESC, id
+          LIMIT $${params.length - 1} OFFSET $${params.length}`,
+        params,
+      ),
+    ]);
+    const total = Number(totalRow?.count ?? '0');
 
     // Two batched lookups for the whole page, not two queries per row. This
     // list was 2N+2 queries — a 100-row page fired ~200 of them at a pool of
     // 10 against a hosted pooler, which is why it took ~9s and intermittently
     // 500'd when the pooler dropped a connection mid-burst. It is now four
-    // queries whatever the page size, and the summary is assembled in memory.
-    const invoices = await this.invoicesForTransactions(rows.map((r) => r.id));
-    const buyers = await this.buyers.findByIds(
-      rows.map((r) => r.buyer_id).filter((id): id is string => id !== null),
-    );
+    // queries whatever the page size (two concurrent waves), and the summary
+    // is assembled in memory.
+    const [invoices, buyers] = await Promise.all([
+      this.invoicesForTransactions(rows.map((r) => r.id)),
+      this.buyers.findByIds(rows.map((r) => r.buyer_id).filter((id): id is string => id !== null)),
+    ]);
 
     return {
       items: rows.map((row) =>

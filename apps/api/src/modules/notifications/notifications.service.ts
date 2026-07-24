@@ -170,23 +170,28 @@ export class NotificationsService {
     if (filters.unread) conditions.push(`delivered_at IS NULL`);
     const where = `WHERE ${conditions.join(' AND ')}`;
 
-    const totalRow = await this.db.queryOne<{ count: string }>(
-      `SELECT count(*)::text AS count FROM notifications ${where}`,
-      params,
-    );
-    const unreadRow = await this.db.queryOne<{ count: string }>(
-      `SELECT count(*)::text AS count FROM notifications
-        WHERE recipient_user_id = $1 AND channel = 'IN_PLATFORM' AND delivered_at IS NULL`,
-      [ctx.userId],
-    );
-
+    // Three independent reads, one concurrent wave: sequential, each cost a
+    // full round trip to the remote pooler and the inbox took ~1s longer
+    // than it needed to.
+    const countParams = [...params];
     params.push(filters.pageSize, (filters.page - 1) * filters.pageSize);
-    const { rows } = await this.db.query<NotificationRow>(
-      `SELECT * FROM notifications ${where}
-        ORDER BY queued_at DESC
-        LIMIT $${params.length - 1} OFFSET $${params.length}`,
-      params,
-    );
+    const [totalRow, unreadRow, { rows }] = await Promise.all([
+      this.db.queryOne<{ count: string }>(
+        `SELECT count(*)::text AS count FROM notifications ${where}`,
+        countParams,
+      ),
+      this.db.queryOne<{ count: string }>(
+        `SELECT count(*)::text AS count FROM notifications
+          WHERE recipient_user_id = $1 AND channel = 'IN_PLATFORM' AND delivered_at IS NULL`,
+        [ctx.userId],
+      ),
+      this.db.query<NotificationRow>(
+        `SELECT * FROM notifications ${where}
+          ORDER BY queued_at DESC
+          LIMIT $${params.length - 1} OFFSET $${params.length}`,
+        params,
+      ),
+    ]);
 
     const total = Number(totalRow?.count ?? '0');
     return {

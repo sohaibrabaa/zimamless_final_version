@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, Logger } from '@nestjs/common';
 import { DatabaseService } from '../../database/database.service';
 import { AppException } from '../../common/errors/app.exception';
 import { ErrorCode } from '../../common/errors/error-codes';
@@ -26,9 +26,78 @@ export interface MembershipRow {
   membership_status: string;
 }
 
+/**
+ * TTL for the per-user auth-context cache, in milliseconds.
+ *
+ * The guard resolves the user row and their memberships on EVERY request —
+ * two sequential queries which, against a remote pooler (the hosted DB sits
+ * a continent away), put a ~600ms floor under every single click. A short
+ * cache removes that floor for the burst of requests one screen fires.
+ *
+ * Deliberately 0 (disabled) unless set, and force-disabled under
+ * NODE_ENV=test: the RLS/persona suites revoke and grant memberships and
+ * assert the very next request sees it. When enabled, a revocation can lag
+ * by at most the TTL — the trade a local demo accepts and a real deployment
+ * would set to 0 or back with real session invalidation.
+ */
+const CONTEXT_CACHE_TTL_MS =
+  process.env.NODE_ENV === 'test' ? 0 : Number(process.env.AUTH_CONTEXT_CACHE_MS ?? '0') || 0;
+
+/** Monotonic ms — immune to the demo time machine, which moves the domain clock. */
+const monotonicMs = (): number => Number(process.hrtime.bigint() / 1_000_000n);
+
+interface Cached<T> {
+  value: T;
+  at: number;
+}
+
 @Injectable()
 export class AuthService {
-  constructor(private readonly db: DatabaseService) {}
+  private readonly logger = new Logger(AuthService.name);
+  private readonly userCache = new Map<string, Cached<PlatformUser>>();
+  private readonly membershipCache = new Map<string, Cached<MembershipRow[]>>();
+
+  constructor(private readonly db: DatabaseService) {
+    // One line at boot so "is the cache on?" is never a guess.
+    this.logger.log(
+      CONTEXT_CACHE_TTL_MS > 0
+        ? `auth-context cache enabled (TTL ${CONTEXT_CACHE_TTL_MS}ms)`
+        : 'auth-context cache disabled',
+    );
+  }
+
+  private cached<T>(map: Map<string, Cached<T>>, key: string): T | null {
+    if (CONTEXT_CACHE_TTL_MS <= 0) return null;
+    const hit = map.get(key);
+    if (!hit) return null;
+    if (monotonicMs() - hit.at > CONTEXT_CACHE_TTL_MS) {
+      map.delete(key);
+      return null;
+    }
+    return hit.value;
+  }
+
+  private store<T>(map: Map<string, Cached<T>>, key: string, value: T): void {
+    if (CONTEXT_CACHE_TTL_MS <= 0) return;
+    map.set(key, { value, at: monotonicMs() });
+  }
+
+  /**
+   * Drop cached context for one user. Called wherever this API itself
+   * changes what the cache holds — a bootstrap creating the first
+   * membership, a language change — so its own mutations are never blunted
+   * by its own cache. Changes made outside this process still ride out the
+   * TTL.
+   */
+  invalidateUser(userId: string, authUserId?: string): void {
+    this.membershipCache.delete(userId);
+    if (authUserId) this.userCache.delete(authUserId);
+    else {
+      for (const [key, hit] of this.userCache) {
+        if (hit.value.id === userId) this.userCache.delete(key);
+      }
+    }
+  }
 
   /**
    * Resolve the platform `users` row for a verified token, creating it on
@@ -44,13 +113,16 @@ export class AuthService {
    * requests race on the auth_user_id unique index and the loser re-reads.
    */
   async syncUser(token: VerifiedToken): Promise<PlatformUser> {
+    const hit = this.cached(this.userCache, token.authUserId);
+    if (hit) return this.assertUsable(hit);
+
     const existing = await this.db.queryOne<PlatformUser>(
       `SELECT id, auth_user_id, full_name, email, phone_number,
               preferred_language, mfa_enabled, status
          FROM users WHERE auth_user_id = $1`,
       [token.authUserId],
     );
-    if (existing) return this.assertUsable(existing);
+    if (existing) return this.assertUsable(this.storeUser(existing));
 
     // The seed and the onboarding bootstrap may have created the row by
     // email before the user ever signed in (bank and platform staff are
@@ -65,7 +137,7 @@ export class AuthService {
                 preferred_language, mfa_enabled, status`,
         [token.authUserId, token.email],
       );
-      if (byEmail) return this.assertUsable(byEmail);
+      if (byEmail) return this.assertUsable(this.storeUser(byEmail));
     }
 
     if (!token.email) {
@@ -102,7 +174,17 @@ export class AuthService {
     }
 
     // ZM-I18N-003: English default, never inferred from the request locale.
-    return this.assertUsable(created);
+    return this.assertUsable(this.storeUser(created));
+  }
+
+  /**
+   * Stored only on a DB read, never on a cache hit — a hit must not slide
+   * the expiry, or steady traffic would keep a revoked account alive past
+   * the TTL indefinitely.
+   */
+  private storeUser(user: PlatformUser): PlatformUser {
+    this.store(this.userCache, user.auth_user_id, user);
+    return user;
   }
 
   private assertUsable(user: PlatformUser): PlatformUser {
@@ -124,6 +206,9 @@ export class AuthService {
    * an explicit header rather than something inferred from the user.
    */
   async listMemberships(userId: string): Promise<MembershipRow[]> {
+    const hit = this.cached(this.membershipCache, userId);
+    if (hit) return hit;
+
     const { rows } = await this.db.query<MembershipRow>(
       `SELECT m.organization_id,
               o.legal_name        AS organization_name,
@@ -146,6 +231,7 @@ export class AuthService {
      ORDER BY o.legal_name`,
       [userId],
     );
+    this.store(this.membershipCache, userId, rows);
     return rows;
   }
 
@@ -169,5 +255,7 @@ export class AuthService {
       language,
       userId,
     ]);
+    // The next /auth/me must show the language the user just chose.
+    this.invalidateUser(userId);
   }
 }

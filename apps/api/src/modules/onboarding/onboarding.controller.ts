@@ -31,7 +31,7 @@ import {
   OrgContextExempt,
   RequireRoles,
 } from '../auth/decorators';
-import { MembershipRow, PlatformUser } from '../auth/auth.service';
+import { AuthService, MembershipRow, PlatformUser } from '../auth/auth.service';
 import { RequestContextStore } from '../../common/context/request-context';
 import { AppException } from '../../common/errors/app.exception';
 
@@ -46,7 +46,10 @@ import { AppException } from '../../common/errors/app.exception';
 @ApiTags('Onboarding')
 @Controller()
 export class OnboardingController {
-  constructor(private readonly onboarding: OnboardingService) {}
+  constructor(
+    private readonly onboarding: OnboardingService,
+    private readonly auth: AuthService,
+  ) {}
 
   private contextOf(user: PlatformUser, membership: MembershipRow | undefined): ActorContext {
     if (!membership) throw AppException.organizationContextRequired();
@@ -76,6 +79,11 @@ export class OnboardingController {
     @Res({ passthrough: true }) res: Response,
   ): Promise<RegisterResponseDto> {
     const result = await this.onboarding.register(user.id, body);
+
+    // The bootstrap just created this user's first membership; the guard's
+    // context cache must not serve the pre-bootstrap "no memberships" answer
+    // to the redirect that follows.
+    this.auth.invalidateUser(user.id, user.auth_user_id);
 
     // Hard rule 6: this mutation had no organization context on the way in
     // — there was no organization yet. Now there is, so the audit row names
