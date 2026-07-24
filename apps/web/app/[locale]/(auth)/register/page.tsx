@@ -7,6 +7,22 @@ import { supabase } from "@/lib/supabase/client";
 import { useTranslations } from "@/lib/i18n/dictionary-context";
 import { Input } from "@/components/ui/Input";
 import { Button } from "@/components/ui/Button";
+import { Modal } from "@/components/ui/Modal";
+
+// The dictionary layer returns strings only, so the terms live as numbered
+// keys rather than an array; rendered in this order in the modal.
+const TERMS_KEYS = [
+  "auth.termsPlaceholder",
+  "auth.terms1",
+  "auth.terms2",
+  "auth.terms3",
+  "auth.terms4",
+  "auth.terms5",
+  "auth.terms6",
+  "auth.terms7",
+  "auth.terms8",
+  "auth.terms9",
+];
 
 // Establishment number, licence number, and the rest of the supplier profile
 // are collected in the onboarding wizard (Phase 2, POST /onboarding/register
@@ -21,9 +37,17 @@ export default function RegisterPage() {
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+  const [agreed, setAgreed] = useState(false);
+  const [termsOpen, setTermsOpen] = useState(false);
 
   async function onSubmit(e: React.FormEvent) {
     e.preventDefault();
+    // The button is disabled until the box is ticked; this is the safety net
+    // for submits that bypass it (e.g. Enter in a field).
+    if (!agreed) {
+      setError(t("auth.termsRequired"));
+      return;
+    }
     setLoading(true);
     setError(null);
     // The phone travels as profile metadata only — NOT as a Supabase auth
@@ -91,10 +115,49 @@ export default function RegisterPage() {
           onChange={(e) => setPassword(e.target.value)}
           error={error ?? undefined}
         />
-        <Button type="submit" loading={loading} className="mt-2">
+        <label className="flex items-start gap-3">
+          <input
+            type="checkbox"
+            className="mt-1 h-4 w-4 shrink-0"
+            checked={agreed}
+            onChange={(e) => setAgreed(e.target.checked)}
+          />
+          <span className="text-sm text-(--color-muted)">
+            {t("auth.termsCheckboxLabel")}
+            <button
+              type="button"
+              className="font-medium text-(--color-secondary) underline underline-offset-2"
+              onClick={(e) => {
+                // Inside a <label>, a plain click would also toggle the
+                // checkbox — reading the terms must not count as agreeing.
+                e.preventDefault();
+                setTermsOpen(true);
+              }}
+            >
+              {t("auth.termsLinkText")}
+            </button>
+          </span>
+        </label>
+        <Button type="submit" loading={loading} disabled={!agreed} className="mt-2">
           {t("auth.registerButton")}
         </Button>
       </form>
+      <Modal
+        open={termsOpen}
+        onClose={() => setTermsOpen(false)}
+        title={t("auth.termsModalTitle")}
+        footer={
+          <Button type="button" variant="secondary" onClick={() => setTermsOpen(false)}>
+            {t("common.close")}
+          </Button>
+        }
+      >
+        <div className="max-h-[60vh] space-y-3 overflow-y-auto text-sm text-(--color-fg)">
+          {TERMS_KEYS.map((key) => (
+            <p key={key}>{t(key)}</p>
+          ))}
+        </div>
+      </Modal>
       <p className="text-center text-sm text-(--color-muted)">
         {t("auth.haveAccount")}{" "}
         <Link href={`/${locale}/login`} className="font-medium text-(--color-secondary)">
