@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { useRouter, useParams } from "next/navigation";
 import Link from "next/link";
+import Image from "next/image";
 import { supabase } from "@/lib/supabase/client";
 import { useTranslations } from "@/lib/i18n/dictionary-context";
 import { Input } from "@/components/ui/Input";
@@ -33,6 +34,14 @@ export default function LoginPage() {
 
   return (
     <div className="flex flex-col gap-6">
+      <Image
+        src="/logo.png"
+        alt={t("common.appName")}
+        width={715}
+        height={349}
+        priority
+        className="mx-auto h-auto w-48"
+      />
       <div>
         <h1 className="text-lg font-semibold">{t("auth.loginTitle")}</h1>
         <p className="text-sm text-(--color-muted)">{t("auth.loginSubtitle")}</p>
