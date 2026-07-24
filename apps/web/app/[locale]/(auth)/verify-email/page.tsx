@@ -5,6 +5,7 @@ import { useParams, useRouter, useSearchParams } from "next/navigation";
 import { supabase } from "@/lib/supabase/client";
 import { useTranslations } from "@/lib/i18n/dictionary-context";
 import { Button } from "@/components/ui/Button";
+import { Input } from "@/components/ui/Input";
 
 // useSearchParams() requires a Suspense boundary at build time, or
 // prerendering the page fails (missing-suspense-with-csr-bailout).
@@ -25,6 +26,30 @@ function VerifyEmailPage() {
   const [resending, setResending] = useState(false);
   const [sent, setSent] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [code, setCode] = useState("");
+  const [verifying, setVerifying] = useState(false);
+
+  // The emailed code is Supabase's own single-use signup token ({{ .Token }}
+  // in the template) — verifyOtp validates and consumes it server-side at
+  // Supabase and establishes the session, same guarantee as the link form.
+  async function submitCode(e: React.FormEvent) {
+    e.preventDefault();
+    if (!code.trim()) return;
+    setVerifying(true);
+    setError(null);
+    setSent(false);
+    const { error: verifyError } = await supabase.auth.verifyOtp({
+      type: "signup",
+      email,
+      token: code.trim(),
+    });
+    setVerifying(false);
+    if (verifyError) {
+      setError(t("auth.otpInvalid"));
+      return;
+    }
+    router.replace(`/${locale}`);
+  }
 
   async function resend() {
     setResending(true);
@@ -58,6 +83,21 @@ function VerifyEmailPage() {
       <h1 className="text-lg font-semibold">{t("auth.verifyEmailTitle")}</h1>
       <p className="text-sm text-(--color-muted)">{t("auth.verifyEmailBody", { email })}</p>
       <p className="text-xs text-(--color-muted)">{t("auth.verifyEmailHint")}</p>
+      <form onSubmit={submitCode} className="flex flex-col gap-4 text-start" noValidate>
+        <Input
+          label={t("auth.otpLabel")}
+          type="text"
+          dir="ltr"
+          inputMode="numeric"
+          autoComplete="one-time-code"
+          required
+          value={code}
+          onChange={(e) => setCode(e.target.value)}
+        />
+        <Button type="submit" loading={verifying} disabled={!code.trim()}>
+          {t("auth.otpSubmit")}
+        </Button>
+      </form>
       <Button variant="secondary" loading={resending} onClick={resend}>
         {t("auth.resendLink")}
       </Button>
