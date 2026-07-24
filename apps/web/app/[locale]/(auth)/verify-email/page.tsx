@@ -26,12 +26,13 @@ export default function VerifyEmailPage() {
     <div className="flex flex-col gap-4 text-center">
       <h1 className="text-lg font-semibold">{t("auth.verifyEmailTitle")}</h1>
       <p className="text-sm text-(--color-muted)">{t("auth.verifyEmailBody", { email })}</p>
+      <p className="text-xs text-(--color-muted)">{t("auth.verifyEmailHint")}</p>
       <Button variant="secondary" loading={resending} onClick={resend}>
         {t("auth.resendCode")}
       </Button>
       {sent && <p className="text-xs text-(--color-success)">✓</p>}
-      <Button variant="ghost" onClick={() => router.push(`/${locale}/verify-phone`)}>
-        {t("common.next")}
+      <Button variant="ghost" onClick={() => router.push(`/${locale}/login`)}>
+        {t("auth.loginButton")}
       </Button>
     </div>
   );

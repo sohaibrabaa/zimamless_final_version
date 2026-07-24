@@ -26,15 +26,26 @@ export default function RegisterPage() {
     e.preventDefault();
     setLoading(true);
     setError(null);
-    const { error: signUpError } = await supabase.auth.signUp({
+    // The phone travels as profile metadata only — NOT as a Supabase auth
+    // factor. No SMS provider is configured, so a top-level `phone` would
+    // enroll a verification channel that can never deliver a code, stranding
+    // every registration behind an unpassable step. Email is the single
+    // verification factor.
+    const { data, error: signUpError } = await supabase.auth.signUp({
       email,
       password,
-      phone,
       options: { data: { phone } },
     });
     setLoading(false);
     if (signUpError) {
       setError(signUpError.message);
+      return;
+    }
+    // When email confirmation is disabled on the project, signUp already
+    // returns a live session — go straight in rather than telling the user
+    // to wait for an email that will never matter.
+    if (data.session) {
+      router.push(`/${locale}`);
       return;
     }
     router.push(`/${locale}/verify-email?email=${encodeURIComponent(email)}`);

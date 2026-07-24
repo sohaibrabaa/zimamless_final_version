@@ -13,7 +13,8 @@
     "seed": "node tools/seed.mjs",
     "reset": "node tools/migrate.mjs --reset",
     "scenario:phase5": "node tools/scenario-phase5.mjs",
-    "scenario:demo": "node tools/scenario-demo.mjs"
+    "scenario:demo": "node tools/scenario-demo.mjs",
+    "confirm:email": "node tools/confirm-email.mjs"
   },
   "dependencies": {
     "pg": "^8.13.1"
