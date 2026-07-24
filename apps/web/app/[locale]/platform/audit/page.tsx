@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { useSearchParams } from "next/navigation";
 import { useTranslations } from "@/lib/i18n/dictionary-context";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
@@ -27,9 +28,17 @@ const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{
 
 export default function PlatformAuditPage() {
   const t = useTranslations();
+  // "?entity=<uuid>" pre-scopes the trail — the transactions register links
+  // here per row. Validated the same as typed input; a bad value is ignored.
+  const searchParams = useSearchParams();
+  const entityParam = searchParams?.get("entity")?.trim() ?? "";
+  const initialEntity = UUID_PATTERN.test(entityParam) ? entityParam : "";
+
   const [page, setPage] = useState(1);
-  const [entityInput, setEntityInput] = useState("");
-  const [entityFilter, setEntityFilter] = useState<string | undefined>(undefined);
+  const [entityInput, setEntityInput] = useState(initialEntity);
+  const [entityFilter, setEntityFilter] = useState<string | undefined>(
+    initialEntity || undefined
+  );
   const [filterInvalid, setFilterInvalid] = useState(false);
 
   const logs = useAuditLogs(page, 20, entityFilter);

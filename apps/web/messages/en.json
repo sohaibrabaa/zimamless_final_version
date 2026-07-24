@@ -14,7 +14,6 @@
     "noResults": "No results found.",
     "somethingWentWrong": "Something went wrong.",
     "requiredField": "This field is required.",
-    "comingSoon": "Coming soon",
     "mockDataBadge": "Mock data",
     "unknownError": "An unexpected error occurred. Please try again.",
     "correlationId": "Reference ID",
@@ -812,7 +811,9 @@
         "SELECTED": "Selected",
         "NOT_SELECTED": "Not selected",
         "WITHDRAWN": "Withdrawn",
-        "EXPIRED": "Expired"
+        "EXPIRED": "Expired",
+        "DRAFT": "Draft",
+        "REVISED": "Revised"
       },
       "notSelectedExplain": "The supplier accepted a different offer. No information about the winning bank or any other offer is shared.",
       "viewContract": "View contract"
@@ -1044,7 +1045,8 @@
         "RECOURSE": "Recourse"
       },
       "openedOn": "Opened {date}",
-      "filterAll": "All types"
+      "filterAll": "All types",
+      "recourseIntro": "Recourse claims your bank has opened on funded receivables — each claim’s status and remaining amount."
     },
     "dispute": {
       "open": "Raise a dispute",
@@ -1134,6 +1136,24 @@
       "yes": "Yes",
       "no": "No",
       "empty": "No commission tiers configured."
+    },
+    "transactions": {
+      "subtitle": "Every receivable on the platform ({total} in total), newest first. Read-only — actions belong to the accountable roles.",
+      "empty": "No transactions match.",
+      "viewAudit": "View audit"
+    }
+  },
+  "offersHub": {
+    "intro": "Your receivables with a financing round in progress. Open the comparison to review the offers and select one — or reject them all.",
+    "empty": "No round is in progress right now. List an eligible invoice from the Invoices screen to start one.",
+    "compare": "Compare offers"
+  },
+  "bankRounds": {
+    "intro": "Your bank’s participation ledger: the outcome of every round this bank entered, from live offers to selected and not selected. Nothing about competing offers appears here.",
+    "empty": "Your bank has not entered a round yet. Start from the Marketplace screen.",
+    "column": {
+      "outcome": "Outcome",
+      "gross": "Gross funding"
     }
   }
 }
