@@ -1,8 +1,9 @@
-import { Body, Controller, HttpCode, HttpStatus, Post } from '@nestjs/common';
+import { Body, Controller, HttpCode, HttpStatus, Post, UseGuards } from '@nestjs/common';
 import { ApiOperation, ApiResponse, ApiTags } from '@nestjs/swagger';
 import { DemoService } from './demo.service';
+import { DemoAvailableGuard } from './demo.guard';
 import { TimeTravelDto } from './dto';
-import { CurrentContext, CurrentUser, RequireRoles } from '../auth/decorators';
+import { CurrentContext, CurrentUser } from '../auth/decorators';
 import { MembershipRow, PlatformUser } from '../auth/auth.service';
 import { ActorContext } from '../onboarding/onboarding.service';
 import { AppException } from '../../common/errors/app.exception';
@@ -22,9 +23,13 @@ function contextOf(user: PlatformUser, membership: MembershipRow | undefined): A
 export class DemoController {
   constructor(private readonly demo: DemoService) {}
 
+  // The platform-role wall is enforced in DemoService, not with
+  // @RequireRoles: the global guard's role check would answer 403 even with
+  // the env flag off, confirming the route exists to a caller in production.
+  // The order must be 404 (either guard off) before 403 (wrong role).
   @Post('time-travel')
   @HttpCode(HttpStatus.OK)
-  @RequireRoles('PLATFORM_OPS_ADMIN', 'PLATFORM_SUPER_ADMIN')
+  @UseGuards(DemoAvailableGuard)
   @ApiOperation({
     summary: 'Advance the simulated clock — 404 unless the demo time machine is armed',
     description:

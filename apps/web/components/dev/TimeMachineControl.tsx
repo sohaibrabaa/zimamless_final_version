@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { Button } from "@/components/ui/Button";
+import { useTranslations } from "@/lib/i18n/dictionary-context";
 import { useTimeMachine } from "@/lib/demo/useTimeMachine";
 
 /**
@@ -19,27 +20,28 @@ import { useTimeMachine } from "@/lib/demo/useTimeMachine";
  * not something a live clock steps through.
  */
 export function TimeMachineControl() {
+  const t = useTranslations();
   const { state, busy, error, travel, reset } = useTimeMachine();
   const [days, setDays] = useState(45);
 
   return (
     <section className="rounded-lg border border-dashed border-(--color-warning) bg-(--color-warning-bg) p-4">
       <div className="flex flex-wrap items-baseline justify-between gap-2">
-        <h2 className="text-sm font-semibold text-(--color-warning)">Demo time machine</h2>
-        <span className="text-xs text-(--color-muted)">Platform only · never available in production</span>
+        <h2 className="text-sm font-semibold text-(--color-warning)">{t("admin.timeMachine.title")}</h2>
+        <span className="text-xs text-(--color-muted)">{t("admin.timeMachine.badge")}</span>
       </div>
 
       <p className="mt-2 text-sm text-(--color-fg)">
         {state
           ? state.offsetDays === 0
-            ? `Clock is at real time (${state.effectiveDate}).`
-            : `Clock is ${state.offsetDays} day(s) ahead — effective date ${state.effectiveDate}.`
-          : "Move the whole system clock forward to demonstrate maturity and escalation."}
+            ? t("admin.timeMachine.realTime", { date: state.effectiveDate })
+            : t("admin.timeMachine.ahead", { days: state.offsetDays, date: state.effectiveDate })
+          : t("admin.timeMachine.intro")}
       </p>
 
       <div className="mt-3 flex flex-wrap items-center gap-2">
         <label className="flex items-center gap-2 text-sm">
-          <span>Jump</span>
+          <span>{t("admin.timeMachine.jump")}</span>
           <input
             type="number"
             step={1}
@@ -53,17 +55,21 @@ export function TimeMachineControl() {
               setDays(Number.isNaN(e.target.valueAsNumber) ? 0 : Math.trunc(e.target.valueAsNumber))
             }
           />
-          <span>days</span>
+          <span>{t("admin.timeMachine.days")}</span>
         </label>
         <Button type="button" size="sm" loading={busy} onClick={() => travel(days)}>
-          Advance clock
+          {t("admin.timeMachine.advance")}
         </Button>
         <Button type="button" size="sm" variant="secondary" loading={busy} onClick={reset}>
-          Back to real time
+          {t("admin.timeMachine.back")}
         </Button>
       </div>
 
-      {error && <p className="mt-2 text-sm text-(--color-danger)">{error}</p>}
+      {error && (
+        <p className="mt-2 text-sm text-(--color-danger)">
+          {t(error === "notArmed" ? "admin.timeMachine.notArmed" : "admin.timeMachine.error")}
+        </p>
+      )}
     </section>
   );
 }

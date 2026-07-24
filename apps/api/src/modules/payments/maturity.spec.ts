@@ -137,11 +137,18 @@ describe('pre-maturity reminders', () => {
     expect(reminderDue(DUE, new Date('2026-08-25T00:00:00.000Z'), thresholds)).toBe(7);
   });
 
-  it('keeps sending nothing new past the due date — the sweep takes over there', () => {
-    // 0 is not in `thresholds` here, so the nearest reached one stays 7 and the
-    // caller has already sent it. Past due, reminders stop and
-    // `maturityAction` owns the transaction.
-    expect(reminderDue(DUE, new Date('2026-09-15T00:00:00.000Z'), thresholds)).toBe(7);
+  it('sends nothing at all past the due date — the sweep takes over there', () => {
+    // Not the nearest reached threshold, *nothing*: relying on "the caller
+    // already sent 7" breaks the moment a due date is jumped over (demo time
+    // machine) or slept through (downed scheduler) — the next sweep would
+    // then deliver "due in 7 days" on an invoice already past due, in the
+    // same pass that marks it OVERDUE_UNCONFIRMED. Past due, reminders stop
+    // and `maturityAction` owns the transaction.
+    expect(reminderDue(DUE, new Date('2026-09-15T00:00:00.000Z'), thresholds)).toBeNull();
+    // The due-date reminder itself still fires on the due date...
+    expect(reminderDue(DUE, new Date('2026-08-30T00:00:00.000Z'), [...thresholds, 0])).toBe(0);
+    // ...but never after it.
+    expect(reminderDue(DUE, new Date('2026-08-31T00:00:00.000Z'), [...thresholds, 0])).toBeNull();
   });
 
   it('ignores nonsense thresholds rather than throwing on bad settings', () => {

@@ -1101,7 +1101,21 @@
       "filterPlaceholder": "Transaction, offer or case ID…",
       "filterApply": "Apply",
       "empty": "No audit entries match.",
-      "pageInfo": "Page"
+      "pageInfo": "Page",
+      "filterInvalid": "The filter takes an entity ID (UUID), not a reference number — paste the id from the entity's detail screen."
+    },
+    "timeMachine": {
+      "title": "Demo time machine",
+      "badge": "Platform only · never available in production",
+      "intro": "Move the whole system clock forward to demonstrate maturity and escalation.",
+      "realTime": "Clock is at real time ({date}).",
+      "ahead": "Clock is {days} day(s) ahead — effective date {date}.",
+      "jump": "Jump",
+      "days": "days",
+      "advance": "Advance clock",
+      "back": "Back to real time",
+      "notArmed": "The time machine is not armed in this environment.",
+      "error": "Could not move the demo clock."
     },
     "settings": {
       "title": "Platform settings",

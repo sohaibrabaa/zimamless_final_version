@@ -1,5 +1,6 @@
 import { Injectable, Logger, OnApplicationBootstrap, OnApplicationShutdown } from '@nestjs/common';
 import { AppConfig } from '../config/configuration';
+import { SystemTimeProvider } from '../common/time/time.provider';
 import { ListingDeadlinesService } from '../modules/marketplace/listing-deadlines.service';
 import { FundingDeadlinesService } from '../modules/funding/funding-deadlines.service';
 import { MaturityService } from '../modules/payments/maturity.service';
@@ -50,6 +51,7 @@ export class SchedulerService implements OnApplicationBootstrap, OnApplicationSh
 
   constructor(
     private readonly config: AppConfig,
+    private readonly time: SystemTimeProvider,
     private readonly listings: ListingDeadlinesService,
     private readonly funding: FundingDeadlinesService,
     private readonly maturity: MaturityService,
@@ -84,6 +86,19 @@ export class SchedulerService implements OnApplicationBootstrap, OnApplicationSh
     if (this.running) return;
     this.running = true;
     try {
+      // The sweeps ask the TimeProvider what time it is, so the provider's
+      // cached offset must be current *before* they run. Without this, a
+      // disarm (or a jump served by another instance) leaves every sweep on
+      // the old clock until some request happens to refresh it — the sweeps
+      // are exactly the caller that cannot rely on request traffic.
+      try {
+        await this.time.refreshIfStale();
+      } catch (err) {
+        this.logger.error(
+          `time provider refresh failed; sweeping on the cached clock: ` +
+            `${err instanceof Error ? err.message : String(err)}`,
+        );
+      }
       await this.run('listing deadlines', () => this.listings.sweep());
       await this.run('funding confirmations', () => this.funding.sweep());
       await this.run('invoice maturity', () => this.maturity.sweep());

@@ -22,7 +22,7 @@ endpoint, and has no mock→live promotion to track.
 | GET /onboarding/applications-list * | 2 | — | mock | v3.1.0 · supplier onboarding home + reviewer queue |
 | POST /onboarding/applications | 2 | — | mock | no screen consumes it — bootstrap (D-04) covers the supplier path |
 | GET /onboarding/applications/{id} | 2 | — | mock | reviewer application detail |
-| POST …/{id}/submit | 2 | **2026-07-24** | **live** (2026-07-24, wizard.live.spec.tsx) | wizard step 4 |
+| POST …/{id}/submit | 2 | — | mock | wizard step 4 · a 2026-07-24 sweep flipped this row by mistake — the wizard spec covers the *transactions* submit below, not onboarding |
 | POST …/{id}/bank-account | 2 | — | mock | wizard step 4 |
 | POST …/{id}/consents | 2 | — | mock | wizard step 3 · **consent catalogue provisional, see Q-09** |
 | GET …/{id}/information-requests | 2 | — | mock | info-request inbox (both portals) |
@@ -42,7 +42,7 @@ endpoint, and has no mock→live promotion to track.
 | PUT …/{id}/buyer | 3 | **2026-07-24** | **live** (2026-07-24, wizard.live.spec.tsx) | wizard step 1 · the buyer must have been resolved by this supplier first, else 422 |
 | PUT …/{id}/minimum-amount | 3 | **2026-07-24** | **live** (2026-07-24, wizard.live.spec.tsx) | wizard step 4 · 422 when above `outstandingAmount`; the error deliberately does **not** echo the floor back |
 | POST …/{id}/declarations | 3 | **2026-07-24** | **live** (2026-07-24, wizard.live.spec.tsx) | wizard step 5 · 201. All eight must be true; a false one is **422** with `details.notAffirmed[]` naming which · **template version provisional, see Q-13** |
-| POST …/{id}/submit | 3 | — | mock | wizard step 6 · **200**, not 201. 409 `DUPLICATE_INVOICE` with `details.reviewReference` → blocked screen (ZM-VER-001, Q-11 resolved by that key) |
+| POST …/{id}/submit | 3 | **2026-07-24** | **live** (2026-07-24, wizard.live.spec.tsx) | wizard step 6 · **200**, not 201. 409 `DUPLICATE_INVOICE` with `details.reviewReference` → blocked screen (ZM-VER-001, Q-11 resolved by that key) |
 | GET …/{id}/verification | 3 | **2026-07-24** | **live** (2026-07-24, wizard.live.spec.tsx) | verification panel · all 8 checks always recorded, passes included. `NOT_APPLICABLE` is not `PASS` |
 | GET …/{id}/risk | 4 | **2026-07-24** | **live** (risk.live.spec.tsx — stored 86/LOW on the MATURING fixture; no weight/coefficient/probability anywhere in the body, ZM-RSK-013) | built. components[] may carry null (render "not scored", not 0); dataAvailabilityPct is a separate NUMBER, style neutrally; mlFallbackReason present only when mlUsed=false · UI: TrustScoreGauge/ComponentBars/FactorList on the supplier transaction detail and the bank underwriting view |
 | GET/POST /admin/risk-models | 4 | — | mock | built. platform roles only. POST creates, never edits; activating needs activationReason · UI: handler not implemented — no admin screen this session, not B's Phase 4 scope |
@@ -70,7 +70,7 @@ endpoint, and has no mock→live promotion to track.
 | POST …/{id}/funding/confirm | 7 | **2026-07-23** | **live** (2026-07-24, funding.live.spec.tsx — wrong code → OtpRejected/attemptsRemaining; right code → FUNDED) | 200 `{transactionState, fundedAt}`. **401 carries `attemptsRemaining` at the top level** (inline schema, not the Error envelope) and also under `details`. Wrong/expired/used are one identical failure (ZM-FND-009) |
 | GET …/{id}/settlement | 7 | **2026-07-23** | **live** (2026-07-24, funding.live.spec.tsx) | 404 before mark-sent — the normal pre-funding state, not an error |
 | POST /settlements/{id}/retry | 7 | **2026-07-23** | mock | Retrying a completed settlement is a no-op returning it unchanged, not an error (INV-13). `MANUAL_REVIEW` is platform-staff only (AS-03) |
-| GET/POST …/{id}/payments | 8 | **2026-07-23** | mock | Balance is **derived** from buyer_payments on every read (D-13); invoices.paid_amount never moves. A supplier payload has NO `bankInternalNotes`, `evidenceDocumentId` or `reportedBy` — built as a separate object, not filtered |
+| GET/POST …/{id}/payments | 8 | **2026-07-23** | **GET live** (2026-07-23, detail screens) · POST mock | Balance is **derived** from buyer_payments on every read (D-13); invoices.paid_amount never moves. A supplier payload has NO `bankInternalNotes`, `evidenceDocumentId` or `reportedBy` — built as a separate object, not filtered |
 | POST …/{id}/confirm-status | 8 | **2026-07-23** | mock | The **only** route to OVERDUE anywhere. 422 with `details.outstandingAmount` if PAID is claimed while a balance remains |
 | POST …/{id}/close | 8 | **2026-07-23** | mock | Idempotent — a second close returns the ORIGINAL reason rather than rewriting it. Deletes nothing (INV-7) |
 | POST …/{id}/recourse · GET/status/repay /recourse/{id} | 8 | **2026-07-23** | mock | partly v3.1.0 · **BANK ONLY — a platform admin gets 403.** Requires a CONFIRMED overdue (409 from OVERDUE_UNCONFIRMED); claim capped at the gross advance (422). A supplier may only move it to DISPUTED. Settling closes the transaction RECOURSE_SETTLED. **No commission refund** (ZM-FEE-016) |
@@ -79,8 +79,8 @@ endpoint, and has no mock→live promotion to track.
 | POST …/{id}/fraud-review · decide * | 8 | **2026-07-23** | mock | Opening freezes and concludes **nothing**; compliance is notified. `GET /fraud-cases/{id}` **404s for a bank or supplier**. decide is compliance-only and is the only confirmed status in the system (ZM-FRD-004) |
 | GET /cases * | 8 | **2026-07-23** | **live** | v3.1.0 · Fraud cases are **excluded from the query** for a bank or supplier, not redacted. Summary carries type/status/amount/date and never a counterparty free-text field |
 | GET /admin/relisting-requests * | 8 | **2026-07-23** | **live** | v3.1.0 · Platform only — a bank reading it would see which receivables are about to return to the market before they are listed. The seven ZM-REC-018 checks report `null` when unrecorded rather than being omitted: "checked and failed" and "not yet checked" mean opposite things to a reviewer. No screen consumes it yet; the review desk and `POST …/approve` are Phase 9 |
-| POST …/{id}/relist-request * | 8 | — | mock | v3.1.0 |
-| POST …/{id}/cancel * | 8 | — | mock | v3.1.0 |
+| POST …/{id}/relist-request * | 9 | — | mock | v3.1.0 |
+| POST …/{id}/cancel * | 9 | — | mock | v3.1.0 |
 | GET /notifications · POST read * | 8 | **2026-07-23** | **live** | v3.1.0 · Scoped to `recipient_user_id` alone — a notification is addressed to a person, not an org. No `destination` or gateway reference returned. read sets DELIVERED, the only delivery the platform can honestly observe |
 | POST /notifications/{id}/manual-call * | 8 | **2026-07-23** | mock | **D-16 (Q-17)** · additive: ZM-NOT-007 had storage (/) and no route to write it. Platform staff incl. compliance. Deliberately NOT folded into /read — a recipient opening their inbox and an operator attesting to a phone call are different claims by different people. Blank notes refused; the previous notes are kept in the audit entry (INV-7). No screen consumes it yet |
 | GET/PATCH /admin/settings | 9 | **2026-07-24** | **live** (admin.live.spec.tsx — settings editor on platform/settings; edit round trip restored after) | |

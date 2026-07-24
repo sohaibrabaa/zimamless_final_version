@@ -1434,3 +1434,60 @@ it caught, D-21, named proofs, demo-day runbook, deliberate exclusions
 (~50 non-demo-path endpoints stay mock; manual RTL walkthrough; PA-09).
 Full regression (unit + all integration suites, tree frozen) is the gate
 before the phase is declared done.
+
+## 2026-07-24 (review) — four-lens review of Phase 9; twelve defects fixed
+
+Four independent review passes (notifications, admin/time-machine API, demo
+seed, web screens) over 174f40d..108795c. No invariant breaches anywhere —
+money, floor confidentiality, bankInternalNotes, RLS, hard deletes all
+verified clean. Twelve real defects, all fixed and re-verified:
+
+API: (1) disarming the time machine never refreshed the cached offset and no
+interval did either — sweeps could run on a +45d clock indefinitely; the
+scheduler tick now refreshes first and the settings PATCH refreshes on the
+arming key. (2) /demo/time-travel answered 403 with the env flag off — a
+route guard now makes every response 404 before pipes or roles can leak the
+control's existence; the role wall moved into the service, after both 404
+guards. (3) travel() now keeps the response's "jobs re-evaluated" promise by
+running a sweep pass before answering. (4) cancel raced acceptance — the
+stage check ran on an unlocked pre-transaction read; it now locks the row
+FOR UPDATE inside the transaction (a lost race could have CANCELLED an
+accepted receivable and released its D-01 fingerprint). (5) cancel's listing
+close and offer withdrawals now write per-entity status_history and stamp
+provider time, not SQL now(). (6) settings PATCH accepted "-500.000" as a
+listing fee — money-typed settings now refuse negatives, and
+currentListingFee() guards as backstop. (7) selection reminders keyed on
+transaction_id alone — round 1 suppressed every relisted round's AS-02
+reminders forever; now scoped per listing activation and sent in one
+transaction (a partial multi-recipient failure was unrecoverable). (8)
+funding's remind() got the same transactional envelope escalate() had. (9)
+rejectAll told every bank "the supplier has selected another offer" — a
+fabricated competitive signal; a new OFFER_ROUND_CLOSED template (EN/AR)
+says what happened. (10) an OFFER_RECEIVED failure after approve's commit
+surfaced as a 500 whose retry 409s — now degrades per ZM-NOT-004. (11)
+reminderDue() returned the due-today reminder for *past-due* invoices —
+after a time jump the sweep sent "due today" alongside OVERDUE_UNCONFIRMED;
+past due now sends nothing (named unit test updated to assert the honest
+behaviour). (12) admin audit filter 500'd on any non-UUID input — now a 400
+server-side and caught client-side with a usable message.
+
+Seed: arm/jump moved inside the try (a lost jump response left the machine
+armed and the clock moved for the next run); the finally reverts and disarms
+independently so neither failure masks or skips the other; SIGINT prints
+recovery commands; a failed contract fetch aborts loudly instead of
+half-staging fixtures 6/7 with exit 0. And the review's live catch: today's
+own test runs had matured ZM-DEMO-MATURING (+45 sweeps on the shared clock —
+permanent, INV-7). The maturing fixture is now generational: the seed
+detects a consumed generation and stages the next (ZM-DEMO-MATURING-2 walked
+to FUNDED, 86/LOW, verified end to end).
+
+Web: the wizard-submit promotion had flipped the *onboarding* submit row in
+ENDPOINT_STATUS.md (wrong row of two "…/{id}/submit"); payments GET was live
+in code but mock in the mirror — both corrected. TimeMachineControl was
+hardcoded English on a localized screen — now admin.timeMachine.* in both
+dictionaries (hook returns error kinds, the component owns wording).
+
+Recorded, not fixed: Q-19 (external-channel dispatch fires inside the
+caller's uncommitted transaction — latent until a real gateway is wired;
+outbox recommended). Full re-verification: API unit 540, integration 11/11
+suites 288/288, web 232, live 15 files/45 tests, seed staged 9/9 at target.

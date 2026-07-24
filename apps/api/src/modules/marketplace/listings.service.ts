@@ -85,7 +85,11 @@ export class ListingsService {
       `SELECT value FROM platform_settings WHERE key = 'listing_fee_amount'`,
     );
     const raw = typeof row?.value === 'string' ? row.value.replace(/^"|"$/g, '') : '25.000';
-    return Money.from(Money.isValidMoneyString(raw) ? raw : '25.000');
+    // A negative fee would flow into funding math as a payout bonus; the
+    // settings PATCH refuses one, and this fallback holds if anything else
+    // ever writes the row.
+    const fee = Money.isValidMoneyString(raw) ? Money.from(raw) : null;
+    return fee && !fee.isNegative() ? fee : Money.from('25.000');
   }
 
   private async windowHours(key: string, fallback: number): Promise<number> {

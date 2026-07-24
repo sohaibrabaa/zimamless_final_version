@@ -18,10 +18,17 @@ export interface TimeMachineState {
   effectiveDate: string;
 }
 
+/**
+ * Error as a *kind*, not prose: the hook has no dictionary, and hardcoding
+ * English here put untranslated strings on an otherwise localized screen.
+ * The component owns the wording (`admin.timeMachine.*`).
+ */
+export type TimeMachineError = "notArmed" | "failed";
+
 export function useTimeMachine() {
   const [state, setState] = useState<TimeMachineState | null>(null);
   const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState<TimeMachineError | null>(null);
 
   async function travel(offsetDays: number): Promise<void> {
     setBusy(true);
@@ -34,11 +41,7 @@ export function useTimeMachine() {
       const body = data as unknown as TimeMachineState;
       setState({ offsetDays: body.offsetDays, effectiveDate: body.effectiveDate });
     } catch (err) {
-      if (err instanceof ApiError && err.status === 404) {
-        setError("The time machine is not armed in this environment.");
-      } else {
-        setError(err instanceof ApiError ? err.message : "Could not move the demo clock.");
-      }
+      setError(err instanceof ApiError && err.status === 404 ? "notArmed" : "failed");
     } finally {
       setBusy(false);
     }

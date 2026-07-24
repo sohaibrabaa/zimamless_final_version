@@ -3,7 +3,11 @@ import { DatabaseService } from '../../database/database.service';
 import { SystemTimeProvider } from '../../common/time/time.provider';
 import { AppException } from '../../common/errors/app.exception';
 import { AuditService } from '../../common/audit/audit.service';
+import { SchedulerService } from '../../jobs/scheduler.service';
 import type { ActorContext } from '../onboarding/onboarding.service';
+
+/** Who may move the clock once the machine is armed. */
+const TIME_TRAVEL_ROLES = ['PLATFORM_OPS_ADMIN', 'PLATFORM_SUPER_ADMIN'];
 
 /**
  * The demo time machine (ZM-DEMO-003/004).
@@ -32,6 +36,7 @@ export class DemoService {
     private readonly db: DatabaseService,
     private readonly time: SystemTimeProvider,
     private readonly audit: AuditService,
+    private readonly scheduler: SchedulerService,
     @Inject('DEMO_TIME_MACHINE_ENV_FLAG') private readonly envFlagEnabled: boolean,
   ) {}
 
@@ -48,6 +53,14 @@ export class DemoService {
   async travel(offsetDays: number, ctx: ActorContext): Promise<Record<string, unknown>> {
     this.requireAvailable();
     await this.requireArmed();
+
+    // Role wall AFTER both 404 guards, deliberately: a supplier probing a
+    // disarmed machine learns "not found", never "forbidden" — a 403 from a
+    // route decorator would confirm the control exists before the guards got
+    // to deny its existence.
+    if (!ctx.roles.some((role) => TIME_TRAVEL_ROLES.includes(role))) {
+      throw AppException.insufficientRole(TIME_TRAVEL_ROLES);
+    }
 
     if (!Number.isInteger(offsetDays)) {
       throw AppException.validation('offsetDays must be a whole number of days.');
@@ -75,6 +88,12 @@ export class DemoService {
         .toISOString()
         .slice(0, 10)}) by user ${ctx.userId}`,
     );
+
+    // The response promises "scheduled jobs re-evaluated", so keep that
+    // promise before answering: a jump exists to make deadlines pass, and a
+    // presenter should not stand waiting for the next 60s tick. The sweeps
+    // are idempotent; tick() itself refuses re-entrancy.
+    await this.scheduler.tick();
 
     return {
       offsetDays: this.time.currentOffsetDays(),

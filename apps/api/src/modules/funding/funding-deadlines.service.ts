@@ -152,20 +152,28 @@ export class FundingDeadlinesService {
     const recipients = await this.supplierRecipients(row.supplier_org_id);
     if (recipients.length === 0) return false;
 
-    for (const userId of recipients) {
-      await this.notifications.send({
-        templateKey: REMINDER_KEY,
-        recipientUserId: userId,
-        transactionId: row.transaction_id,
-        fallbackSubject: 'Please confirm you received your funding',
-        fallbackBody:
-          `Your bank recorded this transfer as sent. Confirming receipt with the one-time ` +
-          `code the bank gave you is what completes funding. If you have not received the ` +
-          `code, ask the bank to issue a new one. After about ${windowHours} hours without ` +
-          `a confirmation this is escalated to platform operations.`,
-        variables: { windowHours },
-      });
-    }
+    // One transaction for all recipients, the same shape escalate() uses: the
+    // idempotency check above is per transaction_id, so a partial send that
+    // committed recipient 1's row would make every later sweep skip the rest.
+    await this.db.transaction(async (client: PoolClient) => {
+      for (const userId of recipients) {
+        await this.notifications.send(
+          {
+            templateKey: REMINDER_KEY,
+            recipientUserId: userId,
+            transactionId: row.transaction_id,
+            fallbackSubject: 'Please confirm you received your funding',
+            fallbackBody:
+              `Your bank recorded this transfer as sent. Confirming receipt with the one-time ` +
+              `code the bank gave you is what completes funding. If you have not received the ` +
+              `code, ask the bank to issue a new one. After about ${windowHours} hours without ` +
+              `a confirmation this is escalated to platform operations.`,
+            variables: { windowHours },
+          },
+          client,
+        );
+      }
+    });
     this.logger.log(`Reminded supplier to confirm funding on transaction ${row.transaction_id}`);
     return true;
   }

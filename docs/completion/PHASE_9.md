@@ -86,8 +86,13 @@ offer approval, naming no bank and no amount.
    with fresh approved offers. `--status` shows the board.
 2. **The time machine** is armed from platform/settings (the arm switch is
    a real `PATCH /admin/settings`; the jump control is beside it). Jump
-   ≥ +9 days to mature `ZM-DEMO-MATURING` live on stage; return to zero
-   and disarm when done.
+   ≥ +9 days to mature the maturing fixture live on stage; return to zero
+   and disarm when done. The maturing fixture is **generational**
+   (`ZM-DEMO-MATURING`, `-2`, `-3`, …): any test run or rehearsal that
+   jumps the shared clock matures the current one permanently (INV-7,
+   correctly), so the seed detects a consumed generation and stages the
+   next — the morning re-run always leaves a fresh FUNDED chain one jump
+   short of maturity. `--status` names the live generation.
 3. **Production drill:** with `DEMO_TIME_MACHINE_ENABLED` unset,
    `/demo/time-travel` is 404 and boot refuses the offset entirely.
 

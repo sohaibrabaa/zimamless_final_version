@@ -181,7 +181,9 @@ describe("offer acceptance against the live API", () => {
         txId,
       ])
       .catch(() => undefined);
-    await db.query(`DELETE FROM audit_logs WHERE target_entity_id = $1`, [txId]).catch(() => undefined);
+    // Deliberately NOT deleting audit_logs rows: the trail is append-only
+    // (INV-7) and a teardown that tries is either dead code or a violation.
+    // The orphaned rows for this disposable fixture are the cheaper artifact.
     await db.query(`DELETE FROM receivable_transactions WHERE id = $1`, [txId]).catch(() => undefined);
     await db.end();
   }, 60_000);

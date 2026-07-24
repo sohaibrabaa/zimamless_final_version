@@ -5,7 +5,16 @@ import { AuditService } from '../../common/audit/audit.service';
 import { AppException } from '../../common/errors/app.exception';
 import { ErrorCode } from '../../common/errors/error-codes';
 import { Money } from '../../common/money/money';
+import { SystemTimeProvider } from '../../common/time/time.provider';
 import type { ActorContext } from '../onboarding/onboarding.service';
+
+/**
+ * Settings that hold an amount of money. Whitelisting the *keys* is not
+ * enough for these: `Money`'s wire pattern accepts a negative, and a negative
+ * listing fee frozen into an obligation would flow through funding math as a
+ * payout bonus. Validated here, at the only door these values enter through.
+ */
+const MONEY_SETTINGS = new Set(['listing_fee_amount']);
 
 /**
  * The platform admin surface (requirements §16 admin).
@@ -24,6 +33,7 @@ export class AdminService {
   constructor(
     private readonly db: DatabaseService,
     private readonly audit: AuditService,
+    private readonly time: SystemTimeProvider,
   ) {}
 
   // ---------------------------------------------------------------
@@ -57,7 +67,22 @@ export class AdminService {
     const keys = Object.keys(patch);
     if (keys.length === 0) throw AppException.validation('No settings to update.');
 
-    return this.db.transaction(async (client) => {
+    for (const key of keys) {
+      if (!MONEY_SETTINGS.has(key)) continue;
+      const value = patch[key];
+      if (
+        typeof value !== 'string' ||
+        !Money.isValidMoneyString(value) ||
+        Money.from(value).isNegative()
+      ) {
+        throw AppException.validation(
+          `"${key}" must be a non-negative amount as a 3-decimal string.`,
+          { key },
+        );
+      }
+    }
+
+    const settings = await this.db.transaction(async (client) => {
       for (const key of keys) {
         const { rows } = await client.query<{ value: unknown }>(
           `SELECT value FROM platform_settings WHERE key = $1 FOR UPDATE`,
@@ -87,6 +112,16 @@ export class AdminService {
       for (const row of rows) out[row.key] = row.value;
       return out;
     });
+
+    // Disarming (or arming) the time machine must reach the clock's cache
+    // now, not whenever the next /auth/me happens to refresh it — the sweeps
+    // run on this cache, and a disarm that leaves them on a +45d clock for
+    // an unbounded time is a disarm in name only.
+    if (keys.includes('demo_time_machine_enabled')) {
+      await this.time.refresh();
+    }
+
+    return settings;
   }
 
   // ---------------------------------------------------------------

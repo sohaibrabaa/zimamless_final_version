@@ -170,6 +170,56 @@ const listingId = (f) => fid('3', f.n);
 const offerId = (f) => fid('4', f.n);
 
 // ---------------------------------------------------------------------------
+// The maturing fixture is consumable, so it is generational.
+// ---------------------------------------------------------------------------
+// Any integration run of phase9-demo (or a live rehearsal) jumps the shared
+// clock past +8 and the real sweep matures ZM-DEMO-MATURING — correctly, and
+// permanently: the chain is ledger'd (INV-7) and maturity has no undo. A
+// fixed UUID would leave the demo with no FUNDED-near-maturity story and
+// this script exiting 0 as if all were well. So the slot walks forward:
+// generation g lives at ...1010+g offsets, refs ZM-DEMO-MATURING-<g> after
+// the first, and the first non-consumed (or absent) generation is the live
+// one. Consumed generations remain as extra matured receivables — honest
+// history, not garbage.
+const CONSUMED_STATES = new Set([
+  'OVERDUE_UNCONFIRMED',
+  'OVERDUE',
+  'RECOURSE_ACTIVE',
+  'PARTIALLY_PAID',
+  'PAID',
+  'CLOSED',
+  'DISPUTED',
+  'FRAUD_REVIEW',
+  'CANCELLED',
+  'REJECTED',
+]);
+
+async function resolveMaturingFixture(f) {
+  const first = f.n;
+  for (let g = first; g <= first + 9; g++) {
+    const { rows } = await client.query(
+      `SELECT state FROM receivable_transactions WHERE id = $1`,
+      [fid('1', g)],
+    );
+    const state = rows[0]?.state;
+    if (state && CONSUMED_STATES.has(state)) continue;
+    if (g !== first) {
+      f.n = g;
+      f.ref = `ZM-DEMO-MATURING-${g - first + 1}`;
+      console.log(
+        `  [time-machine target] earlier maturing chain(s) were swept past maturity ` +
+          `(test runs move the shared clock); staging generation ${g - first + 1} as ${f.ref}`,
+      );
+    }
+    return;
+  }
+  throw new Error(
+    `Every ZM-DEMO-MATURING generation (${first}..${first + 9}) is consumed. ` +
+      `Extend the range or purge retired demo chains before the next staging run.`,
+  );
+}
+
+// ---------------------------------------------------------------------------
 // The bilingual template catalogue (ZM-NOT-009, D-17: Western digits)
 // ---------------------------------------------------------------------------
 // Keys are the ones the senders actually pass — LISTING_AVAILABLE and
@@ -227,6 +277,20 @@ const TEMPLATES = [
     ar: {
       subject: 'لم يتم اختيار عرضكم',
       body: 'اختار المورّد عرضاً آخر لهذه الذمم المدينة.',
+    },
+  },
+  {
+    // Reject-all, not selection: saying "another offer was selected" here
+    // would fabricate a competitive signal. No placeholders, same reason as
+    // OFFER_NOT_SELECTED.
+    key: 'OFFER_ROUND_CLOSED',
+    en: {
+      subject: 'This offer round has closed',
+      body: 'The supplier closed this offer round without selecting an offer.',
+    },
+    ar: {
+      subject: 'أُغلقت جولة العروض هذه',
+      body: 'أغلق المورّد جولة العروض هذه دون اختيار أي عرض.',
     },
   },
   ...[50, 15].map((pct) => ({
@@ -585,6 +649,23 @@ async function ensureBase(f, state, { withOffer = false, withDeclarations = true
 // Stage 3 — API-driven progressions
 // ---------------------------------------------------------------------------
 
+// States at or past CONTRACTED: a missing contract *fetch* is tolerable only
+// if the chain has already moved beyond needing signatures.
+const POST_CONTRACT_STATES = new Set([
+  'CONTRACTED',
+  'FUNDING_IN_PROGRESS',
+  'FUNDING_CONFIRMATION_PENDING',
+  'FUNDED',
+  'PARTIALLY_PAID',
+  'PAID',
+  'OVERDUE_UNCONFIRMED',
+  'OVERDUE',
+  'RECOURSE_ACTIVE',
+  'DISPUTED',
+  'FRAUD_REVIEW',
+  'CLOSED',
+]);
+
 /** Accept → contract signed by both → mark-sent. Tolerates re-runs. */
 async function driveToConfirmationPending(f) {
   let state = await stateOf(txId(f));
@@ -606,6 +687,18 @@ async function driveToConfirmationPending(f) {
 
   // Sign as both parties; a 409/422 means that signature already exists.
   const contract = await api('supplier', 'GET', `/transactions/${txId(f)}/contract`);
+  if (contract.status !== 200) {
+    // Silently skipping here used to strand fixtures mid-chain with exit 0:
+    // no signatures → never CONTRACTED → mark-sent/funding guards all skip →
+    // the time-machine block finds nothing FUNDED and "succeeds".
+    const state = await stateOf(txId(f));
+    if (state !== 'CONTRACTED' && !POST_CONTRACT_STATES.has(state)) {
+      throw new Error(
+        `[${f.ref}] contract fetch returned ${contract.status} while the transaction is ` +
+          `${state} — the chain cannot reach its target from here: ${contract.raw}`,
+      );
+    }
+  }
   if (contract.status === 200) {
     for (const persona of ['supplier', 'bankAApprover']) {
       // Explicit assent: `accepted: true` IS the signature (SignContractDto).
@@ -730,6 +823,24 @@ async function ensureEinvoiceDocument(f) {
  * setting armed by a platform admin, the jump audited, the offset applied in
  * exactly one place. This script never touches `demo_time_offsets` directly.
  */
+// True from arm to disarm. Ctrl+C runs no `finally`, and the longest wait of
+// the whole script (awaitSweep, up to 180s per fixture) sits between the jump
+// and the revert — exactly when an operator gets impatient. The handler can't
+// safely await async cleanup on its way out, but it can refuse to let the
+// interrupt look clean.
+let timeMachineEngaged = false;
+process.on('SIGINT', () => {
+  if (timeMachineEngaged) {
+    console.error(
+      '\n!! Interrupted while the demo time machine is ARMED (clock may be moved).\n' +
+        '!! Recover before demoing: re-run this script (its finally will reset), or manually\n' +
+        '!!   POST /demo/time-travel {"offsetDays":0}\n' +
+        '!!   PATCH /admin/settings {"demo_time_machine_enabled":false}',
+    );
+  }
+  process.exit(130);
+});
+
 async function armTimeMachine(on) {
   const res = await api('platformAdmin', 'PATCH', `/admin/settings`, {
     demo_time_machine_enabled: on,
@@ -737,6 +848,7 @@ async function armTimeMachine(on) {
   if (res.status !== 200) {
     throw new Error(`arming the time machine (${on}) failed (${res.status}): ${res.raw}`);
   }
+  timeMachineEngaged = on;
   console.log(`  [time-machine] ${on ? 'armed' : 'disarmed'}`);
 }
 
@@ -866,6 +978,7 @@ try {
   await client.connect();
 
   if (statusOnly) {
+    await resolveMaturingFixture(FIXTURES.find((f) => f.slot === 'FUNDED_NEAR_MATURITY'));
     await report();
     process.exit(0);
   }
@@ -910,9 +1023,15 @@ try {
       if (!done6) await driveToFunded(F[6]);
       if (!done7) await driveToFunded(F[7]);
 
+      // Arm and jump INSIDE the try: if the jump itself fails after the
+      // server applied it (network drop on the response), or arming succeeds
+      // and the jump throws, the finally still reverts and disarms. Outside
+      // the try, that failure mode left the machine armed and possibly the
+      // clock at +2 — and the next morning's run would stage fixtures two
+      // days in the future.
       await armTimeMachine(true);
-      await timeTravel(2);
       try {
+        await timeTravel(2);
         if ((await stateOf(txId(F[6]))) === 'FUNDED') await awaitSweep(F[6]);
         if ((await stateOf(txId(F[7]))) === 'FUNDED') await awaitSweep(F[7]);
 
@@ -937,9 +1056,27 @@ try {
           step(F[7].ref, `recourse case opened (${res.body.id})`);
         }
       } finally {
-        // Whatever happened above, the clock never stays moved.
-        await timeTravel(0);
-        await armTimeMachine(false);
+        // Whatever happened above, the clock never stays moved — and a
+        // failed revert must not mask the original error OR skip the disarm,
+        // so each step swallows its own failure loudly. Disarm last: a
+        // disarmed machine zeroes the effective offset on the API side even
+        // if the revert call itself was lost.
+        try {
+          await timeTravel(0);
+        } catch (err) {
+          console.error(
+            `!! FAILED to return the demo clock to zero: ${err.message}\n` +
+              `!! Run manually: POST /demo/time-travel {"offsetDays":0}`,
+          );
+        }
+        try {
+          await armTimeMachine(false);
+        } catch (err) {
+          console.error(
+            `!! FAILED to disarm the time machine: ${err.message}\n` +
+              `!! Run manually: PATCH /admin/settings {"demo_time_machine_enabled":false}`,
+          );
+        }
       }
     }
     step(F[6].ref, `${await stateOf(txId(F[6]))}`);
@@ -1016,7 +1153,10 @@ try {
   await driveToConfirmationPending(F[4]);
   step(F[4].ref, `${await stateOf(txId(F[4]))}`);
 
-  // 10 — FUNDED, due in 8 days: the time machine's target.
+  // 10 — FUNDED, due in 8 days: the time machine's target. Generational —
+  // see resolveMaturingFixture: a matured earlier generation is permanent
+  // and the demo still needs a FUNDED chain one jump short of maturity.
+  await resolveMaturingFixture(F[10]);
   await ensureBase(F[10], 'OPEN_FOR_OFFERS', { withOffer: true });
   await driveToFunded(F[10]);
   step(F[10].ref, `${await stateOf(txId(F[10]))}`);

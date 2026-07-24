@@ -148,10 +148,12 @@ export class ListingDeadlinesService {
   /**
    * AS-02 reminders at 50% and 15% of the selection window remaining.
    *
-   * `template_key` doubles as the idempotency key: a reminder is sent only if
-   * no notification with that key already exists for the transaction. Without
-   * that, a sweep running every minute would send a reminder every minute for
-   * the whole second half of the window.
+   * `template_key` + the current round doubles as the idempotency key: a
+   * reminder is sent only if no notification with that key exists for the
+   * transaction *since this listing was activated*. Without the key, a sweep
+   * running every minute would send a reminder every minute for the whole
+   * second half of the window; without the round scoping, round 1's reminder
+   * would suppress every relisted round's reminders forever.
    */
   private async sendSelectionReminders(now: Date): Promise<number> {
     const thresholds = await this.reminderThresholds();
@@ -172,40 +174,52 @@ export class ListingDeadlinesService {
         if (remainingPct > threshold) continue;
         const key = `SELECTION_REMINDER_${threshold}`;
 
-        const already = await this.db.queryOne(
-          `SELECT 1 FROM notifications
-            WHERE template_key = $1 AND transaction_id = $2`,
-          [key, listing.transaction_id],
-        );
-        if (already) continue;
+        // All of one threshold's sends commit or none do. Without the
+        // transaction, a failure after recipient 1 of 3 leaves a row that
+        // makes every later sweep skip the whole listing — recipients 2-3
+        // would never get the reminder and nothing would retry.
+        sent += await this.db.transaction(async (client) => {
+          // Scoped to THIS round: relisting creates a new listing for the
+          // same transaction, and an idempotency check on transaction_id
+          // alone would let round 1's reminder suppress round 2's forever.
+          const already = await client.query(
+            `SELECT 1 FROM notifications
+              WHERE template_key = $1 AND transaction_id = $2 AND queued_at >= $3`,
+            [key, listing.transaction_id, listing.activated_at],
+          );
+          if (already.rows.length > 0) return 0;
 
-        const { rows: recipients } = await this.db.query<{ user_id: string }>(
-          `SELECT DISTINCT m.user_id
-             FROM organization_memberships m
-             JOIN receivable_transactions t ON t.supplier_org_id = m.organization_id
-            WHERE t.id = $1 AND m.status = 'ACTIVE'`,
-          [listing.transaction_id],
-        );
+          const { rows: recipients } = await client.query<{ user_id: string }>(
+            `SELECT DISTINCT m.user_id
+               FROM organization_memberships m
+               JOIN receivable_transactions t ON t.supplier_org_id = m.organization_id
+              WHERE t.id = $1 AND m.status = 'ACTIVE'`,
+            [listing.transaction_id],
+          );
 
-        // A displayed percentage, not money — truncated rather than rounded
-        // so the notification never claims more time remains than does.
-        const pctRemaining = Math.max(0, Math.trunc(remainingPct));
-        for (const recipient of recipients) {
-          await this.notifications.send({
-            templateKey: key,
-            recipientUserId: recipient.user_id,
-            transactionId: listing.transaction_id,
-            fallbackSubject: 'Offer selection deadline approaching',
-            fallbackBody:
-              `About ${pctRemaining}% of your selection window remains. ` +
-              `It closes at ${listing.supplier_selection_deadline.toISOString()}.`,
-            variables: {
-              percentRemaining: pctRemaining,
-              selectionDeadline: listing.supplier_selection_deadline.toISOString(),
-            },
-          });
-          sent += 1;
-        }
+          // A displayed percentage, not money — truncated rather than rounded
+          // so the notification never claims more time remains than does.
+          const pctRemaining = Math.max(0, Math.trunc(remainingPct));
+          for (const recipient of recipients) {
+            await this.notifications.send(
+              {
+                templateKey: key,
+                recipientUserId: recipient.user_id,
+                transactionId: listing.transaction_id,
+                fallbackSubject: 'Offer selection deadline approaching',
+                fallbackBody:
+                  `About ${pctRemaining}% of your selection window remains. ` +
+                  `It closes at ${listing.supplier_selection_deadline.toISOString()}.`,
+                variables: {
+                  percentRemaining: pctRemaining,
+                  selectionDeadline: listing.supplier_selection_deadline.toISOString(),
+                },
+              },
+              client,
+            );
+          }
+          return recipients.length;
+        });
       }
     }
     return sent;

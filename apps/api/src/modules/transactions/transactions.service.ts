@@ -796,24 +796,38 @@ export class TransactionsService {
   ]);
 
   async cancel(id: string, ctx: ActorContext, reason?: string): Promise<Record<string, unknown>> {
-    const { row } = await this.requireVisible(id, ctx);
-    this.requireSupplierOwner(row, ctx);
-
-    if (row.state === 'CANCELLED') {
-      // Idempotent: cancelling a cancelled transaction returns it unchanged.
-      return this.describe(row, 'SUPPLIER', { includeDetail: true });
-    }
-    if (!TransactionsService.SUPPLIER_CANCELLABLE.has(row.state)) {
-      throw new AppException(
-        ErrorCode.INVALID_STATE_TRANSITION,
-        'This transaction can no longer be cancelled unilaterally; an accepted offer must be ' +
-          'unwound through the case workflows.',
-        HttpStatus.CONFLICT,
-        { state: row.state },
-      );
-    }
+    const { row: visible } = await this.requireVisible(id, ctx);
+    this.requireSupplierOwner(visible, ctx);
 
     await this.db.transaction(async (client) => {
+      // The stage check runs on a row locked INSIDE this transaction, not on
+      // the visibility read above: cancel races acceptance, and a cancel that
+      // validated against a pre-acceptance snapshot would blindly overwrite
+      // OFFER_SELECTED with CANCELLED — releasing the invoice fingerprint
+      // (D-01) on a receivable a bank has actually accepted.
+      const { rows } = await client.query<TransactionRow>(
+        `SELECT * FROM receivable_transactions WHERE id = $1 FOR UPDATE`,
+        [id],
+      );
+      const row = rows[0];
+      if (!row) throw AppException.notFound('Transaction');
+
+      if (row.state === 'CANCELLED') {
+        // Idempotent: cancelling a cancelled transaction returns it unchanged.
+        return;
+      }
+      if (!TransactionsService.SUPPLIER_CANCELLABLE.has(row.state) || row.locked_at !== null) {
+        throw new AppException(
+          ErrorCode.INVALID_STATE_TRANSITION,
+          'This transaction can no longer be cancelled unilaterally; an accepted offer must be ' +
+            'unwound through the case workflows.',
+          HttpStatus.CONFLICT,
+          { state: row.state },
+        );
+      }
+
+      const now = this.time.now();
+
       // OPEN_FOR_OFFERS: the listing and any live offers are closed with the
       // transaction, so a bank is not left holding an offer on a receivable
       // that no longer exists.
@@ -822,17 +836,51 @@ export class TransactionsService {
         // neither table has an updated_at, which the first version of this
         // wrote and no test drove through an actually-open listing. The demo
         // seed's CANCELLED fixture was the first caller to reach this branch.
-        await client.query(
-          `UPDATE listings SET status = 'CANCELLED', closed_at = now()
-            WHERE transaction_id = $1 AND status = 'OPEN_FOR_OFFERS'`,
+        // Both stamps come from the TimeProvider so a demo jump cannot leave
+        // a listing "closed" days before its own cancellation event.
+        // Previous statuses are read before the UPDATEs — RETURNING reflects
+        // the post-update row, and a PENDING_INTERNAL_APPROVAL offer must not
+        // be recorded as having been ACTIVE.
+        const { rows: openListings } = await client.query<{ id: string; status: string }>(
+          `SELECT id, status FROM listings
+            WHERE transaction_id = $1 AND status = 'OPEN_FOR_OFFERS' FOR UPDATE`,
           [id],
         );
-        await client.query(
-          `UPDATE bank_offers SET status = 'WITHDRAWN', withdrawn_at = now()
+        const { rows: liveOffers } = await client.query<{ id: string; status: string }>(
+          `SELECT id, status FROM bank_offers
             WHERE listing_id IN (SELECT id FROM listings WHERE transaction_id = $1)
-              AND status IN ('ACTIVE','PENDING_INTERNAL_APPROVAL')`,
+              AND status IN ('ACTIVE','PENDING_INTERNAL_APPROVAL') FOR UPDATE`,
           [id],
         );
+        await client.query(
+          `UPDATE listings SET status = 'CANCELLED', closed_at = $2
+            WHERE id = ANY($1::uuid[])`,
+          [openListings.map((l) => l.id), now],
+        );
+        await client.query(
+          `UPDATE bank_offers SET status = 'WITHDRAWN', withdrawn_at = $2
+            WHERE id = ANY($1::uuid[])`,
+          [liveOffers.map((o) => o.id), now],
+        );
+        // Each closed listing and withdrawn offer gets its own history row:
+        // "who withdrew my ACTIVE offer and when" must be answerable from the
+        // record for THAT entity, not only from the transaction's audit row.
+        for (const listing of openListings) {
+          await client.query(
+            `INSERT INTO status_history
+               (entity_type, entity_id, previous_status, new_status, reason, changed_by, changed_at)
+             VALUES ('LISTING', $1, $2, 'CANCELLED', 'Supplier cancelled the transaction', $3, $4)`,
+            [listing.id, listing.status, ctx.userId, now],
+          );
+        }
+        for (const offer of liveOffers) {
+          await client.query(
+            `INSERT INTO status_history
+               (entity_type, entity_id, previous_status, new_status, reason, changed_by, changed_at)
+             VALUES ('BANK_OFFER', $1, $2, 'WITHDRAWN', 'Listing cancelled by the supplier', $3, $4)`,
+            [offer.id, offer.status, ctx.userId, now],
+          );
+        }
       }
       await this.transition(client, row, 'CANCELLED', ctx.userId, reason ?? 'Cancelled by supplier');
     });

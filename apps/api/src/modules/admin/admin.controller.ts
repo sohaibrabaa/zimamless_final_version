@@ -107,7 +107,11 @@ export class AdminController {
   async getAuditLogs(
     @Query('page', new DefaultValuePipe(1), ParseIntPipe) page: number,
     @Query('pageSize', new DefaultValuePipe(20), ParseIntPipe) pageSize: number,
-    @Query('targetEntityId') targetEntityId?: string,
+    // Not ParseUUIDPipe: the column is uuid, but the natural wrong input here
+    // is a reference number ("ZM-DEMO-…") typed by support, and that must be
+    // a 400 with a usable message — not the Postgres 22P02 → 500 an
+    // unvalidated string produced when it hit the uuid cast.
+    @Query('targetEntityId', new ParseUUIDPipe({ optional: true })) targetEntityId?: string,
   ): Promise<Record<string, unknown>> {
     return this.admin.getAuditLogs({
       page: Math.max(1, page),

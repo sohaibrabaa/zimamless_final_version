@@ -548,17 +548,21 @@ export class AcceptanceService {
   }
 
   /**
-   * Both outcomes, and neither carries competitive information (ZM-MKT-013).
+   * All three outcomes, and none carries competitive information (ZM-MKT-013).
    *
    * The winning bank is told it won. The losing banks are told they were not
    * selected — not by how much, not by whom, not how many others there were.
    * A "you were the second-best offer" message would be a competitive signal
-   * dressed as courtesy.
+   * dressed as courtesy. And when the supplier rejects the whole round
+   * (`selectedOfferId` null), the banks are told the round closed without a
+   * selection — NOT that "another offer was selected", which would be a
+   * fabricated competitive signal: a bank that believes it lost on price
+   * behaves differently from one that knows the round was scrapped.
    */
   private async notifyOutcome(
     client: PoolClient,
     listingId: string,
-    selectedOfferId: string,
+    selectedOfferId: string | null,
     transactionId: string,
   ): Promise<void> {
     const { rows: offers } = await client.query<{ id: string; bank_org_id: string }>(
@@ -568,7 +572,8 @@ export class AcceptanceService {
     );
 
     for (const offer of offers) {
-      const won = offer.id === selectedOfferId;
+      const won = selectedOfferId !== null && offer.id === selectedOfferId;
+      const roundClosed = selectedOfferId === null;
       const { rows: recipients } = await client.query<{ user_id: string }>(
         `SELECT DISTINCT m.user_id
            FROM organization_memberships m
@@ -579,22 +584,34 @@ export class AcceptanceService {
       );
 
       for (const recipient of recipients) {
-        // No variables on either template deliberately: the not-selected
-        // message must carry nothing about the winning terms (ZM-MKT-013),
-        // and a placeholder is a hole a future template edit could leak
-        // through. Fixed prose only, in both languages.
+        // No variables on any of the three templates deliberately: the
+        // not-selected message must carry nothing about the winning terms
+        // (ZM-MKT-013), and a placeholder is a hole a future template edit
+        // could leak through. Fixed prose only, in both languages.
         await this.notifications.send(
           {
-            templateKey: won ? 'OFFER_SELECTED' : 'OFFER_NOT_SELECTED',
+            templateKey: won
+              ? 'OFFER_SELECTED'
+              : roundClosed
+                ? 'OFFER_ROUND_CLOSED'
+                : 'OFFER_NOT_SELECTED',
             recipientUserId: recipient.user_id,
             transactionId,
-            fallbackSubject: won ? 'Your offer has been accepted' : 'Your offer was not selected',
+            fallbackSubject: won
+              ? 'Your offer has been accepted'
+              : roundClosed
+                ? 'This offer round has closed'
+                : 'Your offer was not selected',
             fallbackBody: won
               ? 'The supplier has accepted your offer. The contract will be generated next.'
-              : // Deliberately terse. Anything about the winning terms, the
-                // number of competitors, or the margin would be exactly the
-                // information the confidential marketplace exists to withhold.
-                'The supplier has selected another offer for this receivable.',
+              : roundClosed
+                ? // True and nothing more: no offer won, and saying otherwise
+                  // would be a fabricated signal about a competitor.
+                  'The supplier closed this offer round without selecting an offer.'
+                : // Deliberately terse. Anything about the winning terms, the
+                  // number of competitors, or the margin would be exactly the
+                  // information the confidential marketplace exists to withhold.
+                  'The supplier has selected another offer for this receivable.',
           },
           client,
         );
@@ -667,7 +684,7 @@ export class AcceptanceService {
         [listing.transaction_id, ctx.userId, now],
       );
 
-      await this.notifyOutcome(client, listingId, '', listing.transaction_id);
+      await this.notifyOutcome(client, listingId, null, listing.transaction_id);
 
       await this.audit.recordIn(client, {
         actionType: 'OFFERS_REJECTED',

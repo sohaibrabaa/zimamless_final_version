@@ -62,6 +62,13 @@ export function reminderDue(
   thresholds: readonly number[],
 ): number | null {
   const remaining = daysUntilDue(dueDate, now);
+  // Past due, no reminder at all — the same false-statement rule as the
+  // backfill one above. Without this, a due date jumped over by the demo
+  // time machine (or slept through by a downed scheduler) earns "your
+  // invoice is due today" days after it was due, in the very sweep that
+  // marks the invoice OVERDUE_UNCONFIRMED. Past due, the overdue
+  // notification is the only true message left.
+  if (remaining < 0) return null;
   const reached = [...thresholds]
     .filter((t) => Number.isFinite(t) && t >= 0)
     .filter((t) => remaining <= t);

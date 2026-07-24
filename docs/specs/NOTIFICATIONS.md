@@ -99,6 +99,7 @@ written under it.
 | `OFFER_RECEIVED` | Supplier | An offer becomes ACTIVE (internal approval) — not at creation, which is the bank's internal state; names no bank and no amount | built (Phase 9 — the catalogue previously claimed this and no code sent it) |
 | `OFFER_SELECTED` | Bank | Its offer was selected | built |
 | `OFFER_NOT_SELECTED` | Bank | Another offer was selected — and **nothing about which** | built |
+| `OFFER_ROUND_CLOSED` | Bank | The supplier rejected the whole round — no offer was selected. Distinct from `OFFER_NOT_SELECTED` because telling a bank "another offer was selected" when none was is a fabricated competitive signal | built (Phase 9 review) |
 | `SELECTION_REMINDER_50` / `_15` | Supplier | AS-02 selection window points | built |
 | `CONTRACT_READY_FOR_SIGNATURE` | Both | Contract generated | built |
 

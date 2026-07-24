@@ -26,6 +26,7 @@ import { NotificationsService } from './modules/notifications/notifications.serv
 import { NotificationsController } from './modules/notifications/notifications.controller';
 import { DemoController } from './modules/demo/demo.controller';
 import { DemoService } from './modules/demo/demo.service';
+import { DemoAvailableGuard } from './modules/demo/demo.guard';
 import { AdminController } from './modules/admin/admin.controller';
 import { AdminService } from './modules/admin/admin.service';
 import {
@@ -241,6 +242,7 @@ export const APP_CONFIG = 'APP_CONFIG';
 
     // --- Phase 9 ---
     DemoService,
+    DemoAvailableGuard,
     AdminService,
     {
       provide: NOTIFICATION_CHANNELS,

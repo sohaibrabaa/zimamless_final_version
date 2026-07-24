@@ -224,3 +224,13 @@ Recommendation: **Option 3** for the demo (it is honest and needs no contract ch
 Interim behaviour: `AdminService.approveRelisting()` transitions REQUESTED/UNDER_REVIEW → APPROVED, is idempotent, and records both the previous and current `verification` in the audit entry. The doc comment and the endpoint description both name Q-18 so the gap is not silently passed over.
 Needed by: Phase 9 relisting demo, if the seven-check gate is wanted on screen.
 Status: OPEN
+
+## Q-19 — external-channel dispatch fires inside the caller's uncommitted transaction
+Raised by: solo agent, 2026-07-24 (Phase 9 review), blocking: no (latent — every current sender uses IN_PLATFORM and the EMAIL/WHATSAPP gateways are dummies)
+`NotificationsService.send()` correctly joins the caller's transaction for the notification INSERT and delivery record, but `dispatch()` — the channel/gateway call — runs before the caller commits. If a caller's transaction rolls back after `send()` returns, a real external gateway would already have carried a message announcing a mutation that never happened, and the notification row that would evidence it (ZM-NOT-008) rolls back with everything else. It also holds row locks across gateway network I/O.
+Options considered:
+1. Defer external dispatch to post-commit (an outbox table swept by the scheduler; IN_PLATFORM stays synchronous since it *is* the DB row).
+2. Refuse `channel != IN_PLATFORM` when a client is passed, forcing callers to send external messages outside their transaction.
+Recommendation: **Option 1** when a real gateway is wired; nothing needs to change before then.
+Needed by: whichever phase first wires a real EMAIL/WHATSAPP provider.
+Status: OPEN

@@ -1,4 +1,4 @@
-import { HttpStatus, Inject, Injectable } from '@nestjs/common';
+import { HttpStatus, Inject, Injectable, Logger } from '@nestjs/common';
 import { DatabaseService } from '../../database/database.service';
 import { AppException } from '../../common/errors/app.exception';
 import { ErrorCode } from '../../common/errors/error-codes';
@@ -108,6 +108,8 @@ const REJECTION_MESSAGES: Record<OfferRejection, string> = {
 
 @Injectable()
 export class OffersService {
+  private readonly logger = new Logger(OffersService.name);
+
   constructor(
     private readonly db: DatabaseService,
     private readonly listings: ListingsService,
@@ -532,7 +534,19 @@ export class OffersService {
     // state and the supplier cannot see the offer until it is ACTIVE. The
     // body deliberately names no bank and no amount: those belong on the
     // comparison screen, behind the supplier's login, not in an inbox row.
-    await this.notifyOfferReceived(offer.listing_id);
+    //
+    // The approval above is already committed, so a notification failure must
+    // degrade (ZM-NOT-004), not surface as a 500 — the bank's natural retry
+    // of a "failed" approval would hit the status guard and get a 409 for an
+    // operation that in fact succeeded.
+    try {
+      await this.notifyOfferReceived(offer.listing_id);
+    } catch (err) {
+      this.logger.error(
+        `OFFER_RECEIVED notification failed after offer ${offerId} was approved; ` +
+          `the approval stands: ${err instanceof Error ? err.message : String(err)}`,
+      );
+    }
 
     return rows[0];
   }

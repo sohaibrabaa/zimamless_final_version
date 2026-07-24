@@ -19,11 +19,18 @@ import { useAuditLogs, type AuditLog } from "@/lib/admin/useAdmin";
  * the endpoint indexes and what support actually holds when they arrive
  * here: a transaction id off an error screen's correlation trail.
  */
+// The endpoint filters a uuid column, and the server refuses anything else
+// with a 400. Caught before submitting so the operator gets told what the
+// field takes instead of a generic error panel — the natural wrong input
+// here is a reference number like ZM-DEMO-…, which is not an id.
+const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
 export default function PlatformAuditPage() {
   const t = useTranslations();
   const [page, setPage] = useState(1);
   const [entityInput, setEntityInput] = useState("");
   const [entityFilter, setEntityFilter] = useState<string | undefined>(undefined);
+  const [filterInvalid, setFilterInvalid] = useState(false);
 
   const logs = useAuditLogs(page, 20, entityFilter);
 
@@ -77,8 +84,14 @@ export default function PlatformAuditPage() {
         className="mb-4 flex max-w-xl items-end gap-2"
         onSubmit={(e) => {
           e.preventDefault();
+          const trimmed = entityInput.trim();
+          if (trimmed && !UUID_PATTERN.test(trimmed)) {
+            setFilterInvalid(true);
+            return;
+          }
+          setFilterInvalid(false);
           setPage(1);
-          setEntityFilter(entityInput.trim() || undefined);
+          setEntityFilter(trimmed || undefined);
         }}
       >
         <div className="grow">
@@ -86,13 +99,21 @@ export default function PlatformAuditPage() {
             label={t("admin.audit.filterLabel")}
             placeholder={t("admin.audit.filterPlaceholder")}
             value={entityInput}
-            onChange={(e) => setEntityInput(e.target.value)}
+            onChange={(e) => {
+              setEntityInput(e.target.value);
+              setFilterInvalid(false);
+            }}
           />
         </div>
         <Button type="submit" size="sm">
           {t("admin.audit.filterApply")}
         </Button>
       </form>
+      {filterInvalid ? (
+        <p className="mb-4 -mt-2 text-sm text-(--color-danger)">
+          {t("admin.audit.filterInvalid")}
+        </p>
+      ) : null}
 
       {logs.error ? (
         <ErrorState title={logs.error} onRetry={logs.reload} retryLabel={t("common.retry")} />
