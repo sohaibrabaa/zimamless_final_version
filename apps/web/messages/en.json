@@ -534,10 +534,11 @@
       "choose": "Choose file",
       "replace": "Replace file",
       "remove": "Remove",
+      "uploadFailed": "The file could not be uploaded to storage. Try again — if it keeps failing, check your connection.",
       "download": "Download",
       "downloadUnavailable": "This document is not available to download right now.",
       "type": {
-        "EINVOICE": "Electronic invoice",
+        "ELECTRONIC_INVOICE": "Electronic invoice",
         "PURCHASE_ORDER": "Purchase order",
         "DELIVERY_NOTE": "Delivery note",
         "STATEMENT_OF_ACCOUNT": "Statement of account",
@@ -545,7 +546,7 @@
         "OTHER": "Other document"
       },
       "desc": {
-        "EINVOICE": "Required. The Jordanian electronic invoice, as a PDF or image.",
+        "ELECTRONIC_INVOICE": "Required. The Jordanian electronic invoice, as a PDF or image.",
         "PURCHASE_ORDER": "The buyer’s order for the goods or services.",
         "DELIVERY_NOTE": "Evidence that the goods or services were delivered.",
         "STATEMENT_OF_ACCOUNT": "A recent statement showing the balance with this buyer.",

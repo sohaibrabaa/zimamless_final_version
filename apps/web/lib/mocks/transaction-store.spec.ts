@@ -51,7 +51,7 @@ function completeDraft(
   const id = transaction.id!;
   linkBuyer(id, B1.id);
   createDocument({
-    documentType: "EINVOICE",
+    documentType: "ELECTRONIC_INVOICE",
     fileName: "einvoice.pdf",
     mimeType: "application/pdf",
     sizeBytes: 1024,
@@ -106,7 +106,7 @@ describe("extraction profiles", () => {
 
   it("keeps the OCR and QR readings separate on the mismatch fixture", () => {
     const doc = createDocument({
-      documentType: "EINVOICE",
+      documentType: "ELECTRONIC_INVOICE",
       fileName: "seeded-mismatch.pdf",
       mimeType: "application/pdf",
       sizeBytes: 2048,
@@ -127,7 +127,7 @@ describe("extraction profiles", () => {
 
   it("reports an unreadable QR as UNPARSED with nothing taken from it", () => {
     const doc = createDocument({
-      documentType: "EINVOICE",
+      documentType: "ELECTRONIC_INVOICE",
       fileName: "unparsed-qr.pdf",
       mimeType: "application/pdf",
       sizeBytes: 2048,
@@ -257,7 +257,7 @@ describe("verification reflects the transaction rather than a canned list", () =
     const id = transaction.id!;
     linkBuyer(id, B1.id);
     createDocument({
-      documentType: "EINVOICE",
+      documentType: "ELECTRONIC_INVOICE",
       fileName: "seeded-mismatch.pdf",
       mimeType: "application/pdf",
       sizeBytes: 1024,
@@ -283,7 +283,7 @@ describe("verification reflects the transaction rather than a canned list", () =
     const id = transaction.id!;
     linkBuyer(id, B1.id);
     createDocument({
-      documentType: "EINVOICE",
+      documentType: "ELECTRONIC_INVOICE",
       fileName: "unparsed-qr.pdf",
       mimeType: "application/pdf",
       sizeBytes: 1024,
@@ -306,7 +306,7 @@ describe("verification reflects the transaction rather than a canned list", () =
     const id = transaction.id!;
     linkBuyer(id, B6.id); // UNDER_LIQUIDATION
     createDocument({
-      documentType: "EINVOICE",
+      documentType: "ELECTRONIC_INVOICE",
       fileName: "einvoice.pdf",
       mimeType: "application/pdf",
       sizeBytes: 1024,

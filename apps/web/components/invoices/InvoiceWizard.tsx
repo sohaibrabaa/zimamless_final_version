@@ -161,6 +161,18 @@ export function InvoiceWizard({
       }
       setStepIndex((i) => i + 1);
     } catch (err) {
+      // The console gets the whole story — code, message, and the details
+      // object naming exactly which fields the server rejected. The UI copy
+      // stays friendly; this is for whoever has DevTools open.
+      if (err instanceof ApiError) {
+        console.error(
+          `[InvoiceWizard] step ${stepIndex} rejected: ${err.status} ${err.code} — ${err.message}`,
+          err.details ?? {},
+          `correlationId=${err.correlationId ?? "n/a"}`
+        );
+      } else {
+        console.error(`[InvoiceWizard] step ${stepIndex} failed:`, err);
+      }
       const block = readDuplicateBlock(err);
       if (block) {
         setDuplicate(block);
@@ -239,7 +251,7 @@ export function InvoiceWizard({
             <p className="mt-1 mb-4 text-sm text-(--color-muted)">{t("invoices.invoice.intro")}</p>
 
             <DocumentUpload
-              documentType="EINVOICE"
+              documentType="ELECTRONIC_INVOICE"
               label={t(EINVOICE_SPEC.labelKey)}
               description={t(EINVOICE_SPEC.descriptionKey)}
               transactionId={transactionId}

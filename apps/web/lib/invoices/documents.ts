@@ -12,7 +12,7 @@
  */
 
 export type DocumentType =
-  | "EINVOICE"
+  | "ELECTRONIC_INVOICE"
   | "PURCHASE_ORDER"
   | "DELIVERY_NOTE"
   | "STATEMENT_OF_ACCOUNT"
@@ -28,9 +28,9 @@ export interface DocumentTypeSpec {
 }
 
 export const EINVOICE_SPEC: DocumentTypeSpec = {
-  type: "EINVOICE",
-  labelKey: "invoices.documents.type.EINVOICE",
-  descriptionKey: "invoices.documents.desc.EINVOICE",
+  type: "ELECTRONIC_INVOICE",
+  labelKey: "invoices.documents.type.ELECTRONIC_INVOICE",
+  descriptionKey: "invoices.documents.desc.ELECTRONIC_INVOICE",
   mandatory: true,
 };
 

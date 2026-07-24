@@ -297,7 +297,7 @@ export function createDocument(input: {
     sizeBytes: input.sizeBytes,
     uploadedAt: new Date().toISOString(),
     extractionProfile:
-      input.documentType === "EINVOICE" ? profileForFileName(input.fileName) : null,
+      input.documentType === "ELECTRONIC_INVOICE" ? profileForFileName(input.fileName) : null,
   };
   documents = [doc, ...documents];
 
@@ -501,7 +501,7 @@ let reviewCounter = 500;
  * A canned PASS list would make the whole panel decorative.
  */
 function runVerification(transaction: MockTransaction): VerificationRun {
-  const einvoice = transaction.documents.find((d) => d.documentType === "EINVOICE");
+  const einvoice = transaction.documents.find((d) => d.documentType === "ELECTRONIC_INVOICE");
   const extraction = einvoice ? extractionForDocument(einvoice.id) : undefined;
   const invoice = transaction.invoice;
 
@@ -582,7 +582,7 @@ export function submitTransaction(id: string): SubmitResult {
   const missing: string[] = [];
   if (!transaction.buyer) missing.push("buyer");
   if (!transaction.invoice) missing.push("invoice");
-  if (!transaction.documents.some((d) => d.documentType === "EINVOICE")) missing.push("einvoice");
+  if (!transaction.documents.some((d) => d.documentType === "ELECTRONIC_INVOICE")) missing.push("einvoice");
   if (!transaction.minimumAcceptableAmount) missing.push("minimumAcceptableAmount");
   if (!transaction.declarationTemplateVersion) missing.push("declarations");
   if (missing.length > 0) return { ok: false, error: "INCOMPLETE", missing };

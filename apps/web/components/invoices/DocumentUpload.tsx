@@ -17,6 +17,9 @@ export interface UploadedDocument {
   fileName: string;
 }
 
+/** Mock mode never PUTs bytes — the mock uploadUrl is a host that doesn't exist. */
+const MOCKING_ENABLED = process.env.NEXT_PUBLIC_API_MOCKING !== "disabled";
+
 /**
  * A single document upload, driven by `POST /documents/upload-url`.
  *
@@ -73,11 +76,35 @@ export function DocumentUpload({
       if (apiError) throw apiError;
       if (!data?.documentId) throw new Error("No documentId returned");
 
-      // The byte upload to data.uploadUrl happens here against the real API.
-      // It is intentionally absent under MSW: passthrough() to a mock storage
-      // host would either 404 or, worse, appear to work.
+      // The actual byte upload to the signed URL. Without this PUT the
+      // document exists only as metadata: storage stays empty, the hash is
+      // never computed, and OCR/QR extraction has nothing to read — the
+      // wizard then shows an "uploaded" file with no suggestions. Skipped
+      // under MSW, where the mock uploadUrl is a host no request can reach.
+      if (!MOCKING_ENABLED) {
+        if (!data.uploadUrl) throw new Error("No uploadUrl returned");
+        const put = await fetch(data.uploadUrl, {
+          method: "PUT",
+          headers: { "Content-Type": file.type },
+          body: file,
+        });
+        if (!put.ok) {
+          const detail = await put.text().catch(() => "");
+          console.error(
+            `[DocumentUpload] byte PUT to storage failed: ${put.status} ${put.statusText}`,
+            detail.slice(0, 500)
+          );
+          setError(t("invoices.documents.uploadFailed"));
+          return;
+        }
+        console.debug(
+          `[DocumentUpload] uploaded ${file.name} (${file.size} bytes) as document ${data.documentId}`
+        );
+      }
+
       onUploaded({ documentId: data.documentId, documentType, fileName: file.name });
     } catch (err) {
+      console.error("[DocumentUpload] upload failed:", err);
       setError(err instanceof ApiError ? err.message : t("common.unknownError"));
     } finally {
       setBusy(false);

@@ -38,7 +38,7 @@ function submittedTransaction(orgId: string, minimumAmount = "5000.000") {
   const id = transaction.id!;
   linkBuyer(id, mockBuyers[0].id);
   createDocument({
-    documentType: "EINVOICE",
+    documentType: "ELECTRONIC_INVOICE",
     fileName: "einvoice.pdf",
     mimeType: "application/pdf",
     sizeBytes: 1024,
