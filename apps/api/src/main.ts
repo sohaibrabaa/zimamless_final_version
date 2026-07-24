@@ -7,6 +7,7 @@ loadEnv();
 
 import { NestFactory } from '@nestjs/core';
 import { ValidationPipe } from '@nestjs/common';
+import compression from 'compression';
 import { SwaggerModule } from '@nestjs/swagger';
 import { AppModule } from './app.module';
 import { AppConfig } from './config/configuration';
@@ -27,6 +28,12 @@ async function bootstrap(): Promise<void> {
   // documented path lives under /v1. /health is the one exception and is
   // registered outside the prefix, where probes expect it.
   app.setGlobalPrefix(config.globalPrefix, { exclude: ['health'] });
+
+  // Transparent gzip for clients that advertise it (bodies are identical
+  // after decoding). Sub-1KB responses are left alone by the default
+  // threshold; the win is list endpoints (5–8KB JSON → ~1–2KB) on real
+  // network paths, not localhost.
+  app.use(compression());
 
   app.enableCors({
     origin: config.corsOrigins,

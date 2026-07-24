@@ -116,13 +116,47 @@ export class AuthService {
     const hit = this.cached(this.userCache, token.authUserId);
     if (hit) return this.assertUsable(hit);
 
-    const existing = await this.db.queryOne<PlatformUser>(
-      `SELECT id, auth_user_id, full_name, email, phone_number,
-              preferred_language, mfa_enabled, status
-         FROM users WHERE auth_user_id = $1`,
+    // One round trip, not two: the guard needs the user AND their
+    // memberships on every cache miss, and against the remote pooler each
+    // sequential query is ~300ms of wall clock. The membership subquery is
+    // the exact SQL listMemberships runs, so priming its cache here changes
+    // when the data is fetched, never what it contains. With the cache
+    // disabled (tests), store() is a no-op and listMemberships still reads
+    // fresh — identical visibility to before.
+    const existing = await this.db.queryOne<PlatformUser & { memberships: MembershipRow[] }>(
+      `SELECT u.id, u.auth_user_id, u.full_name, u.email, u.phone_number,
+              u.preferred_language, u.mfa_enabled, u.status,
+              (
+                SELECT coalesce(json_agg(m2 ORDER BY m2.organization_name), '[]'::json)
+                  FROM (
+                    SELECT m.organization_id,
+                           o.legal_name        AS organization_name,
+                           o.organization_type,
+                           o.status::text      AS organization_status,
+                           m.is_authorized_signatory,
+                           m.status::text      AS membership_status,
+                           coalesce(
+                             array_agg(r.role::text ORDER BY r.role) FILTER (WHERE r.role IS NOT NULL),
+                             '{}'
+                           ) AS roles
+                      FROM organization_memberships m
+                      JOIN organizations o ON o.id = m.organization_id
+                 LEFT JOIN membership_roles r ON r.membership_id = m.id
+                     WHERE m.user_id = u.id
+                       AND m.status = 'ACTIVE'
+                       AND (m.valid_to IS NULL OR m.valid_to > now())
+                  GROUP BY m.organization_id, o.legal_name, o.organization_type, o.status,
+                           m.is_authorized_signatory, m.status
+                  ) m2
+              ) AS memberships
+         FROM users u WHERE u.auth_user_id = $1`,
       [token.authUserId],
     );
-    if (existing) return this.assertUsable(this.storeUser(existing));
+    if (existing) {
+      const { memberships, ...user } = existing;
+      this.store(this.membershipCache, user.id, memberships);
+      return this.assertUsable(this.storeUser(user));
+    }
 
     // The seed and the onboarding bootstrap may have created the row by
     // email before the user ever signed in (bank and platform staff are

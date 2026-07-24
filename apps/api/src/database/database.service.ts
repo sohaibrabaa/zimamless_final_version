@@ -40,7 +40,19 @@ export class DatabaseService implements OnModuleInit, OnModuleDestroy {
       connectionString: url,
       ssl: needsTls ? { rejectUnauthorized: false } : undefined,
       max: 10,
-      idleTimeoutMillis: 30_000,
+      // Opening a connection to the remote session-mode pooler costs
+      // ~1.8s measured (TCP + TLS + auth to another continent). At 30s the
+      // pool drained between user clicks and the next click paid that cost
+      // again — measured as a 3.0s first request vs 0.85s warm. Ten minutes
+      // keeps the demo's think-time well inside the window; TCP keepalive
+      // stops intermediaries from silently dropping the idle sockets.
+      //
+      // Tests keep the old 30s release: the session pooler admits only 15
+      // clients project-wide, and the integration run boots an app (and
+      // pool) per suite — held connections accumulate across suites until
+      // the cap 500s a passing test (observed as EMAXCONNSESSION).
+      idleTimeoutMillis: process.env.NODE_ENV === 'test' ? 30_000 : 600_000,
+      keepAlive: true,
       connectionTimeoutMillis: 10_000,
     });
 
