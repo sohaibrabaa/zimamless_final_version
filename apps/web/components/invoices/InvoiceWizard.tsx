@@ -166,9 +166,9 @@ export function InvoiceWizard({
       // stays friendly; this is for whoever has DevTools open.
       if (err instanceof ApiError) {
         console.error(
-          `[InvoiceWizard] step ${stepIndex} rejected: ${err.status} ${err.code} — ${err.message}`,
-          err.details ?? {},
-          `correlationId=${err.correlationId ?? "n/a"}`
+          `[InvoiceWizard] step ${stepIndex} rejected: ${err.status} ${err.code} — ${err.message}\n` +
+            JSON.stringify(err.details ?? {}, null, 2) +
+            `\ncorrelationId=${err.correlationId ?? "n/a"}`
         );
       } else {
         console.error(`[InvoiceWizard] step ${stepIndex} failed:`, err);
