@@ -34,8 +34,10 @@ side by side, as full net-payout breakdowns.
 
 ### 📊 Screens
 
-_Screenshots pending. Drop `offer-comparison.png`, `bank-marketplace.png`, and
-`platform-admin.png` into `docs/assets/` and reference them here._
+<img width="1917" height="971" alt="Screenshot 2026-09-10 182421" src="https://github.com/user-attachments/assets/2fa813dc-4fd1-4b0c-82ed-cbf584ca349d" />
+
+<img width="1917" height="966" alt="image" src="https://github.com/user-attachments/assets/db386b52-31eb-4eb2-aefd-e3c799f51088" />
+
 
 ---
 
